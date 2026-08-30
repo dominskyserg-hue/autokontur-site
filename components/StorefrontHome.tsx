@@ -41,6 +41,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
+import Link from 'next/link';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -519,18 +520,29 @@ export default function StorefrontHome() {
             <span>{workingHours}</span>
           </div>
 
-          {/* ---- Корзина ---- */}
-          {/* Кнопка только відкриває панель (не toggle) — закрывается
-              панель отдельно, кликом по крестику или по затемнению
-              фона (см. компонент CartDrawer ниже) */}
-          <button
-            type="button"
-            onClick={() => setCartOpen(true)}
-            className="relative flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium"
-            style={{ background: '#1E293B', color: '#FFFFFF' }}
-          >
-            <CartIcon />
-            <span className="hidden sm:inline">Кошик</span>
+          <div className="flex items-center gap-2.5">
+            {/* ---- Особистий кабінет ---- */}
+            <Link
+              href="/account"
+              className="flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium"
+              style={{ background: '#1E293B', color: '#FFFFFF' }}
+            >
+              <UserIcon />
+              <span className="hidden sm:inline">Кабінет</span>
+            </Link>
+
+            {/* ---- Корзина ---- */}
+            {/* Кнопка только відкриває панель (не toggle) — закрывается
+                панель отдельно, кликом по крестику или по затемнению
+                фона (см. компонент CartDrawer ниже) */}
+            <button
+              type="button"
+              onClick={() => setCartOpen(true)}
+              className="relative flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium"
+              style={{ background: '#1E293B', color: '#FFFFFF' }}
+            >
+              <CartIcon />
+              <span className="hidden sm:inline">Кошик</span>
             {cartCount > 0 && (
               <span
                 className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center"
@@ -539,7 +551,8 @@ export default function StorefrontHome() {
                 {cartCount}
               </span>
             )}
-          </button>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -1279,6 +1292,15 @@ function CartIcon() {
       />
       <circle cx="9" cy="20" r="1.5" fill="currentColor" />
       <circle cx="17" cy="20" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function UserIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }
