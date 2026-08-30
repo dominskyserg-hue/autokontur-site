@@ -185,7 +185,7 @@ export default function GlobalRatesWidget() {
               placeholder="напр. 41.50"
               disabled={loading}
               className="w-full px-3 py-2 text-sm rounded-md font-mono disabled:opacity-50"
-              style={{ border: '1px solid var(--line)' }}
+              style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
               value={form[currency]}
               onChange={(e) => setForm({ ...form, [currency]: e.target.value })}
             />
