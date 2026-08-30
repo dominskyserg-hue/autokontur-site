@@ -924,7 +924,7 @@ export default function StorefrontHome() {
                           <span className="text-sm font-medium leading-snug">{product.name || 'Без назви'}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-xs font-mono whitespace-nowrap" style={{ color: '#EA580C' }}>
+                      <td className="px-4 py-3 text-xs font-mono font-bold whitespace-nowrap" style={{ color: '#EA580C' }}>
                         {product.article}
                         {product.brand ? ` · ${product.brand}` : ''}
                       </td>
