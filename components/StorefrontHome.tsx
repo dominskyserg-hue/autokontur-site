@@ -80,6 +80,7 @@ interface CartItem {
 }
 
 const CART_STORAGE_KEY = 'autokontur-cart';
+const VIEW_MODE_STORAGE_KEY = 'autokontur-view-mode';
 
 // Значения по умолчанию — показываются, пока /api/site-settings ещё
 // не ответил (или если админ ни разу не менял их через "Настройки")
@@ -160,6 +161,29 @@ export default function StorefrontHome() {
   const [results, setResults] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // Вигляд результатів пошуку — плиткою (картки) або таблицею.
+  // Запам'ятовуємо вибір у localStorage, щоб покупець не перемикав
+  // його заново при кожному новому пошуку чи візиті на сайт
+  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_MODE_STORAGE_KEY);
+      if (saved === 'grid' || saved === 'table') setViewMode(saved);
+    } catch {
+      // localStorage недоступний — просто лишаємось з виглядом за замовчуванням
+    }
+  }, []);
+
+  const changeViewMode = (mode: 'grid' | 'table') => {
+    setViewMode(mode);
+    try {
+      window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+    } catch {
+      // не критично — вибір просто не запам'ятається до наступного разу
+    }
+  };
 
   // ---- підбір за автомобілем (марка/рік/об'єм двигуна) ----
   // Значення у випадаючих списках — не довільний текст, а реальні
@@ -739,9 +763,37 @@ export default function StorefrontHome() {
           <h2 className="text-xl font-semibold mb-1">
             Результати пошуку: «{submittedQuery}»
           </h2>
-          <p className="text-sm mb-6" style={{ color: '#5B6472' }}>
-            {searching ? 'Шукаємо...' : `Знайдено: ${results.length}`}
-          </p>
+          <div className="flex items-center justify-between mb-6 gap-4">
+            <p className="text-sm" style={{ color: '#5B6472' }}>
+              {searching ? 'Шукаємо...' : `Знайдено: ${results.length}`}
+            </p>
+
+            {/* ---- перемикач вигляду: плиткою або таблицею ---- */}
+            {!searching && results.length > 0 && (
+              <div className="flex gap-1 p-1 rounded-lg shrink-0" style={{ background: '#EEF0F3' }}>
+                <button
+                  type="button"
+                  onClick={() => changeViewMode('grid')}
+                  aria-label="Показати плиткою"
+                  title="Плиткою"
+                  className="p-1.5 rounded-md"
+                  style={viewMode === 'grid' ? { background: '#FFFFFF', color: '#EA580C' } : { color: '#8A93A2' }}
+                >
+                  <GridViewIcon />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => changeViewMode('table')}
+                  aria-label="Показати таблицею"
+                  title="Таблицею"
+                  className="p-1.5 rounded-md"
+                  style={viewMode === 'table' ? { background: '#FFFFFF', color: '#EA580C' } : { color: '#8A93A2' }}
+                >
+                  <TableViewIcon />
+                </button>
+              </div>
+            )}
+          </div>
 
           {searchError && (
             <p className="text-sm p-4 rounded-lg" style={{ background: '#FEE2E2', color: '#DC2626' }}>
@@ -769,7 +821,7 @@ export default function StorefrontHome() {
             </div>
           )}
 
-          {!searching && results.length > 0 && (
+          {!searching && results.length > 0 && viewMode === 'grid' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {results.map((product) => (
                 <div
@@ -826,6 +878,86 @@ export default function StorefrontHome() {
                   </button>
                 </div>
               ))}
+            </div>
+          )}
+
+          {!searching && results.length > 0 && viewMode === 'table' && (
+            <div className="rounded-xl overflow-x-auto" style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}>
+              <table className="w-full text-sm" style={{ minWidth: '640px' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #E2E5EA' }}>
+                    {['Товар', 'Артикул', 'Наявність', 'Ціна', ''].map((heading) => (
+                      <th
+                        key={heading}
+                        className="text-left px-4 py-3 text-xs font-medium whitespace-nowrap"
+                        style={{ color: '#8A93A2' }}
+                      >
+                        {heading}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((product) => (
+                    <tr key={product.id} style={{ borderBottom: '1px solid #F0F1F3' }}>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3 min-w-[200px]">
+                          <div
+                            className="w-11 h-11 shrink-0 rounded-lg flex items-center justify-center overflow-hidden"
+                            style={{ background: '#F1EAE0' }}
+                          >
+                            {product.imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={product.imageUrl}
+                                alt={product.name || product.article}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: '#C9BFAF' }}>
+                                <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                                <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.6" />
+                                <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </div>
+                          <span className="text-sm font-medium leading-snug">{product.name || 'Без назви'}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs font-mono whitespace-nowrap" style={{ color: '#8A93A2' }}>
+                        {product.article}
+                        {product.brand ? ` · ${product.brand}` : ''}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span
+                          className="text-xs px-2 py-1 rounded-full font-medium"
+                          style={
+                            product.stock > 0
+                              ? { background: '#DCFCE7', color: '#16A34A' }
+                              : { background: '#FEE2E2', color: '#DC2626' }
+                          }
+                        >
+                          {product.stock > 0 ? `В наявності: ${product.stock}` : 'Немає в наявності'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm font-semibold whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatMoney(product.retailPrice)} грн
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <button
+                          type="button"
+                          disabled={product.stock <= 0}
+                          onClick={() => addToCart(product)}
+                          className="px-4 py-2 rounded-md text-xs font-medium disabled:opacity-40"
+                          style={{ background: '#EA580C', color: '#FFFFFF' }}
+                        >
+                          До кошика
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </section>
@@ -1292,6 +1424,26 @@ function CartIcon() {
       />
       <circle cx="9" cy="20" r="1.5" fill="currentColor" />
       <circle cx="17" cy="20" r="1.5" fill="currentColor" />
+    </svg>
+  );
+}
+
+function GridViewIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="13" y="3" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="3" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <rect x="13" y="13" width="8" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function TableViewIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+      <rect x="3" y="4" width="18" height="16" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3 10h18M9 10v10" stroke="currentColor" strokeWidth="1.8" />
     </svg>
   );
 }
