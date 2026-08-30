@@ -281,7 +281,15 @@ function parseExcelBuffer(buffer: Buffer, mapping: MappingSettings, exchangeRate
     const carYear = String(rawCarYear ?? '').trim();
     const engineVolume = String(rawEngineVolume ?? '').trim();
     const priceInSupplierCurrency = parseCellNumber(rawPrice);
-    const stock = parseCellNumber(rawStock);
+    // products.stock — колонка INTEGER (остаток считается целыми
+    // штуками детали), а в реальных прайсах в колонке остатка
+    // иногда встречаются дробные значения — то ли артефакт формулы
+    // у поставщика, то ли единицы измерения перепутаны с количеством.
+    // Округляем до целого здесь же, при разборе файла: без этого
+    // INSERT в products падал бы целиком с ошибкой Postgres
+    // "invalid input syntax for type integer", и НИ ОДНА строка
+    // прайса не сохранялась бы из-за одного дробного остатка
+    const stock = Math.round(parseCellNumber(rawStock));
 
     if (!article && !priceInSupplierCurrency) continue;
 
