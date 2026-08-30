@@ -502,7 +502,7 @@ CREATE INDEX IF NOT EXISTS idx_announcements_active ON announcements (is_active)
 
 
 -- ============================================================
--- 11. ТАБЛИЦА product_cross_references — кросс-номера товаров
+-- 11. КРОСС-НОМЕРА — модель "группы взаимозаменяемости"
 -- ============================================================
 -- "Кросс-номер" в мире автозапчастей — это артикул той же самой (или
 -- взаимозаменяемой) детали у ДРУГОГО производителя или по оригинальной
@@ -511,63 +511,127 @@ CREATE INDEX IF NOT EXISTS idx_announcements_active ON announcements (is_active)
 -- TRW — под "GDB1330", а сам автопроизводитель называет её ещё
 -- иначе — это всё "кроссы" друг для друга, взаимозаменяемые детали.
 --
--- Смысл таблицы: покупатель часто ищет деталь не по артикулу товара
--- в НАШЕМ каталоге, а по номеру, который он видел на старой детали,
--- в сервисе или в каталоге производителя авто. Если такой номер
--- записан сюда как кросс к нашему товару — покупатель найдёт нужную
--- деталь через обычный поиск по артикулу (см. app/api/products/route.ts),
--- даже не зная, под каким артикулом она продаётся у нас
-CREATE TABLE IF NOT EXISTS product_cross_references (
+-- ПЕРВАЯ версия этой функции хранила кросс-номера ОДНОЙ строкой на
+-- товар (product_id -> cross_article). Это работало для простого
+-- поиска, но не умело моделировать РЕАЛЬНУЮ картину: интерчейндж —
+-- это не "у товара A есть номер B", а "A, B, C и D — это ОДНА И ТА ЖЕ
+-- деталь под четырьмя разными именами", то есть группа, а не
+-- однонаправленная связь. Ниже — правильная модель: "группа
+-- взаимозаменяемости" (cross_reference_groups) и её "участники"
+-- (cross_reference_members, каждый — конкретная пара бренд+артикул).
+-- Два участника одной группы — кросс друг для друга; группа из трёх
+-- и более участников — это и есть "кластер взаимозаменяемых деталей"
+-- из требований.
+
+-- Сама группа — по сути просто "контейнер" с id, вся суть в её
+-- участниках ниже. Отдельной таблицы для метаданных группы пока не
+-- нужно: у группы нет своих полей, кроме списка участников
+CREATE TABLE IF NOT EXISTS cross_reference_groups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Один участник группы — конкретный "бренд + номер детали", который
+-- входит в кластер взаимозаменяемости
+CREATE TABLE IF NOT EXISTS cross_reference_members (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
-  -- Наш товар, для которого это кросс-номер. ON DELETE CASCADE —
-  -- если товар удалят из каталога, его кросс-номера тоже больше не
-  -- нужны и удаляются вместе с ним
-  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  -- Группа (кластер), к которой принадлежит эта деталь. ON DELETE
+  -- CASCADE — если группу удалят целиком (например, слили в другую
+  -- при разрешении конфликта), все её участники удаляются вместе с ней
+  group_id UUID NOT NULL REFERENCES cross_reference_groups(id) ON DELETE CASCADE,
 
-  -- Сам кросс-номер — очищенный точно той же функцией cleanArticle(),
-  -- что и обычный артикул товара (см. app/api/products/route.ts):
-  -- без пробелов/дефисов, в верхнем регистре. Иначе поиск "0986424815"
-  -- не найдёт запись, сохранённую как "0 986 424 815"
-  cross_article TEXT NOT NULL,
+  brand TEXT NOT NULL,
 
-  -- Чей это номер — например "Bosch", "TRW" или "OEM Toyota".
-  -- Необязательное поле: администратор может не знать точно, чей это
-  -- артикул, и просто добавить сам номер без бренда
-  cross_brand TEXT,
+  -- Номер детали — очищенный ТОЙ ЖЕ функцией cleanArticle(), что и
+  -- products.article (см. app/api/products/route.ts): без пробелов/
+  -- дефисов, в верхнем регистре. Без этого поиск "0986424815" не
+  -- нашёл бы запись, сохранённую как "0 986 424 815"
+  part_number TEXT NOT NULL,
+
+  -- Как номер был введён изначально (с пробелами/дефисами) — только
+  -- для отображения администратору, в поиске и сравнениях не участвует
+  part_number_raw TEXT,
+
+  -- Если этот участник группы — товар из НАШЕГО каталога (а не просто
+  -- "чужой референсный номер, которого у нас никогда не было в
+  -- наличии"), здесь его id. ON DELETE SET NULL — если товар удалят
+  -- из каталога, сам факт "такой номер существует и участвует в этом
+  -- кластере" всё равно остаётся полезным знанием, просто товар
+  -- больше не привязан ни к какой конкретной позиции на складе
+  product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+
+  -- OEM (оригинальный номер автопроизводителя) или aftermarket
+  -- (неоригинальный аналог от стороннего производителя) — на это
+  -- опирается разбивка результатов поиска на "Оригінальні аналоги" и
+  -- "Аналоги від виробників" (см. app/api/products/cross-lookup/route.ts)
+  part_type TEXT NOT NULL DEFAULT 'aftermarket' CHECK (part_type IN ('oem', 'aftermarket')),
+
+  -- Откуда взялась эта связь — то, что в задании названо
+  -- "confidence/source flag": official (из проверенного каталога
+  -- производителя/официального прайса), user-reported (админ добавил
+  -- вручную, "на глаз"), algorithmic (сопоставлено автоматически,
+  -- например по совпадению названия/размеров — в этом проекте такой
+  -- механизм ещё не реализован, поле зарезервировано на будущее)
+  source TEXT NOT NULL DEFAULT 'user-reported' CHECK (source IN ('official', 'user-reported', 'algorithmic')),
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  -- Один и тот же кросс-номер у одного и того же товара не должен
-  -- дублироваться — это ограничение и есть то, на что опирается
-  -- ON CONFLICT в массовой загрузке из Excel (см. app/api/products/
-  -- cross-references/import/route.ts): повторная загрузка того же
-  -- файла обновит бренд у уже существующих строк, а не наплодит копий
-  UNIQUE (product_id, cross_article)
+  -- ГЛАВНОЕ ограничение модели: одна и та же пара "бренд + номер" не
+  -- может одновременно состоять в ДВУХ РАЗНЫХ группах — деталь либо
+  -- ещё не встречалась в интерчейндже (тогда для нее создаётся новая
+  -- группа), либо уже состоит в какой-то одной. Именно на это
+  -- ограничение опирается вся логика разрешения конфликтов при
+  -- импорте (см. linkCrossParts() в app/api/products/cross-references/
+  -- import/route.ts) — если новая связь пытается добавить пару
+  -- "бренд+номер" во ВТОРУЮ группу, это и есть конфликт
+  UNIQUE (brand, part_number)
 );
 
--- ------------------------------------------------------------
--- МИГРАЦИЯ ДЛЯ ТЕХ, КТО УЖЕ ЗАПУСКАЛ ЭТОТ СКРИПТ РАНЬШЕ
--- ------------------------------------------------------------
--- ALTER TABLE ... ADD CONSTRAINT не бывает "IF NOT EXISTS" в
--- PostgreSQL, поэтому оборачиваем в DO-блок: пробуем добавить
--- ограничение и просто ничего не делаем, если оно уже есть
--- (SQLSTATE 42710 — duplicate_object)
-DO $$
-BEGIN
-  ALTER TABLE product_cross_references
-    ADD CONSTRAINT product_cross_references_product_id_cross_article_key
-    UNIQUE (product_id, cross_article);
-EXCEPTION
-  WHEN duplicate_object THEN NULL;
-  WHEN duplicate_table THEN NULL;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_cross_members_group_id ON cross_reference_members (group_id);
+CREATE INDEX IF NOT EXISTS idx_cross_members_part_number ON cross_reference_members (part_number);
+CREATE INDEX IF NOT EXISTS idx_cross_members_product_id ON cross_reference_members (product_id);
 
--- Ускоряет и "покажи все кросс-номера этого товара" (экран "Кроссы"
--- в админке), и обратный поиск "по какому товару числится этот номер"
--- (используется прямо в поиске на витрине)
-CREATE INDEX IF NOT EXISTS idx_cross_references_product_id ON product_cross_references (product_id);
-CREATE INDEX IF NOT EXISTS idx_cross_references_article ON product_cross_references (cross_article);
+-- ------------------------------------------------------------
+-- ЖУРНАЛ КОНФЛИКТОВ ПРИ ИМПОРТЕ
+-- ------------------------------------------------------------
+-- Ситуация из задания: "Поставщик А говорит — деталь X кросс с Y,
+-- Поставщик Б говорит — X кросс с Z". Если Y и Z уже состоят в ДВУХ
+-- РАЗНЫХ группах (не в одной — тогда конфликта нет, всё уже связано),
+-- слепое объединение этих групп рискованно: одна ошибка в файле
+-- поставщика может незаметно "склеить" два совершенно разных кластера
+-- деталей, и покупателю начнут предлагать несовместимые аналоги. Вместо
+-- автоматического слияния такая связь попадает сюда — администратор
+-- решает вручную: либо подтвердить слияние групп, либо отклонить связь
+-- как ошибку в файле поставщика (см. экран "Кроссы", вкладка "Конфликты")
+CREATE TABLE IF NOT EXISTS cross_reference_conflicts (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  part_a_brand TEXT NOT NULL,
+  part_a_number TEXT NOT NULL,
+  part_b_brand TEXT NOT NULL,
+  part_b_number TEXT NOT NULL,
+
+  -- Группы, которые пришлось бы объединить, чтобы принять эту связь.
+  -- Без FOREIGN KEY (это журнал-протокол, а не рабочая связь): если
+  -- одну из групп потом удалят или сольют независимо от этого
+  -- конфликта, историческая запись всё равно должна остаться читаемой
+  existing_group_a UUID NOT NULL,
+  existing_group_b UUID NOT NULL,
+
+  source TEXT NOT NULL CHECK (source IN ('official', 'user-reported', 'algorithmic')),
+
+  -- Имя файла, из которого пришла конфликтующая связь — чтобы
+  -- администратор понимал, какой прайс/файл поставщика перепроверить
+  source_file TEXT,
+
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'merged', 'rejected')),
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  resolved_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_cross_conflicts_status ON cross_reference_conflicts (status);
 
 
 -- ============================================================

@@ -2,11 +2,16 @@
 // API Route (Route Handler) для Next.js App Router.
 // Адрес: /api/products/[id]/cross-references/[crossId]
 //
-// DELETE — удалить один кросс-номер товара насовсем. [id] — id
-// самого товара, [crossId] — id строки в product_cross_references.
-// Оба проверяются вместе (crossId должен принадлежать ИМЕННО этому
-// товару) — так через подмену [id] в адресе нельзя удалить чужой
-// кросс-номер, даже зная его id
+// DELETE — убрать одну деталь из группы взаимозаменяемости товара
+// [id]. [crossId] — id строки в cross_reference_members (ДРУГОГО
+// участника той же группы, не самого товара).
+//
+// Если после удаления в группе остаётся 0 или 1 участник — группа
+// теряет смысл (кросс — это связь МЕЖДУ детьми, в одиночку "группа"
+// не нужна), поэтому она удаляется целиком вместе с последним
+// оставшимся участником. Так у товара, для которого удалили
+// единственный кросс-номер, список кросс-номеров снова становится
+// пустым, а не "группой из одного себя самого"
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -51,23 +56,60 @@ export async function DELETE(
     return NextResponse.json({ error: 'id должен быть корректным UUID.' }, { status: 400 });
   }
 
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      `DELETE FROM product_cross_references WHERE id = $1 AND product_id = $2 RETURNING id`,
-      [crossId, id]
+    // Группа ТОВАРА [id] — удалять разрешено только участника ИМЕННО
+    // этой группы, даже если кто-то подставит в адрес чужой crossId
+    const myMemberResult = await client.query(
+      `SELECT group_id FROM cross_reference_members WHERE product_id = $1`,
+      [id]
+    );
+    if (myMemberResult.rows.length === 0) {
+      return NextResponse.json({ error: 'У этого товара нет группы кросс-номеров.' }, { status: 404 });
+    }
+    const groupId = myMemberResult.rows[0].group_id;
+
+    await client.query('BEGIN');
+
+    const deleteResult = await client.query(
+      `DELETE FROM cross_reference_members WHERE id = $1 AND group_id = $2 RETURNING id`,
+      [crossId, groupId]
     );
 
-    if (result.rows.length === 0) {
-      return NextResponse.json({ error: 'Кросс-номер с таким id у этого товара не найден.' }, { status: 404 });
+    if (deleteResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json(
+        { error: 'Кросс-номер с таким id не найден в группе этого товара.' },
+        { status: 404 }
+      );
     }
+
+    // Сколько участников осталось в группе (в том числе сам товар)
+    const remainingResult = await client.query(
+      `SELECT COUNT(*) FROM cross_reference_members WHERE group_id = $1`,
+      [groupId]
+    );
+    const remainingCount = parseInt(remainingResult.rows[0].count, 10);
+
+    // 1 (или 0) участник — группа больше не связывает никого ни с кем,
+    // удаляем её целиком (ON DELETE CASCADE заберёт и последнего
+    // участника вместе с ней)
+    if (remainingCount <= 1) {
+      await client.query(`DELETE FROM cross_reference_groups WHERE id = $1`, [groupId]);
+    }
+
+    await client.query('COMMIT');
 
     return NextResponse.json({ success: true });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('Ошибка при удалении кросс-номера:', error);
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
     return NextResponse.json(
       { error: 'Не удалось удалить кросс-номер: ' + message },
       { status: 500 }
     );
+  } finally {
+    client.release();
   }
 }

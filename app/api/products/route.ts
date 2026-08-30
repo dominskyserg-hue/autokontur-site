@@ -166,9 +166,14 @@ export async function GET(request: NextRequest) {
       // Кросс-номер ("0986424815" от Bosch, OEM-номер автопроизводителя
       // и т.п.) ищем той же очищенной строкой, что и обычный артикул —
       // он нормализуется точно так же при сохранении (см.
-      // app/api/products/[id]/cross-references/route.ts). EXISTS —
-      // чтобы у товара с несколькими кросс-номерами не задваивались
-      // строки в результате поиска
+      // app/api/products/cross-references/import/route.ts). Модель —
+      // "группы взаимозаменяемости" (cross_reference_groups /
+      // cross_reference_members, см. schema.sql): товар p попадает в
+      // выдачу, если СРЕДИ УЧАСТНИКОВ ЕГО ЖЕ ГРУППЫ (mine.product_id =
+      // p.id) есть хоть один (other) с подходящим номером — включая
+      // саму запись mine, если у p ещё нет группы. JOIN, а не просто
+      // проверка part_number = p.article — потому что нужно найти
+      // товар ПО ЧУЖОМУ кросс-номеру, а не только по своему
       const cleanedArticle = cleanArticle(search);
       values.push(`%${cleanedArticle}%`, `%${search}%`);
       const articlePlaceholder = `$${values.length - 1}`;
@@ -180,8 +185,10 @@ export async function GET(request: NextRequest) {
           OR p.car_make ILIKE ${textPlaceholder}
           OR p.car_model ILIKE ${textPlaceholder}
           OR EXISTS (
-            SELECT 1 FROM product_cross_references cr
-            WHERE cr.product_id = p.id AND cr.cross_article ILIKE ${articlePlaceholder}
+            SELECT 1
+            FROM cross_reference_members mine
+            JOIN cross_reference_members other ON other.group_id = mine.group_id
+            WHERE mine.product_id = p.id AND other.part_number ILIKE ${articlePlaceholder}
           )
         )`
       );
