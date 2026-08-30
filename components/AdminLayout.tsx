@@ -28,7 +28,7 @@ import type { CSSProperties, ReactNode } from 'react';
 // значение по умолчанию, что и на витрине (components/StorefrontHome.tsx)
 const DEFAULT_SHOP_NAME = 'AUTOKONTUR';
 
-export type AdminSection = 'suppliers' | 'products' | 'orders' | 'analytics' | 'settings';
+export type AdminSection = 'suppliers' | 'products' | 'crossReferences' | 'orders' | 'analytics' | 'settings';
 
 interface NavItem {
   key: AdminSection | 'products' | 'orders' | 'analytics';
@@ -47,6 +47,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'suppliers', label: 'Поставщики', href: '/admin' },
       { key: 'products', label: 'Товары', href: '/admin/products' },
+      { key: 'crossReferences', label: 'Кроссы', href: '/admin/cross-references' },
     ],
   },
   {

@@ -13,8 +13,10 @@
 //   pageSize    — сколько товаров на странице (по умолчанию 50,
 //                 максимум 200 — чтобы случайно не запросили всю базу
 //                 разом через строку адреса)
-//   search      — ищет совпадение по артикулу ИЛИ по бренду
-//                 (регистронезависимо, по подстроке)
+//   search      — ищет совпадение по артикулу, бренду ИЛИ по
+//                 кросс-номеру товара (регистронезависимо, по
+//                 подстроке) — см. таблицу product_cross_references
+//                 и экран "Кроссы" в админке
 //   supplierId  — если передан, показывает товары только этого
 //                 поставщика (UUID)
 //   carMake, carYear, engineVolume — "Підбір за автомобілем" на
@@ -161,12 +163,27 @@ export async function GET(request: NextRequest) {
       // cleanArticle при сохранении, значит и искать их нужно как
       // обычный текст. Так запрос "Toyota" находит все запчасти для
       // Toyota, даже если сам текст запроса не похож на артикул
+      // Кросс-номер ("0986424815" от Bosch, OEM-номер автопроизводителя
+      // и т.п.) ищем той же очищенной строкой, что и обычный артикул —
+      // он нормализуется точно так же при сохранении (см.
+      // app/api/products/[id]/cross-references/route.ts). EXISTS —
+      // чтобы у товара с несколькими кросс-номерами не задваивались
+      // строки в результате поиска
       const cleanedArticle = cleanArticle(search);
       values.push(`%${cleanedArticle}%`, `%${search}%`);
       const articlePlaceholder = `$${values.length - 1}`;
       const textPlaceholder = `$${values.length}`;
       conditions.push(
-        `(p.article ILIKE ${articlePlaceholder} OR p.brand ILIKE ${textPlaceholder} OR p.car_make ILIKE ${textPlaceholder} OR p.car_model ILIKE ${textPlaceholder})`
+        `(
+          p.article ILIKE ${articlePlaceholder}
+          OR p.brand ILIKE ${textPlaceholder}
+          OR p.car_make ILIKE ${textPlaceholder}
+          OR p.car_model ILIKE ${textPlaceholder}
+          OR EXISTS (
+            SELECT 1 FROM product_cross_references cr
+            WHERE cr.product_id = p.id AND cr.cross_article ILIKE ${articlePlaceholder}
+          )
+        )`
       );
     }
 
