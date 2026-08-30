@@ -536,8 +536,32 @@ CREATE TABLE IF NOT EXISTS product_cross_references (
   -- артикул, и просто добавить сам номер без бренда
   cross_brand TEXT,
 
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  -- Один и тот же кросс-номер у одного и того же товара не должен
+  -- дублироваться — это ограничение и есть то, на что опирается
+  -- ON CONFLICT в массовой загрузке из Excel (см. app/api/products/
+  -- cross-references/import/route.ts): повторная загрузка того же
+  -- файла обновит бренд у уже существующих строк, а не наплодит копий
+  UNIQUE (product_id, cross_article)
 );
+
+-- ------------------------------------------------------------
+-- МИГРАЦИЯ ДЛЯ ТЕХ, КТО УЖЕ ЗАПУСКАЛ ЭТОТ СКРИПТ РАНЬШЕ
+-- ------------------------------------------------------------
+-- ALTER TABLE ... ADD CONSTRAINT не бывает "IF NOT EXISTS" в
+-- PostgreSQL, поэтому оборачиваем в DO-блок: пробуем добавить
+-- ограничение и просто ничего не делаем, если оно уже есть
+-- (SQLSTATE 42710 — duplicate_object)
+DO $$
+BEGIN
+  ALTER TABLE product_cross_references
+    ADD CONSTRAINT product_cross_references_product_id_cross_article_key
+    UNIQUE (product_id, cross_article);
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+  WHEN duplicate_table THEN NULL;
+END $$;
 
 -- Ускоряет и "покажи все кросс-номера этого товара" (экран "Кроссы"
 -- в админке), и обратный поиск "по какому товару числится этот номер"
