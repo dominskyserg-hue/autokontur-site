@@ -5,6 +5,12 @@
 // то, что видит обычный покупатель (не путать с админ-панелью,
 // она теперь живёт под /admin, см. components/AdminLayout.tsx).
 //
+// Визуальный стиль — "Wasteland" (индустриальный, по мотивам
+// реального логотипа DOMINATOR PARTS): тёмная палитра, красный +
+// жовтий акценти, шрифти Bebas Neue/Rajdhani/Barlow (подключены
+// через Google Fonts в app/layout.tsx), смуга небезпеки під
+// шапкою, зернистість фону, зрізаний кут у карток товару.
+//
 // Экран состоит из:
 //   1. Шапка — логотип, контакты, иконка корзины со счётчиком
 //   2. Hero-блок — большая строка поиска по артикулу по центру
@@ -105,6 +111,31 @@ function isValidPhone(value: string): boolean {
   const digitsOnly = value.replace(/\D/g, '');
   return digitsOnly.length >= 9 && digitsOnly.length <= 13;
 }
+
+// ------------------------------------------------------------
+// ПАЛІТРА "WASTELAND" — фірмовий стиль DOMINATOR PARTS,
+// узгоджений з реальним логотипом (шестерня + поршень + пружина).
+// Винесено в константи, бо ці кольори повторюються по всьому файлу
+// ------------------------------------------------------------
+const BG = '#15100E';
+const PANEL = '#1F1815';
+const PANEL_SOFT = '#241C18';
+const IMG_PLACEHOLDER_BG = '#2A211C';
+const BORDER = '#3A2E26';
+const RED = '#E5231C';
+const YELLOW = '#F0B429';
+const PAPER = '#EDE6DD';
+const MUTED = '#B0A89C';
+const FAINT = '#8A7F70';
+const SUCCESS_BG = '#16301C';
+const SUCCESS_TEXT = '#4ADE80';
+const DANGER_BG = '#3A1512';
+const DANGER_TEXT = '#FF6B5C';
+const INK = '#15100E';
+
+const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
+const LABEL_FONT = "'Rajdhani', sans-serif";
+const BODY_FONT = "'Barlow', sans-serif";
 
 export default function StorefrontHome() {
   // ---- магазин, контакты и объявления (настраиваются в админке /admin/settings) ----
@@ -566,588 +597,633 @@ export default function StorefrontHome() {
   const hasSearched = submittedQuery !== null;
 
   return (
-    <div className="min-h-screen" style={{ background: '#F7F8FA', color: '#14181F' }}>
-      {/* ==================== ОБЪЯВЛЕНИЯ ==================== */}
-      {/* Настраиваются в админке /admin/settings (см. AnnouncementsManager) —
-          показываем только те, что админ явно включил. Если объявлений
-          несколько, выводим все подряд узкими полосками */}
-      {announcements.map((announcement) => (
-        <div
-          key={announcement.id}
-          className="text-center text-xs md:text-sm py-2 px-4 font-medium"
-          style={{ background: '#EA580C', color: '#FFFFFF' }}
-        >
-          {announcement.text}
-        </div>
-      ))}
+    <div className="min-h-screen relative" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+      {/* тонка зернистість по всій сторінці — фірмова текстура "Wasteland" */}
+      <svg
+        aria-hidden="true"
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', opacity: 0.05, pointerEvents: 'none', zIndex: 0 }}
+      >
+        <filter id="dp-grain">
+          <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" />
+        </filter>
+        <rect width="100%" height="100%" filter="url(#dp-grain)" />
+      </svg>
 
-      {/* ==================== ШАПКА ==================== */}
-      <header style={{ background: '#0F172A' }}>
-        <div className="max-w-6xl mx-auto px-5 md:px-8 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="w-9 h-9 rounded-md flex items-center justify-center font-bold text-sm"
-              style={{ background: '#EA580C', color: '#FFFFFF' }}
-            >
-              {shopName.charAt(0).toUpperCase()}
+      <div className="relative" style={{ zIndex: 1 }}>
+        {/* ==================== ОБЪЯВЛЕНИЯ ==================== */}
+        {/* Настраиваются в админке /admin/settings (см. AnnouncementsManager) —
+            показываем только те, что админ явно включил. Если объявлений
+            несколько, выводим все подряд узкими полосками */}
+        {announcements.map((announcement) => (
+          <div
+            key={announcement.id}
+            className="text-center text-xs md:text-sm py-2 px-4 font-semibold"
+            style={{ background: RED, color: PAPER }}
+          >
+            {announcement.text}
+          </div>
+        ))}
+
+        {/* ==================== ШАПКА ==================== */}
+        <header style={{ borderBottom: `2px solid ${RED}` }}>
+          <div className="max-w-6xl mx-auto px-5 md:px-8 py-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <DominatorMark />
+              <div>
+                <div
+                  style={{
+                    fontFamily: DISPLAY_FONT,
+                    fontSize: 24,
+                    lineHeight: 0.9,
+                    letterSpacing: '0.01em',
+                    transform: 'skewX(-6deg)',
+                  }}
+                >
+                  {shopName.toUpperCase()}
+                </div>
+                <div
+                  className="text-[11px] uppercase tracking-widest font-semibold"
+                  style={{ fontFamily: LABEL_FONT, color: YELLOW }}
+                >
+                  Команда професіоналів
+                </div>
+              </div>
             </div>
-            <span className="text-white font-semibold text-lg tracking-wide">{shopName}</span>
-          </div>
 
-          <div className="hidden md:flex items-center gap-1.5 text-sm" style={{ color: '#CBD5E1' }}>
-            <PhoneIcon />
-            <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="hover:text-white">
-              {phone}
-            </a>
-            <span className="mx-2" style={{ color: '#475569' }}>
-              ·
-            </span>
-            <span>{workingHours}</span>
-          </div>
-
-          <div className="flex items-center gap-2.5">
-            {/* ---- Особистий кабінет ---- */}
-            <Link
-              href="/account"
-              className="flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium"
-              style={{ background: '#1E293B', color: '#FFFFFF' }}
-            >
-              <UserIcon />
-              <span className="hidden sm:inline">Кабінет</span>
-            </Link>
-
-            {/* ---- Корзина ---- */}
-            {/* Кнопка только відкриває панель (не toggle) — закрывается
-                панель отдельно, кликом по крестику или по затемнению
-                фона (см. компонент CartDrawer ниже) */}
-            <button
-              type="button"
-              onClick={() => setCartOpen(true)}
-              className="relative flex items-center gap-2 px-3.5 py-2 rounded-md text-sm font-medium"
-              style={{ background: '#1E293B', color: '#FFFFFF' }}
-            >
-              <CartIcon />
-              <span className="hidden sm:inline">Кошик</span>
-            {cartCount > 0 && (
-              <span
-                className="absolute -top-1.5 -right-1.5 min-w-[20px] h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center"
-                style={{ background: '#EA580C', color: '#FFFFFF' }}
-              >
-                {cartCount}
-              </span>
-            )}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* ==================== ПАНЕЛЬ КОРЗИНИ (Sidebar) ==================== */}
-      {/* Выезжает справа поверх всей страницы. Что показывать внутри —
-          решает CartDrawer сам, по переданным пропсам: пустая корзина /
-          список товаров + форма оформления / экран "Дякуємо..." */}
-      {cartOpen && (
-        <CartDrawer
-          cart={cart}
-          cartTotal={cartTotal}
-          cartCount={cartCount}
-          orderStatus={orderStatus}
-          orderError={orderError}
-          createdOrderId={createdOrderId}
-          customerName={customerName}
-          customerSurname={customerSurname}
-          customerPhone={customerPhone}
-          city={city}
-          novaPoshtaAddress={novaPoshtaAddress}
-          comment={comment}
-          nameError={nameTouched ? nameError : null}
-          surnameError={surnameTouched ? surnameError : null}
-          phoneError={phoneTouched ? phoneError : null}
-          cityError={cityTouched ? cityError : null}
-          addressError={addressTouched ? addressError : null}
-          onNameChange={setCustomerName}
-          onSurnameChange={setCustomerSurname}
-          onPhoneChange={setCustomerPhone}
-          onCityChange={setCity}
-          onAddressChange={setNovaPoshtaAddress}
-          onCommentChange={setComment}
-          onNameBlur={() => setNameTouched(true)}
-          onSurnameBlur={() => setSurnameTouched(true)}
-          onPhoneBlur={() => setPhoneTouched(true)}
-          onCityBlur={() => setCityTouched(true)}
-          onAddressBlur={() => setAddressTouched(true)}
-          onIncrement={(id) => updateQuantity(id, 1)}
-          onDecrement={(id) => updateQuantity(id, -1)}
-          onRemove={removeFromCart}
-          onSubmit={handleSubmitOrder}
-          onClose={closeCart}
-        />
-      )}
-
-      {/* ==================== МОДАЛЬНЕ ВІКНО "ПІДБІР ЗА VIN" ==================== */}
-      {vinModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0" style={{ background: 'rgba(15, 23, 42, 0.5)' }} onClick={closeVinModal} />
-
-          <div className="relative w-full max-w-md rounded-2xl overflow-hidden" style={{ background: '#FFFFFF' }}>
             <div
-              className="flex items-center justify-between px-5 py-4"
-              style={{ borderBottom: '1px solid #E2E5EA' }}
+              className="hidden md:flex items-center gap-2 text-sm uppercase tracking-wide"
+              style={{ fontFamily: LABEL_FONT, color: MUTED }}
             >
-              <h2 className="text-lg font-semibold">Підбір за VIN</h2>
+              <PhoneIcon />
+              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} style={{ color: MUTED }}>
+                {phone}
+              </a>
+              <span style={{ color: BORDER }}>◆</span>
+              <span>{workingHours}</span>
+            </div>
+
+            <div className="flex items-center gap-2.5">
+              {/* ---- Особистий кабінет ---- */}
+              <Link
+                href="/account"
+                className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
+                style={{ fontFamily: LABEL_FONT, border: `2px solid ${YELLOW}`, color: YELLOW }}
+              >
+                <UserIcon />
+                <span className="hidden sm:inline">Кабінет</span>
+              </Link>
+
+              {/* ---- Корзина ---- */}
+              {/* Кнопка только відкриває панель (не toggle) — закрывается
+                  панель отдельно, кликом по крестику или по затемнению
+                  фона (см. компонент CartDrawer ниже) */}
               <button
                 type="button"
-                onClick={closeVinModal}
-                aria-label="Закрити"
-                className="p-1.5 rounded-md"
-                style={{ color: '#5B6472' }}
+                onClick={() => setCartOpen(true)}
+                className="relative flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
+                style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
               >
-                <CloseIcon />
+                <CartIcon />
+                <span className="hidden sm:inline">Кошик</span>
+                {cartCount > 0 && (
+                  <span
+                    className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center"
+                    style={{ background: YELLOW, color: INK }}
+                  >
+                    {cartCount}
+                  </span>
+                )}
               </button>
             </div>
+          </div>
+        </header>
 
-            {vinSubmitted ? (
-              <div className="flex flex-col items-center text-center px-8 py-10">
-                <div
-                  className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
-                  style={{ background: '#DCFCE7', color: '#16A34A' }}
-                >
-                  <CheckIcon />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">Дякуємо за заявку!</h3>
-                <p className="text-sm mb-6" style={{ color: '#5B6472' }}>
-                  Ми зв&apos;яжемося з вами найближчим часом і підберемо потрібну деталь за
-                  VIN-кодом.
-                </p>
+        {/* смуга небезпеки — фірмовий елемент "Wasteland" */}
+        <div
+          style={{
+            height: 8,
+            background: `repeating-linear-gradient(-45deg, ${RED}, ${RED} 18px, ${YELLOW} 18px, ${YELLOW} 36px)`,
+          }}
+        />
+
+        {/* ==================== ПАНЕЛЬ КОРЗИНИ (Sidebar) ==================== */}
+        {/* Выезжает справа поверх всей страницы. Что показывать внутри —
+            решает CartDrawer сам, по переданным пропсам: пустая корзина /
+            список товаров + форма оформления / экран "Дякуємо..." */}
+        {cartOpen && (
+          <CartDrawer
+            cart={cart}
+            cartTotal={cartTotal}
+            cartCount={cartCount}
+            orderStatus={orderStatus}
+            orderError={orderError}
+            createdOrderId={createdOrderId}
+            customerName={customerName}
+            customerSurname={customerSurname}
+            customerPhone={customerPhone}
+            city={city}
+            novaPoshtaAddress={novaPoshtaAddress}
+            comment={comment}
+            nameError={nameTouched ? nameError : null}
+            surnameError={surnameTouched ? surnameError : null}
+            phoneError={phoneTouched ? phoneError : null}
+            cityError={cityTouched ? cityError : null}
+            addressError={addressTouched ? addressError : null}
+            onNameChange={setCustomerName}
+            onSurnameChange={setCustomerSurname}
+            onPhoneChange={setCustomerPhone}
+            onCityChange={setCity}
+            onAddressChange={setNovaPoshtaAddress}
+            onCommentChange={setComment}
+            onNameBlur={() => setNameTouched(true)}
+            onSurnameBlur={() => setSurnameTouched(true)}
+            onPhoneBlur={() => setPhoneTouched(true)}
+            onCityBlur={() => setCityTouched(true)}
+            onAddressBlur={() => setAddressTouched(true)}
+            onIncrement={(id) => updateQuantity(id, 1)}
+            onDecrement={(id) => updateQuantity(id, -1)}
+            onRemove={removeFromCart}
+            onSubmit={handleSubmitOrder}
+            onClose={closeCart}
+          />
+        )}
+
+        {/* ==================== МОДАЛЬНЕ ВІКНО "ПІДБІР ЗА VIN" ==================== */}
+        {vinModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0" style={{ background: 'rgba(21, 16, 14, 0.72)' }} onClick={closeVinModal} />
+
+            <div className="relative w-full max-w-md overflow-hidden" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
+              <div
+                className="flex items-center justify-between px-5 py-4"
+                style={{ borderBottom: `1px solid ${BORDER}` }}
+              >
+                <h2 className="text-lg" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
+                  Підбір за VIN
+                </h2>
                 <button
                   type="button"
                   onClick={closeVinModal}
-                  className="px-6 py-3 rounded-lg text-sm font-semibold"
-                  style={{ background: '#EA580C', color: '#FFFFFF' }}
+                  aria-label="Закрити"
+                  className="p-1.5"
+                  style={{ color: MUTED }}
                 >
-                  Закрити
+                  <CloseIcon />
                 </button>
               </div>
-            ) : (
-              <form onSubmit={handleSubmitVinRequest} className="px-5 py-5 flex flex-col gap-3">
-                <p className="text-xs" style={{ color: '#5B6472' }}>
-                  Не знайшли деталь за артикулом? Залиште VIN-код автомобіля й опишіть, що
-                  шукаєте — наш менеджер підбере деталь вручну і зв&apos;яжеться з вами.
-                </p>
 
-                <input
-                  type="text"
-                  value={vinCode}
-                  onChange={(e) => setVinCode(e.target.value.toUpperCase())}
-                  placeholder="VIN-код, напр. WVWZZZ1JZXW000001"
-                  className="w-full px-3.5 py-2.5 rounded-md text-sm font-mono outline-none"
-                  style={{ background: '#F7F8FA', border: '1px solid #E2E5EA' }}
-                />
-
-                <input
-                  type="tel"
-                  value={vinPhone}
-                  onChange={(e) => setVinPhone(e.target.value)}
-                  placeholder="Номер телефону"
-                  className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none"
-                  style={{ background: '#F7F8FA', border: '1px solid #E2E5EA' }}
-                />
-
-                <textarea
-                  value={vinDescription}
-                  onChange={(e) => setVinDescription(e.target.value)}
-                  placeholder="Що шукаєте? Наприклад: гальмівні колодки передні"
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none resize-none"
-                  style={{ background: '#F7F8FA', border: '1px solid #E2E5EA' }}
-                />
-
-                {vinError && (
-                  <p className="text-xs p-2.5 rounded-md" style={{ background: '#FEE2E2', color: '#DC2626' }}>
-                    {vinError}
+              {vinSubmitted ? (
+                <div className="flex flex-col items-center text-center px-8 py-10">
+                  <div
+                    className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
+                    style={{ background: SUCCESS_BG, color: SUCCESS_TEXT }}
+                  >
+                    <CheckIcon />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Дякуємо за заявку!</h3>
+                  <p className="text-sm mb-6" style={{ color: MUTED }}>
+                    Ми зв&apos;яжемося з вами найближчим часом і підберемо потрібну деталь за
+                    VIN-кодом.
                   </p>
-                )}
+                  <button
+                    type="button"
+                    onClick={closeVinModal}
+                    className="px-6 py-3 text-sm font-bold uppercase tracking-wide"
+                    style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                  >
+                    Закрити
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleSubmitVinRequest} className="px-5 py-5 flex flex-col gap-3">
+                  <p className="text-xs" style={{ color: MUTED }}>
+                    Не знайшли деталь за артикулом? Залиште VIN-код автомобіля й опишіть, що
+                    шукаєте — наш менеджер підбере деталь вручну і зв&apos;яжеться з вами.
+                  </p>
+
+                  <input
+                    type="text"
+                    value={vinCode}
+                    onChange={(e) => setVinCode(e.target.value.toUpperCase())}
+                    placeholder="VIN-код, напр. WVWZZZ1JZXW000001"
+                    className="w-full px-3.5 py-2.5 text-sm font-mono outline-none placeholder:text-[#8A7F70]"
+                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: PAPER }}
+                  />
+
+                  <input
+                    type="tel"
+                    value={vinPhone}
+                    onChange={(e) => setVinPhone(e.target.value)}
+                    placeholder="Номер телефону"
+                    className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
+                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: PAPER }}
+                  />
+
+                  <textarea
+                    value={vinDescription}
+                    onChange={(e) => setVinDescription(e.target.value)}
+                    placeholder="Що шукаєте? Наприклад: гальмівні колодки передні"
+                    rows={3}
+                    className="w-full px-3.5 py-2.5 text-sm outline-none resize-none placeholder:text-[#8A7F70]"
+                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: PAPER }}
+                  />
+
+                  {vinError && (
+                    <p className="text-xs p-2.5" style={{ background: DANGER_BG, color: DANGER_TEXT }}>
+                      {vinError}
+                    </p>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={vinSubmitting}
+                    className="w-full py-3 text-sm font-bold uppercase tracking-wide disabled:opacity-60"
+                    style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                  >
+                    {vinSubmitting ? 'Надсилаємо...' : 'Надіслати заявку'}
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ==================== HERO + ПОИСК ==================== */}
+        <section className="relative overflow-hidden">
+          <div className="max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-24 relative text-center">
+            <div
+              className="text-xs md:text-sm font-semibold uppercase tracking-[0.2em] mb-4"
+              style={{ fontFamily: LABEL_FONT, color: YELLOW }}
+            >
+              ⚠ Понад 20 000 запчастин у наявності ⚠
+            </div>
+            <h1
+              className="text-4xl md:text-6xl lg:text-7xl mb-5 leading-[0.92]"
+              style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em', transform: 'skewX(-2deg)', textWrap: 'balance' }}
+            >
+              ДОРОГА НЕ ПРОБАЧАЄ
+              <br />
+              СЛАБКИХ ДЕТАЛЕЙ
+            </h1>
+            <p className="text-sm md:text-base mb-9 max-w-xl mx-auto" style={{ color: MUTED }}>
+              {shopName} — деталі, перевірені бездоріжжям. Знайдіть потрібну за артикулом
+              або підберіть деталь за вашим автомобілем.
+            </p>
+
+            {/* ---- перемикач режиму пошуку ---- */}
+            <div className="max-w-2xl mx-auto flex gap-1 p-1 mb-3" style={{ background: 'rgba(237,230,221,0.08)' }}>
+              <button
+                type="button"
+                onClick={() => setSearchMode('article')}
+                className="flex-1 py-2 text-sm font-semibold uppercase tracking-wide transition-colors"
+                style={
+                  searchMode === 'article'
+                    ? { fontFamily: LABEL_FONT, background: PAPER, color: INK }
+                    : { fontFamily: LABEL_FONT, background: 'transparent', color: MUTED }
+                }
+              >
+                За артикулом
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchMode('car')}
+                className="flex-1 py-2 text-sm font-semibold uppercase tracking-wide transition-colors"
+                style={
+                  searchMode === 'car'
+                    ? { fontFamily: LABEL_FONT, background: PAPER, color: INK }
+                    : { fontFamily: LABEL_FONT, background: 'transparent', color: MUTED }
+                }
+              >
+                За автомобілем
+              </button>
+            </div>
+
+            {searchMode === 'article' ? (
+              <form
+                onSubmit={handleSearchSubmit}
+                className="max-w-2xl mx-auto flex flex-col sm:flex-row"
+                style={{ background: PAPER }}
+              >
+                <div className="flex-1 flex items-center gap-2.5 px-4">
+                  <SearchIcon />
+                  <input
+                    type="text"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    placeholder="Наприклад: 555-66 або AB 12"
+                    className="w-full py-4 text-base outline-none bg-transparent placeholder:text-[#8A7F70]"
+                    style={{ color: INK }}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={searching || !searchInput.trim()}
+                  className="px-8 py-4 text-sm font-bold uppercase tracking-wide disabled:opacity-50 shrink-0"
+                  style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                >
+                  {searching ? 'Шукаємо...' : 'Знайти'}
+                </button>
+              </form>
+            ) : (
+              <form
+                onSubmit={handleCarSearchSubmit}
+                className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-2 p-2"
+                style={{ background: PAPER }}
+              >
+                <select
+                  value={carMake}
+                  onChange={(e) => setCarMake(e.target.value)}
+                  className="flex-1 px-3 py-3.5 text-base bg-transparent outline-none"
+                  style={{ color: carMake ? INK : '#8A7F70' }}
+                >
+                  <option value="">Марка авто</option>
+                  {carMakeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={carYear}
+                  onChange={(e) => setCarYear(e.target.value)}
+                  disabled={!carMake}
+                  className="flex-1 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
+                  style={{ color: carYear ? INK : '#8A7F70' }}
+                >
+                  <option value="">Рік</option>
+                  {carYearOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={carEngineVolume}
+                  onChange={(e) => setCarEngineVolume(e.target.value)}
+                  disabled={!carYear}
+                  className="flex-1 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
+                  style={{ color: carEngineVolume ? INK : '#8A7F70' }}
+                >
+                  <option value="">Об&apos;єм двигуна</option>
+                  {carEngineOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
 
                 <button
                   type="submit"
-                  disabled={vinSubmitting}
-                  className="w-full py-3 rounded-lg text-sm font-semibold disabled:opacity-60"
-                  style={{ background: '#EA580C', color: '#FFFFFF' }}
+                  disabled={searching || !carMake}
+                  className="px-8 py-3.5 text-sm font-bold uppercase tracking-wide disabled:opacity-50 shrink-0"
+                  style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
                 >
-                  {vinSubmitting ? 'Надсилаємо...' : 'Надіслати заявку'}
+                  {searching ? 'Шукаємо...' : 'Знайти'}
                 </button>
               </form>
             )}
           </div>
-        </div>
-      )}
+        </section>
 
-      {/* ==================== HERO + ПОИСК ==================== */}
-      <section
-        className="relative overflow-hidden"
-        style={{
-          background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 55%, #334155 100%)',
-        }}
-      >
-        <div className="max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-24 relative text-center">
-          <h1 className="text-3xl md:text-5xl font-bold text-white mb-4 leading-tight">
-            Знайдіть потрібну запчастину
-            <br />
-            за секунди
-          </h1>
-          <p className="text-sm md:text-base mb-9 max-w-xl mx-auto" style={{ color: '#CBD5E1' }}>
-            Понад 20 000 оригінальних та аналогових запчастин в наявності. Шукайте за
-            артикулом деталі або підберіть деталь за вашим автомобілем.
-          </p>
+        {/* ==================== РЕЗУЛЬТАТЫ ПОИСКА ==================== */}
+        {hasSearched && (
+          <section className="max-w-6xl mx-auto px-5 md:px-8 py-12">
+            <h2 className="text-xl md:text-2xl mb-1" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
+              Результати пошуку: «{submittedQuery}»
+            </h2>
+            <div className="flex items-center justify-between mb-6 gap-4">
+              <p className="text-sm" style={{ color: MUTED }}>
+                {searching ? 'Шукаємо...' : `Знайдено: ${results.length}`}
+              </p>
 
-          {/* ---- перемикач режиму пошуку ---- */}
-          <div className="max-w-2xl mx-auto flex gap-1 p-1 rounded-lg mb-3" style={{ background: 'rgba(255,255,255,0.1)' }}>
-            <button
-              type="button"
-              onClick={() => setSearchMode('article')}
-              className="flex-1 py-2 rounded-md text-sm font-medium transition-colors"
-              style={
-                searchMode === 'article'
-                  ? { background: '#FFFFFF', color: '#14181F' }
-                  : { background: 'transparent', color: '#CBD5E1' }
-              }
-            >
-              За артикулом
-            </button>
-            <button
-              type="button"
-              onClick={() => setSearchMode('car')}
-              className="flex-1 py-2 rounded-md text-sm font-medium transition-colors"
-              style={
-                searchMode === 'car'
-                  ? { background: '#FFFFFF', color: '#14181F' }
-                  : { background: 'transparent', color: '#CBD5E1' }
-              }
-            >
-              За автомобілем
-            </button>
-          </div>
+              {/* ---- перемикач вигляду: плиткою або таблицею ---- */}
+              {!searching && results.length > 0 && (
+                <div className="flex gap-1 p-1 shrink-0" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
+                  <button
+                    type="button"
+                    onClick={() => changeViewMode('grid')}
+                    aria-label="Показати плиткою"
+                    title="Плиткою"
+                    className="p-1.5"
+                    style={viewMode === 'grid' ? { background: RED, color: INK } : { color: MUTED }}
+                  >
+                    <GridViewIcon />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => changeViewMode('table')}
+                    aria-label="Показати таблицею"
+                    title="Таблицею"
+                    className="p-1.5"
+                    style={viewMode === 'table' ? { background: RED, color: INK } : { color: MUTED }}
+                  >
+                    <TableViewIcon />
+                  </button>
+                </div>
+              )}
+            </div>
 
-          {searchMode === 'article' ? (
-            <form
-              onSubmit={handleSearchSubmit}
-              className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-3 p-2 rounded-xl"
-              style={{ background: '#FFFFFF' }}
-            >
-              <div className="flex-1 flex items-center gap-2.5 px-3">
-                <SearchIcon />
-                <input
-                  type="text"
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  placeholder="Наприклад: 555-66 або AB 12"
-                  className="w-full py-3.5 text-base outline-none"
-                  style={{ color: '#14181F' }}
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={searching || !searchInput.trim()}
-                className="px-8 py-3.5 rounded-lg text-base font-semibold disabled:opacity-50 shrink-0"
-                style={{ background: '#EA580C', color: '#FFFFFF' }}
+            {searchError && (
+              <p className="text-sm p-4" style={{ background: DANGER_BG, color: DANGER_TEXT }}>
+                {searchError}
+              </p>
+            )}
+
+            {!searching && !searchError && results.length === 0 && (
+              <div
+                className="text-center py-14 px-6"
+                style={{ background: PANEL, border: `1px solid ${BORDER}` }}
               >
-                {searching ? 'Шукаємо...' : 'Знайти'}
-              </button>
-            </form>
-          ) : (
-            <form
-              onSubmit={handleCarSearchSubmit}
-              className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-3 p-3 rounded-xl"
-              style={{ background: '#FFFFFF' }}
-            >
-              <select
-                value={carMake}
-                onChange={(e) => setCarMake(e.target.value)}
-                className="flex-1 px-3 py-3.5 text-base rounded-lg outline-none"
-                style={{ color: carMake ? '#14181F' : '#8A93A2', background: '#F7F8FA' }}
-              >
-                <option value="">Марка авто</option>
-                {carMakeOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={carYear}
-                onChange={(e) => setCarYear(e.target.value)}
-                disabled={!carMake}
-                className="flex-1 px-3 py-3.5 text-base rounded-lg outline-none disabled:opacity-50"
-                style={{ color: carYear ? '#14181F' : '#8A93A2', background: '#F7F8FA' }}
-              >
-                <option value="">Рік</option>
-                {carYearOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-
-              <select
-                value={carEngineVolume}
-                onChange={(e) => setCarEngineVolume(e.target.value)}
-                disabled={!carYear}
-                className="flex-1 px-3 py-3.5 text-base rounded-lg outline-none disabled:opacity-50"
-                style={{ color: carEngineVolume ? '#14181F' : '#8A93A2', background: '#F7F8FA' }}
-              >
-                <option value="">Об&apos;єм двигуна</option>
-                {carEngineOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                type="submit"
-                disabled={searching || !carMake}
-                className="px-8 py-3.5 rounded-lg text-base font-semibold disabled:opacity-50 shrink-0"
-                style={{ background: '#EA580C', color: '#FFFFFF' }}
-              >
-                {searching ? 'Шукаємо...' : 'Знайти'}
-              </button>
-            </form>
-          )}
-        </div>
-      </section>
-
-      {/* ==================== РЕЗУЛЬТАТЫ ПОИСКА ==================== */}
-      {hasSearched && (
-        <section className="max-w-6xl mx-auto px-5 md:px-8 py-12">
-          <h2 className="text-xl font-semibold mb-1">
-            Результати пошуку: «{submittedQuery}»
-          </h2>
-          <div className="flex items-center justify-between mb-6 gap-4">
-            <p className="text-sm" style={{ color: '#5B6472' }}>
-              {searching ? 'Шукаємо...' : `Знайдено: ${results.length}`}
-            </p>
-
-            {/* ---- перемикач вигляду: плиткою або таблицею ---- */}
-            {!searching && results.length > 0 && (
-              <div className="flex gap-1 p-1 rounded-lg shrink-0" style={{ background: '#EEF0F3' }}>
+                <div className="text-4xl mb-3">🔍</div>
+                <h3 className="text-lg font-semibold mb-2">За вашим запитом нічого не знайдено</h3>
+                <p className="text-sm mb-6" style={{ color: MUTED }}>
+                  Перевірте правильність артикула або залиште заявку — наші менеджери підберуть деталь вручну.
+                </p>
                 <button
                   type="button"
-                  onClick={() => changeViewMode('grid')}
-                  aria-label="Показати плиткою"
-                  title="Плиткою"
-                  className="p-1.5 rounded-md"
-                  style={viewMode === 'grid' ? { background: '#FFFFFF', color: '#EA580C' } : { color: '#8A93A2' }}
+                  onClick={() => setVinModalOpen(true)}
+                  className="px-6 py-3 text-sm font-bold uppercase tracking-wide"
+                  style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
                 >
-                  <GridViewIcon />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => changeViewMode('table')}
-                  aria-label="Показати таблицею"
-                  title="Таблицею"
-                  className="p-1.5 rounded-md"
-                  style={viewMode === 'table' ? { background: '#FFFFFF', color: '#EA580C' } : { color: '#8A93A2' }}
-                >
-                  <TableViewIcon />
+                  Залишити заявку на підбір
                 </button>
               </div>
             )}
-          </div>
 
-          {searchError && (
-            <p className="text-sm p-4 rounded-lg" style={{ background: '#FEE2E2', color: '#DC2626' }}>
-              {searchError}
-            </p>
-          )}
-
-          {!searching && !searchError && results.length === 0 && (
-            <div
-              className="text-center py-14 px-6 rounded-xl"
-              style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}
-            >
-              <div className="text-4xl mb-3">🔍</div>
-              <h3 className="text-lg font-semibold mb-2">За вашим запитом нічого не знайдено</h3>
-              <p className="text-sm mb-6" style={{ color: '#5B6472' }}>
-                Перевірте правильність артикула або залиште заявку — наші менеджери підберуть деталь вручну.
-              </p>
-              <button
-                type="button"
-                onClick={() => setVinModalOpen(true)}
-                className="px-6 py-3 rounded-lg text-sm font-semibold"
-                style={{ background: '#EA580C', color: '#FFFFFF' }}
-              >
-                Залишити заявку на підбір
-              </button>
-            </div>
-          )}
-
-          {!searching && results.length > 0 && viewMode === 'grid' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {results.map((product) => (
-                <div
-                  key={product.id}
-                  className="p-4 rounded-xl flex flex-col gap-3"
-                  style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}
-                >
+            {!searching && results.length > 0 && viewMode === 'grid' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {results.map((product) => (
                   <div
-                    className="w-full aspect-square rounded-lg flex items-center justify-center overflow-hidden"
-                    style={{ background: '#F1EAE0' }}
+                    key={product.id}
+                    className="p-4 flex flex-col gap-3"
+                    style={{
+                      background: PANEL,
+                      border: `1px solid ${BORDER}`,
+                      clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%)',
+                    }}
                   >
-                    {product.imageUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={product.imageUrl} alt={product.name || product.article} className="w-full h-full object-cover" />
-                    ) : (
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ color: '#C9BFAF' }}>
-                        <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
-                        <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.6" />
-                        <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-
-                  <div>
-                    <p className="text-xs font-mono mb-1" style={{ color: '#8A93A2' }}>
-                      {product.article}
-                      {product.brand ? ` · ${product.brand}` : ''}
-                    </p>
-                    <p className="text-sm font-medium leading-snug">{product.name || 'Без назви'}</p>
-                  </div>
-
-                  <div className="flex items-center justify-between mt-auto">
-                    <span
-                      className="text-xs px-2 py-1 rounded-full font-medium"
-                      style={
-                        product.stock > 0
-                          ? { background: '#DCFCE7', color: '#16A34A' }
-                          : { background: '#FEE2E2', color: '#DC2626' }
-                      }
+                    <div
+                      className="w-full aspect-square flex items-center justify-center overflow-hidden"
+                      style={{ background: IMG_PLACEHOLDER_BG }}
                     >
-                      {product.stock > 0 ? `В наявності: ${product.stock}` : 'Немає в наявності'}
-                    </span>
-                    <span className="text-base font-semibold">{formatMoney(product.retailPrice)} грн</span>
-                  </div>
+                      {product.imageUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={product.imageUrl} alt={product.name || product.article} className="w-full h-full object-cover" />
+                      ) : (
+                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ color: '#5A4C40' }}>
+                          <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                          <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.6" />
+                          <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
 
-                  <button
-                    type="button"
-                    disabled={product.stock <= 0}
-                    onClick={() => addToCart(product)}
-                    className="w-full py-2.5 rounded-md text-sm font-medium disabled:opacity-40"
-                    style={{ background: '#EA580C', color: '#FFFFFF' }}
-                  >
-                    До кошика
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {!searching && results.length > 0 && viewMode === 'table' && (
-            <div className="rounded-xl overflow-x-auto" style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}>
-              <table className="w-full text-sm" style={{ minWidth: '640px' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid #E2E5EA' }}>
-                    {['Товар', 'Артикул', 'Наявність', 'Ціна', ''].map((heading) => (
-                      <th
-                        key={heading}
-                        className="text-left px-4 py-3 text-xs font-medium whitespace-nowrap"
-                        style={{ color: '#8A93A2' }}
-                      >
-                        {heading}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((product) => (
-                    <tr key={product.id} style={{ borderBottom: '1px solid #F0F1F3' }}>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3 min-w-[200px]">
-                          <div
-                            className="w-11 h-11 shrink-0 rounded-lg flex items-center justify-center overflow-hidden"
-                            style={{ background: '#F1EAE0' }}
-                          >
-                            {product.imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={product.imageUrl}
-                                alt={product.name || product.article}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: '#C9BFAF' }}>
-                                <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
-                                <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.6" />
-                                <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                              </svg>
-                            )}
-                          </div>
-                          <span className="text-sm font-medium leading-snug">{product.name || 'Без назви'}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono font-bold whitespace-nowrap" style={{ color: '#EA580C' }}>
+                    <div>
+                      <p className="text-xs font-mono uppercase tracking-wide mb-1" style={{ fontFamily: LABEL_FONT, color: YELLOW }}>
                         {product.article}
                         {product.brand ? ` · ${product.brand}` : ''}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span
-                          className="text-xs px-2 py-1 rounded-full font-medium"
-                          style={
-                            product.stock > 0
-                              ? { background: '#DCFCE7', color: '#16A34A' }
-                              : { background: '#FEE2E2', color: '#DC2626' }
-                          }
+                      </p>
+                      <p className="text-sm font-medium leading-snug">{product.name || 'Без назви'}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between mt-auto">
+                      <span
+                        className="text-xs px-2 py-1 font-medium"
+                        style={
+                          product.stock > 0
+                            ? { background: SUCCESS_BG, color: SUCCESS_TEXT }
+                            : { background: DANGER_BG, color: DANGER_TEXT }
+                        }
+                      >
+                        {product.stock > 0 ? `В наявності: ${product.stock}` : 'Немає в наявності'}
+                      </span>
+                      <span style={{ fontFamily: DISPLAY_FONT, fontSize: 22 }}>{formatMoney(product.retailPrice)} ГРН</span>
+                    </div>
+
+                    <button
+                      type="button"
+                      disabled={product.stock <= 0}
+                      onClick={() => addToCart(product)}
+                      className="w-full py-2.5 text-sm font-bold uppercase tracking-wide disabled:opacity-40"
+                      style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                    >
+                      До кошика
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {!searching && results.length > 0 && viewMode === 'table' && (
+              <div className="overflow-x-auto" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
+                <table className="w-full text-sm" style={{ minWidth: '640px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                      {['Товар', 'Артикул', 'Наявність', 'Ціна', ''].map((heading) => (
+                        <th
+                          key={heading}
+                          className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide whitespace-nowrap"
+                          style={{ fontFamily: LABEL_FONT, color: MUTED }}
                         >
-                          {product.stock > 0 ? `В наявності: ${product.stock}` : 'Немає в наявності'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm font-semibold whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {formatMoney(product.retailPrice)} грн
-                      </td>
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <button
-                          type="button"
-                          disabled={product.stock <= 0}
-                          onClick={() => addToCart(product)}
-                          className="px-4 py-2 rounded-md text-xs font-medium disabled:opacity-40"
-                          style={{ background: '#EA580C', color: '#FFFFFF' }}
-                        >
-                          До кошика
-                        </button>
-                      </td>
+                          {heading}
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {results.map((product) => (
+                      <tr key={product.id} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3 min-w-[200px]">
+                            <div
+                              className="w-11 h-11 shrink-0 flex items-center justify-center overflow-hidden"
+                              style={{ background: IMG_PLACEHOLDER_BG }}
+                            >
+                              {product.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={product.imageUrl}
+                                  alt={product.name || product.article}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ color: '#5A4C40' }}>
+                                  <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                                  <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.6" />
+                                  <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                                </svg>
+                              )}
+                            </div>
+                            <span className="text-sm font-medium leading-snug">{product.name || 'Без назви'}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs font-mono font-bold whitespace-nowrap" style={{ color: YELLOW }}>
+                          {product.article}
+                          {product.brand ? ` · ${product.brand}` : ''}
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          <span
+                            className="text-xs px-2 py-1 font-medium"
+                            style={
+                              product.stock > 0
+                                ? { background: SUCCESS_BG, color: SUCCESS_TEXT }
+                                : { background: DANGER_BG, color: DANGER_TEXT }
+                            }
+                          >
+                            {product.stock > 0 ? `В наявності: ${product.stock}` : 'Немає в наявності'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm font-semibold whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                          {formatMoney(product.retailPrice)} грн
+                        </td>
+                        <td className="px-4 py-3 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            disabled={product.stock <= 0}
+                            onClick={() => addToCart(product)}
+                            className="px-4 py-2 text-xs font-bold uppercase tracking-wide disabled:opacity-40"
+                            style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                          >
+                            До кошика
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ==================== ПРЕИМУЩЕСТВА ==================== */}
+        <section className="max-w-6xl mx-auto px-5 md:px-8 py-14">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            <BenefitCard
+              icon={<TruckIcon />}
+              title="Швидка доставка"
+              description="Відправляємо замовлення в день оформлення по всій Україні"
+            />
+            <BenefitCard
+              icon={<CheckIcon />}
+              title="Оригінальні запчастини"
+              description="Працюємо тільки з перевіреними постачальниками та брендами"
+            />
+            <BenefitCard
+              icon={<CarIcon />}
+              title="Підбір за VIN"
+              description="Не знайшли за артикулом? Надішліть VIN — підберемо точно"
+              onClick={() => setVinModalOpen(true)}
+            />
+          </div>
         </section>
-      )}
 
-      {/* ==================== ПРЕИМУЩЕСТВА ==================== */}
-      <section className="max-w-6xl mx-auto px-5 md:px-8 py-14">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <BenefitCard
-            icon={<TruckIcon />}
-            title="Швидка доставка"
-            description="Відправляємо замовлення в день оформлення по всій Україні"
-          />
-          <BenefitCard
-            icon={<CheckIcon />}
-            title="Оригінальні запчастини"
-            description="Працюємо тільки з перевіреними постачальниками та брендами"
-          />
-          <BenefitCard
-            icon={<CarIcon />}
-            title="Підбір за VIN"
-            description="Не знайшли за артикулом? Надішліть VIN — підберемо точно"
-            onClick={() => setVinModalOpen(true)}
-          />
-        </div>
-      </section>
-
-      <footer className="py-8 text-center text-xs" style={{ color: '#8A93A2' }}>
-        © {new Date().getFullYear()} {shopName} — автозапчастини з доставкою по Україні
-      </footer>
+        <footer className="py-8 text-center text-xs" style={{ color: FAINT }}>
+          © {new Date().getFullYear()} {shopName} — автозапчастини з доставкою по Україні
+        </footer>
+      </div>
     </div>
   );
 }
@@ -1200,8 +1276,9 @@ interface CartDrawerProps {
 // чтобы не повторять один и тот же объект стилей пять раз подряд
 function fieldStyle(hasError: boolean): React.CSSProperties {
   return {
-    background: '#F7F8FA',
-    border: `1px solid ${hasError ? '#DC2626' : '#E2E5EA'}`,
+    background: PANEL_SOFT,
+    border: `1px solid ${hasError ? DANGER_TEXT : BORDER}`,
+    color: PAPER,
   };
 }
 
@@ -1243,21 +1320,23 @@ function CartDrawer({
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       {/* Затемнение фона — клик по нему закрывает панель, так же как и крестик */}
-      <div className="absolute inset-0" style={{ background: 'rgba(15, 23, 42, 0.5)' }} onClick={onClose} />
+      <div className="absolute inset-0" style={{ background: 'rgba(21, 16, 14, 0.72)' }} onClick={onClose} />
 
-      <div className="relative w-full max-w-md h-full flex flex-col" style={{ background: '#FFFFFF' }}>
+      <div className="relative w-full max-w-md h-full flex flex-col" style={{ background: PANEL, borderLeft: `1px solid ${BORDER}` }}>
         {/* Шапка панели */}
         <div
           className="flex items-center justify-between px-5 py-4 shrink-0"
-          style={{ borderBottom: '1px solid #E2E5EA' }}
+          style={{ borderBottom: `1px solid ${BORDER}` }}
         >
-          <h2 className="text-lg font-semibold">Кошик{cartCount > 0 ? ` (${cartCount})` : ''}</h2>
+          <h2 className="text-lg" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
+            Кошик{cartCount > 0 ? ` (${cartCount})` : ''}
+          </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Закрити кошик"
-            className="p-1.5 rounded-md"
-            style={{ color: '#5B6472' }}
+            className="p-1.5"
+            style={{ color: MUTED }}
           >
             <CloseIcon />
           </button>
@@ -1267,11 +1346,11 @@ function CartDrawer({
           <OrderSuccessScreen orderId={createdOrderId} onClose={onClose} />
         ) : cart.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-            <div style={{ color: '#C9BFAF' }}>
+            <div style={{ color: BORDER }}>
               <CartIcon />
             </div>
             <h3 className="text-base font-semibold mt-4 mb-1.5">Кошик порожній</h3>
-            <p className="text-sm" style={{ color: '#8A93A2' }}>
+            <p className="text-sm" style={{ color: FAINT }}>
               Знайдіть потрібну деталь за артикулом і додайте її сюди.
             </p>
           </div>
@@ -1296,8 +1375,10 @@ function CartDrawer({
                 />
               ))}
 
-              <div className="pt-3 mt-1 flex flex-col gap-3" style={{ borderTop: '1px solid #E2E5EA' }}>
-                <h3 className="text-sm font-semibold">Дані для доставки</h3>
+              <div className="pt-3 mt-1 flex flex-col gap-3" style={{ borderTop: `1px solid ${BORDER}` }}>
+                <h3 className="text-sm font-semibold uppercase tracking-wide" style={{ fontFamily: LABEL_FONT }}>
+                  Дані для доставки
+                </h3>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -1307,11 +1388,11 @@ function CartDrawer({
                       onChange={(e) => onNameChange(e.target.value)}
                       onBlur={onNameBlur}
                       placeholder="Ім'я"
-                      className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none"
+                      className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
                       style={fieldStyle(!!nameError)}
                     />
                     {nameError && (
-                      <p className="text-xs mt-1" style={{ color: '#DC2626' }}>
+                      <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
                         {nameError}
                       </p>
                     )}
@@ -1324,11 +1405,11 @@ function CartDrawer({
                       onChange={(e) => onSurnameChange(e.target.value)}
                       onBlur={onSurnameBlur}
                       placeholder="Прізвище"
-                      className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none"
+                      className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
                       style={fieldStyle(!!surnameError)}
                     />
                     {surnameError && (
-                      <p className="text-xs mt-1" style={{ color: '#DC2626' }}>
+                      <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
                         {surnameError}
                       </p>
                     )}
@@ -1342,11 +1423,11 @@ function CartDrawer({
                     onChange={(e) => onPhoneChange(e.target.value)}
                     onBlur={onPhoneBlur}
                     placeholder="Номер телефону"
-                    className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none"
+                    className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
                     style={fieldStyle(!!phoneError)}
                   />
                   {phoneError && (
-                    <p className="text-xs mt-1" style={{ color: '#DC2626' }}>
+                    <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
                       {phoneError}
                     </p>
                   )}
@@ -1359,11 +1440,11 @@ function CartDrawer({
                     onChange={(e) => onCityChange(e.target.value)}
                     onBlur={onCityBlur}
                     placeholder="Місто"
-                    className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none"
+                    className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
                     style={fieldStyle(!!cityError)}
                   />
                   {cityError && (
-                    <p className="text-xs mt-1" style={{ color: '#DC2626' }}>
+                    <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
                       {cityError}
                     </p>
                   )}
@@ -1376,11 +1457,11 @@ function CartDrawer({
                     onChange={(e) => onAddressChange(e.target.value)}
                     onBlur={onAddressBlur}
                     placeholder="Адреса відділення Нової Пошти"
-                    className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none"
+                    className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
                     style={fieldStyle(!!addressError)}
                   />
                   {addressError && (
-                    <p className="text-xs mt-1" style={{ color: '#DC2626' }}>
+                    <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
                       {addressError}
                     </p>
                   )}
@@ -1394,21 +1475,23 @@ function CartDrawer({
                     onChange={(e) => onCommentChange(e.target.value)}
                     placeholder="Коментар до замовлення (необов'язково)"
                     rows={2}
-                    className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none resize-none"
+                    className="w-full px-3.5 py-2.5 text-sm outline-none resize-none placeholder:text-[#8A7F70]"
                     style={fieldStyle(false)}
                   />
                 </div>
               </div>
             </div>
 
-            <div className="px-5 py-4 flex flex-col gap-3 shrink-0" style={{ borderTop: '1px solid #E2E5EA' }}>
+            <div className="px-5 py-4 flex flex-col gap-3 shrink-0" style={{ borderTop: `1px solid ${BORDER}` }}>
               <div className="flex items-center justify-between text-sm font-semibold">
-                <span>Разом</span>
-                <span>{formatMoney(cartTotal)} грн</span>
+                <span className="uppercase tracking-wide" style={{ fontFamily: LABEL_FONT }}>
+                  Разом
+                </span>
+                <span style={{ fontFamily: DISPLAY_FONT, fontSize: 20 }}>{formatMoney(cartTotal)} ГРН</span>
               </div>
 
               {orderError && (
-                <p className="text-xs p-2.5 rounded-md" style={{ background: '#FEE2E2', color: '#DC2626' }}>
+                <p className="text-xs p-2.5" style={{ background: DANGER_BG, color: DANGER_TEXT }}>
                   {orderError}
                 </p>
               )}
@@ -1416,8 +1499,8 @@ function CartDrawer({
               <button
                 type="submit"
                 disabled={orderStatus === 'submitting'}
-                className="w-full py-3 rounded-lg text-sm font-semibold disabled:opacity-60"
-                style={{ background: '#EA580C', color: '#FFFFFF' }}
+                className="w-full py-3 text-sm font-bold uppercase tracking-wide disabled:opacity-60"
+                style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
               >
                 {orderStatus === 'submitting' ? 'Відправка...' : 'Підтвердити замовлення'}
               </button>
@@ -1445,10 +1528,10 @@ function CartRow({
   const atStockLimit = item.quantity >= item.stock;
 
   return (
-    <div className="flex items-start gap-3 pb-3" style={{ borderBottom: '1px solid #F0F1F3' }}>
+    <div className="flex items-start gap-3 pb-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium leading-snug">{item.name}</p>
-        <p className="text-xs mt-0.5" style={{ color: '#8A93A2' }}>
+        <p className="text-xs mt-0.5 font-mono" style={{ color: YELLOW }}>
           {item.article}
           {item.brand ? ` · ${item.brand}` : ''}
         </p>
@@ -1459,8 +1542,8 @@ function CartRow({
             onClick={onDecrement}
             disabled={item.quantity <= 1}
             aria-label="Зменшити кількість"
-            className="w-6 h-6 rounded flex items-center justify-center text-sm font-semibold disabled:opacity-30"
-            style={{ background: '#F1F2F4', color: '#14181F' }}
+            className="w-6 h-6 flex items-center justify-center text-sm font-semibold disabled:opacity-30"
+            style={{ background: PANEL_SOFT, color: PAPER }}
           >
             −
           </button>
@@ -1472,12 +1555,12 @@ function CartRow({
             onClick={onIncrement}
             disabled={atStockLimit}
             aria-label="Збільшити кількість"
-            className="w-6 h-6 rounded flex items-center justify-center text-sm font-semibold disabled:opacity-30"
-            style={{ background: '#F1F2F4', color: '#14181F' }}
+            className="w-6 h-6 flex items-center justify-center text-sm font-semibold disabled:opacity-30"
+            style={{ background: PANEL_SOFT, color: PAPER }}
           >
             +
           </button>
-          <span className="text-xs ml-1" style={{ color: '#8A93A2' }}>
+          <span className="text-xs ml-1" style={{ color: FAINT }}>
             × {formatMoney(item.price)} грн
           </span>
         </div>
@@ -1491,8 +1574,8 @@ function CartRow({
           type="button"
           onClick={onRemove}
           aria-label="Видалити товар з кошика"
-          className="p-1 rounded"
-          style={{ color: '#DC2626' }}
+          className="p-1"
+          style={{ color: DANGER_TEXT }}
         >
           <TrashIcon />
         </button>
@@ -1513,25 +1596,25 @@ function OrderSuccessScreen({ orderId, onClose }: { orderId: string | null; onCl
     <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
       <div
         className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
-        style={{ background: '#DCFCE7', color: '#16A34A' }}
+        style={{ background: SUCCESS_BG, color: SUCCESS_TEXT }}
       >
         <CheckIcon />
       </div>
       <h3 className="text-lg font-semibold mb-2">Дякуємо за замовлення!</h3>
-      <p className="text-sm mb-1" style={{ color: '#5B6472' }}>
+      <p className="text-sm mb-1" style={{ color: MUTED }}>
         Номер вашого замовлення:{' '}
-        <span className="font-semibold" style={{ color: '#14181F' }}>
+        <span className="font-semibold" style={{ color: PAPER }}>
           №{orderId ? orderId.slice(0, 8) : ''}
         </span>
       </p>
-      <p className="text-sm mb-6" style={{ color: '#5B6472' }}>
+      <p className="text-sm mb-6" style={{ color: MUTED }}>
         Ми зв&apos;яжемося з вами найближчим часом.
       </p>
       <button
         type="button"
         onClick={onClose}
-        className="px-6 py-3 rounded-lg text-sm font-semibold"
-        style={{ background: '#EA580C', color: '#FFFFFF' }}
+        className="px-6 py-3 text-sm font-bold uppercase tracking-wide"
+        style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
       >
         Продовжити покупки
       </button>
@@ -1557,14 +1640,16 @@ function BenefitCard({
   const content = (
     <>
       <div
-        className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0"
-        style={{ background: '#FFF1E8', color: '#EA580C' }}
+        className="w-11 h-11 flex items-center justify-center shrink-0"
+        style={{ background: 'rgba(229,35,28,0.12)', color: RED }}
       >
         {icon}
       </div>
       <div>
-        <h3 className="text-sm font-semibold mb-1">{title}</h3>
-        <p className="text-xs" style={{ color: '#5B6472' }}>
+        <h3 className="text-sm font-semibold mb-1 uppercase tracking-wide" style={{ fontFamily: LABEL_FONT }}>
+          {title}
+        </h3>
+        <p className="text-xs" style={{ color: MUTED }}>
           {description}
         </p>
       </div>
@@ -1580,8 +1665,8 @@ function BenefitCard({
       <button
         type="button"
         onClick={onClick}
-        className="p-5 rounded-xl flex items-start gap-4 text-left w-full"
-        style={{ background: '#FFFFFF', border: '1px solid #E2E5EA', cursor: 'pointer' }}
+        className="p-5 flex items-start gap-4 text-left w-full"
+        style={{ background: PANEL, border: `1px solid ${BORDER}`, cursor: 'pointer' }}
       >
         {content}
       </button>
@@ -1589,9 +1674,36 @@ function BenefitCard({
   }
 
   return (
-    <div className="p-5 rounded-xl flex items-start gap-4" style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}>
+    <div className="p-5 flex items-start gap-4" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
       {content}
     </div>
+  );
+}
+
+// Логотип-марка DOMINATOR PARTS: шестерня + поршень + пружина —
+// намальовано вручну inline SVG (без зовнішніх залежностей чи
+// растрового файлу логотипу), впізнавана форма реального лого бренду
+function DominatorMark() {
+  return (
+    <svg viewBox="0 0 120 120" width="42" height="42" fill="none" aria-hidden="true">
+      <circle cx="60" cy="60" r="42" stroke={RED} strokeWidth="7" />
+      <g fill={RED}>
+        <rect x="54" y="4" width="12" height="18" />
+        <rect x="54" y="98" width="12" height="18" />
+        <rect x="4" y="54" width="18" height="12" />
+        <rect x="98" y="54" width="18" height="12" />
+        <rect x="54" y="4" width="12" height="18" transform="rotate(45 60 60)" />
+        <rect x="54" y="4" width="12" height="18" transform="rotate(135 60 60)" />
+        <rect x="54" y="4" width="12" height="18" transform="rotate(225 60 60)" />
+        <rect x="54" y="4" width="12" height="18" transform="rotate(315 60 60)" />
+      </g>
+      <rect x="50" y="22" width="20" height="16" rx="2" fill={RED} />
+      <g stroke={RED} strokeWidth="5" fill="none" strokeLinecap="round">
+        <line x1="60" y1="38" x2="60" y2="50" />
+        <path d="M52 50 L68 50 L52 58 L68 58 L52 66 L68 66 L52 74 L68 74" />
+      </g>
+      <circle cx="60" cy="84" r="4" fill={RED} />
+    </svg>
   );
 }
 
@@ -1599,7 +1711,7 @@ function BenefitCard({
 // не тянет за собой ещё одну зависимость только ради значков
 function SearchIcon() {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ color: '#8A93A2' }}>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ color: FAINT }}>
       <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
       <path d="M21 21l-4.35-4.35" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>

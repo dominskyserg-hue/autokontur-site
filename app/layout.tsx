@@ -16,6 +16,18 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="uk">
+      {/* Шрифти фірмового стилю "Wasteland" вітрини (Bebas Neue/Rajdhani/Barlow) —
+          підключені глобально, але реально використовуються лише в
+          components/StorefrontHome.tsx; на адмін-панель (/admin) не впливають,
+          бо там ці font-family ніде не задаються */}
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body>{children}</body>
     </html>
   );
