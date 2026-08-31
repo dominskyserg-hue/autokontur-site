@@ -253,6 +253,67 @@ export default function StorefrontHome() {
       .catch(() => {});
   }, [carMake, carYear]);
 
+  // ---- заявка "Підбір за VIN" ----
+  const [vinModalOpen, setVinModalOpen] = useState(false);
+  const [vinCode, setVinCode] = useState('');
+  const [vinPhone, setVinPhone] = useState('');
+  const [vinDescription, setVinDescription] = useState('');
+  const [vinSubmitting, setVinSubmitting] = useState(false);
+  const [vinError, setVinError] = useState<string | null>(null);
+  const [vinSubmitted, setVinSubmitted] = useState(false);
+
+  const closeVinModal = () => {
+    setVinModalOpen(false);
+    // Скидаємо форму й повідомлення про успіх ЗАВЖДИ при закритті —
+    // щоб наступного разу, коли покупець відкриє це саме вікно
+    // (наприклад, щоб лишити ще одну заявку), воно було чистим
+    setVinCode('');
+    setVinPhone('');
+    setVinDescription('');
+    setVinError(null);
+    setVinSubmitted(false);
+  };
+
+  const handleSubmitVinRequest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    if (!vinCode.trim() || vinCode.trim().length < 5) {
+      setVinError('Вкажіть VIN-код автомобіля');
+      return;
+    }
+    if (!isValidPhone(vinPhone)) {
+      setVinError('Введіть коректний номер телефону');
+      return;
+    }
+    if (!vinDescription.trim()) {
+      setVinError('Опишіть, яку деталь ви шукаєте');
+      return;
+    }
+
+    setVinSubmitting(true);
+    setVinError(null);
+    try {
+      const response = await fetch('/api/vin-requests', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vinCode: vinCode.trim(),
+          phone: vinPhone.trim(),
+          description: vinDescription.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Не вдалося надіслати заявку');
+      }
+      setVinSubmitted(true);
+    } catch (error) {
+      setVinError(error instanceof Error ? error.message : 'Помилка мережі під час надсилання заявки');
+    } finally {
+      setVinSubmitting(false);
+    }
+  };
+
   // ---- корзина ----
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
@@ -622,6 +683,104 @@ export default function StorefrontHome() {
         />
       )}
 
+      {/* ==================== МОДАЛЬНЕ ВІКНО "ПІДБІР ЗА VIN" ==================== */}
+      {vinModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0" style={{ background: 'rgba(15, 23, 42, 0.5)' }} onClick={closeVinModal} />
+
+          <div className="relative w-full max-w-md rounded-2xl overflow-hidden" style={{ background: '#FFFFFF' }}>
+            <div
+              className="flex items-center justify-between px-5 py-4"
+              style={{ borderBottom: '1px solid #E2E5EA' }}
+            >
+              <h2 className="text-lg font-semibold">Підбір за VIN</h2>
+              <button
+                type="button"
+                onClick={closeVinModal}
+                aria-label="Закрити"
+                className="p-1.5 rounded-md"
+                style={{ color: '#5B6472' }}
+              >
+                <CloseIcon />
+              </button>
+            </div>
+
+            {vinSubmitted ? (
+              <div className="flex flex-col items-center text-center px-8 py-10">
+                <div
+                  className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
+                  style={{ background: '#DCFCE7', color: '#16A34A' }}
+                >
+                  <CheckIcon />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">Дякуємо за заявку!</h3>
+                <p className="text-sm mb-6" style={{ color: '#5B6472' }}>
+                  Ми зв&apos;яжемося з вами найближчим часом і підберемо потрібну деталь за
+                  VIN-кодом.
+                </p>
+                <button
+                  type="button"
+                  onClick={closeVinModal}
+                  className="px-6 py-3 rounded-lg text-sm font-semibold"
+                  style={{ background: '#EA580C', color: '#FFFFFF' }}
+                >
+                  Закрити
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitVinRequest} className="px-5 py-5 flex flex-col gap-3">
+                <p className="text-xs" style={{ color: '#5B6472' }}>
+                  Не знайшли деталь за артикулом? Залиште VIN-код автомобіля й опишіть, що
+                  шукаєте — наш менеджер підбере деталь вручну і зв&apos;яжеться з вами.
+                </p>
+
+                <input
+                  type="text"
+                  value={vinCode}
+                  onChange={(e) => setVinCode(e.target.value.toUpperCase())}
+                  placeholder="VIN-код, напр. WVWZZZ1JZXW000001"
+                  className="w-full px-3.5 py-2.5 rounded-md text-sm font-mono outline-none"
+                  style={{ background: '#F7F8FA', border: '1px solid #E2E5EA' }}
+                />
+
+                <input
+                  type="tel"
+                  value={vinPhone}
+                  onChange={(e) => setVinPhone(e.target.value)}
+                  placeholder="Номер телефону"
+                  className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none"
+                  style={{ background: '#F7F8FA', border: '1px solid #E2E5EA' }}
+                />
+
+                <textarea
+                  value={vinDescription}
+                  onChange={(e) => setVinDescription(e.target.value)}
+                  placeholder="Що шукаєте? Наприклад: гальмівні колодки передні"
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 rounded-md text-sm outline-none resize-none"
+                  style={{ background: '#F7F8FA', border: '1px solid #E2E5EA' }}
+                />
+
+                {vinError && (
+                  <p className="text-xs p-2.5 rounded-md" style={{ background: '#FEE2E2', color: '#DC2626' }}>
+                    {vinError}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={vinSubmitting}
+                  className="w-full py-3 rounded-lg text-sm font-semibold disabled:opacity-60"
+                  style={{ background: '#EA580C', color: '#FFFFFF' }}
+                >
+                  {vinSubmitting ? 'Надсилаємо...' : 'Надіслати заявку'}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ==================== HERO + ПОИСК ==================== */}
       <section
         className="relative overflow-hidden"
@@ -980,6 +1139,7 @@ export default function StorefrontHome() {
             icon={<CarIcon />}
             title="Підбір за VIN"
             description="Не знайшли за артикулом? Надішліть VIN — підберемо точно"
+            onClick={() => setVinModalOpen(true)}
           />
         </div>
       </section>
@@ -1382,9 +1542,19 @@ function OrderSuccessScreen({ orderId, onClose }: { orderId: string | null; onCl
 // МЕЛКИЕ КОМПОНЕНТЫ ОФОРМЛЕНИЯ
 // ------------------------------------------------------------
 
-function BenefitCard({ icon, title, description }: { icon: React.ReactNode; title: string; description: string }) {
-  return (
-    <div className="p-5 rounded-xl flex items-start gap-4" style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}>
+function BenefitCard({
+  icon,
+  title,
+  description,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+  onClick?: () => void;
+}) {
+  const content = (
+    <>
       <div
         className="w-11 h-11 rounded-lg flex items-center justify-center shrink-0"
         style={{ background: '#FFF1E8', color: '#EA580C' }}
@@ -1397,6 +1567,29 @@ function BenefitCard({ icon, title, description }: { icon: React.ReactNode; titl
           {description}
         </p>
       </div>
+    </>
+  );
+
+  // onClick переданий лише для картки "Підбір за VIN" — вона відкриває
+  // форму заявки, тому рендериться як справжня кнопка, а не просто
+  // <div>: так картка стає доступною і з клавіатури (Tab + Enter), а
+  // не тільки мишкою
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="p-5 rounded-xl flex items-start gap-4 text-left w-full"
+        style={{ background: '#FFFFFF', border: '1px solid #E2E5EA', cursor: 'pointer' }}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="p-5 rounded-xl flex items-start gap-4" style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}>
+      {content}
     </div>
   );
 }
