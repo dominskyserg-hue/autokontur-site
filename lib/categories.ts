@@ -191,6 +191,33 @@ export function getCategoryBySlug(slug: string): CategoryDef | undefined {
   return CATEGORIES.find((c) => c.slug === slug);
 }
 
+// ------------------------------------------------------------
+// КАТЕГОРІЇ ПЛАНОВОГО ТО (для /marky/[make]/to)
+// ------------------------------------------------------------
+// Не всі категорії деталей стосуються РЕГЛЯРНОГО техобслуговування —
+// амортизатори, сайлентблоки, кульові опори тощо міняють за станом
+// (коли зносились), а не за розкладом ТО. Тут — тільки те, що
+// перевіряють/міняють на кожному плановому ТО, у порядку, в якому
+// зазвичай іде чек-лист на СТО: спершу рідини й фільтри, потім
+// свічки та ремінь ГРМ, наприкінці — гальмівна система (її теж
+// перевіряють на кожному ТО, навіть якщо міняють не завжди)
+export const TO_CATEGORY_SLUGS = [
+  'motorni-olyvy',
+  'oliyni-filtry',
+  'povitryani-filtry',
+  'salonni-filtry',
+  'svichky-zapaliuvannia',
+  'remeni-rolyky-grm',
+  'halmivni-kolodky',
+  'halmivni-dysky',
+] as const;
+
+export function getToCategories(): CategoryDef[] {
+  return TO_CATEGORY_SLUGS.map((slug) => getCategoryBySlug(slug)).filter(
+    (c): c is CategoryDef => Boolean(c)
+  );
+}
+
 // Перетворює matchGroups категорії на SQL-умову вигляду
 //   (name ILIKE ANY($1)) AND (name ILIKE ANY($2)) ...
 // і повертає готовий масив параметрів (%слово%) для кожної групи —

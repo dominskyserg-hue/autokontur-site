@@ -43,5 +43,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  return [...staticPages, ...categoryPages, ...makePages];
+  const makeToPages: MetadataRoute.Sitemap = CAR_MAKES.map((m) => ({
+    url: `${SITE_URL}/marky/${m.slug}/to`,
+    lastModified: now,
+    changeFrequency: 'weekly',
+    priority: 0.6,
+  }));
+
+  return [...staticPages, ...categoryPages, ...makePages, ...makeToPages];
 }

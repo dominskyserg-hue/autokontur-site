@@ -159,6 +159,13 @@ export default async function CarMakePage({
               ? `У каталозі понад ${total.toLocaleString('uk-UA')} запчастин для ${make.name}: оригінал та перевірені аналоги. Знайдіть потрібну деталь за артикулом або підберіть за моделлю й роком авто.`
               : `Зараз у каталозі немає в наявності запчастин ${make.name} — скористайтесь підбором за VIN на Головній, і ми підберемо деталь під замовлення.`}
           </p>
+          <Link
+            href={`/marky/${slug}/to`}
+            className="inline-block mt-4 px-4 py-2 text-xs font-bold uppercase tracking-wide"
+            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', background: RED, color: '#15100E' }}
+          >
+            Що потрібно на ТО для {make.name} →
+          </Link>
         </header>
 
         {products.length === 0 ? (

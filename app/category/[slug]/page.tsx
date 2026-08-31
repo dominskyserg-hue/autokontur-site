@@ -21,7 +21,9 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
-import { CATEGORIES, getCategoryBySlug, buildCategoryWhereClause } from '@/lib/categories';
+import { CATEGORIES, getCategoryBySlug } from '@/lib/categories';
+import { getCarMakeBySlug } from '@/lib/carMakes';
+import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 
 export const runtime = 'nodejs';
 
@@ -57,12 +59,14 @@ interface CategoryProduct {
 // один раз
 const loadCategoryProducts = cache(async function loadCategoryProducts(
   slug: string,
-  page: number
+  page: number,
+  makeSlug: string | null
 ): Promise<{ products: CategoryProduct[]; total: number }> {
   const category = getCategoryBySlug(slug);
   if (!category) return { products: [], total: 0 };
 
-  const { clause, params } = buildCategoryWhereClause(category, 1);
+  const make = makeSlug ? getCarMakeBySlug(makeSlug) ?? null : null;
+  const { clause, params } = buildCategoryAndMakeWhereClause(category, make, 1);
   const offset = (page - 1) * PAGE_SIZE;
 
   const [productsResult, countResult] = await Promise.all([
@@ -93,22 +97,28 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
 
 // Next.js 15: params і searchParams — Promise
 type PageParams = { slug: string };
-type PageSearchParams = { page?: string };
+type PageSearchParams = { page?: string; marka?: string };
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<PageParams>;
+  searchParams: Promise<PageSearchParams>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  const { marka } = await searchParams;
   const category = getCategoryBySlug(slug);
   if (!category) return {};
 
-  const { total } = await loadCategoryProducts(slug, 1);
+  const make = marka ? getCarMakeBySlug(marka) : undefined;
+  const { total } = await loadCategoryProducts(slug, 1, marka ?? null);
 
   return {
-    title: category.metaTitle,
-    description: category.metaDescription,
+    title: make ? `${category.name} ${make.name} купити — DominatorParts` : category.metaTitle,
+    description: make
+      ? `${category.name} для ${make.name} в наявності: оригінал та перевірені аналоги. Доставка по всій Україні.`
+      : category.metaDescription,
     // Порожня категорія (поки що немає жодного відповідного товару в
     // каталозі) навмисно не індексується — сторінка без товарів
     // виглядає для Google як "тонкий" неякісний контент і може
@@ -141,14 +151,20 @@ export default async function CategoryPage({
   searchParams: Promise<PageSearchParams>;
 }) {
   const { slug } = await params;
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, marka } = await searchParams;
 
   const category = getCategoryBySlug(slug);
   if (!category) notFound();
 
+  const make = marka ? getCarMakeBySlug(marka) : undefined;
   const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
-  const { products, total } = await loadCategoryProducts(slug, page);
+  const { products, total } = await loadCategoryProducts(slug, page, marka ?? null);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  // Пагінація має зберігати ?marka= при переході між сторінками —
+  // інакше фільтр по марці скидався б на другій сторінці результатів
+  const pageHref = (targetPage: number) =>
+    `/category/${slug}?page=${targetPage}${make ? `&marka=${make.slug}` : ''}`;
 
   return (
     <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
@@ -163,6 +179,15 @@ export default async function CategoryPage({
             Категорії
           </Link>{' '}
           / <span>{category.name}</span>
+          {make && (
+            <>
+              {' '}
+              /{' '}
+              <Link href={`/marky/${make.slug}`} className="underline">
+                {make.name}
+              </Link>
+            </>
+          )}
         </nav>
 
         {/* ==================== ЗАГОЛОВОК ==================== */}
@@ -171,11 +196,19 @@ export default async function CategoryPage({
             className="text-3xl md:text-4xl mb-3"
             style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
           >
-            {category.h1}
+            {make ? `${category.name} ${make.name}` : category.h1}
           </h1>
           <p className="text-sm max-w-2xl" style={{ color: PAPER, opacity: 0.85 }}>
             {category.intro}
           </p>
+          {make && (
+            <p className="text-xs mt-2">
+              Фільтр за маркою: <strong>{make.name}</strong> ·{' '}
+              <Link href={`/category/${slug}`} className="underline" style={{ color: RED }}>
+                показати всі марки
+              </Link>
+            </p>
+          )}
         </header>
 
         {/* ==================== СПИСОК ТОВАРІВ ==================== */}
@@ -184,8 +217,10 @@ export default async function CategoryPage({
             className="p-6 rounded-md text-sm"
             style={{ background: PANEL_SOFT, border: `1px dashed ${RED}` }}
           >
-            Зараз у цій категорії немає товарів у наявності. Скористайтесь пошуком за артикулом або підбором за
-            VIN на{' '}
+            {make
+              ? `Зараз немає товарів "${category.name}" для ${make.name} у наявності. `
+              : 'Зараз у цій категорії немає товарів у наявності. '}
+            Скористайтесь пошуком за артикулом або підбором за VIN на{' '}
             <Link href="/" className="underline" style={{ color: YELLOW }}>
               Головній сторінці
             </Link>{' '}
@@ -230,11 +265,7 @@ export default async function CategoryPage({
             {totalPages > 1 && (
               <div className="flex items-center gap-3 text-sm mb-8">
                 {page > 1 && (
-                  <Link
-                    href={`/category/${slug}?page=${page - 1}`}
-                    className="underline"
-                    style={{ color: YELLOW }}
-                  >
+                  <Link href={pageHref(page - 1)} className="underline" style={{ color: YELLOW }}>
                     ← Попередня
                   </Link>
                 )}
@@ -242,11 +273,7 @@ export default async function CategoryPage({
                   Сторінка {page} з {totalPages}
                 </span>
                 {page < totalPages && (
-                  <Link
-                    href={`/category/${slug}?page=${page + 1}`}
-                    className="underline"
-                    style={{ color: YELLOW }}
-                  >
+                  <Link href={pageHref(page + 1)} className="underline" style={{ color: YELLOW }}>
                     Наступна →
                   </Link>
                 )}
