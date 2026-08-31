@@ -121,6 +121,18 @@ export default function AdminLayout({
       });
   }, []);
 
+  // ВЫХОД — стирает cookie-сессию (см. app/api/admin/logout/route.ts),
+  // затем полной перезагрузкой уходит на экран входа. Полная
+  // перезагрузка (а не клиентская навигация) — чтобы middleware.ts
+  // сразу увидел, что сессии больше нет, и не пришлось ждать лишний круг
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } finally {
+      window.location.href = '/admin/login';
+    }
+  };
+
   return (
     <div className="min-h-screen flex" style={rootStyle}>
       {/* ==================== БОКОВОЕ МЕНЮ ==================== */}
@@ -183,6 +195,15 @@ export default function AdminLayout({
             </div>
           ))}
         </nav>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="mt-auto px-2 py-2 rounded-md text-sm font-medium text-left"
+          style={{ color: 'var(--ink-faint)' }}
+        >
+          Выйти
+        </button>
       </aside>
 
       {/* ==================== ОБЛАСТЬ КОНТЕНТА ==================== */}
