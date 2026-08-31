@@ -972,6 +972,7 @@ export default function StorefrontHome() {
               </p>
               <button
                 type="button"
+                onClick={() => setVinModalOpen(true)}
                 className="px-6 py-3 rounded-lg text-sm font-semibold"
                 style={{ background: '#EA580C', color: '#FFFFFF' }}
               >
