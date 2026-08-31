@@ -51,6 +51,7 @@ import Link from 'next/link';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { FAQ_ITEMS } from '@/lib/faq';
+import { decodeVin } from '@/lib/vinDecode';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -116,24 +117,31 @@ function isValidPhone(value: string): boolean {
 }
 
 // ------------------------------------------------------------
-// ПАЛІТРА "WASTELAND" — фірмовий стиль DOMINATOR PARTS,
-// узгоджений з реальним логотипом (шестерня + поршень + пружина).
-// Винесено в константи, бо ці кольори повторюються по всьому файлу
+// ПАЛІТРА "WORKSHOP" — світліший варіант фірмового стилю DOMINATOR
+// PARTS (раніше був темний "Wasteland" — теплий кремовий фон замість
+// майже чорного, щоб ціни, кнопки й товари було легше сканувати
+// оком: для інтернет-магазину це напряму впливає на конверсію.
+// Бренд-акценти (червоний, лого) лишились ті самі.
+//
+// TEXT — новий: основний текст на світлому тлі (раніше цю роль
+// виконував PAPER, який водночас був і "світлою поверхнею" — на
+// темному тлі обидві ролі співпадали за кольором, на світлому вже
+// ні, тому роль розділено на TEXT (текст) і PANEL (поверхня)
 // ------------------------------------------------------------
-const BG = '#15100E';
-const PANEL = '#1F1815';
-const PANEL_SOFT = '#241C18';
-const IMG_PLACEHOLDER_BG = '#2A211C';
-const BORDER = '#3A2E26';
+const BG = '#FAF7F2';
+const PANEL = '#FFFFFF';
+const PANEL_SOFT = '#F1EBE0';
+const IMG_PLACEHOLDER_BG = '#EAE2D3';
+const BORDER = '#E3DAC9';
 const RED = '#E5231C';
-const YELLOW = '#F0B429';
-const PAPER = '#EDE6DD';
-const MUTED = '#B0A89C';
-const FAINT = '#8A7F70';
-const SUCCESS_BG = '#16301C';
-const SUCCESS_TEXT = '#4ADE80';
-const DANGER_BG = '#3A1512';
-const DANGER_TEXT = '#FF6B5C';
+const YELLOW = '#B45309';
+const TEXT = '#1C1917';
+const MUTED = '#6B6560';
+const FAINT = '#78716C';
+const SUCCESS_BG = '#DCFCE7';
+const SUCCESS_TEXT = '#15803D';
+const DANGER_BG = '#FEE2E2';
+const DANGER_TEXT = '#B91C1C';
 const INK = '#15100E';
 
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
@@ -301,6 +309,12 @@ export default function StorefrontHome() {
   const [vinSubmitting, setVinSubmitting] = useState(false);
   const [vinError, setVinError] = useState<string | null>(null);
   const [vinSubmitted, setVinSubmitted] = useState(false);
+
+  // Розшифровка VIN "на льоту" (lib/vinDecode.ts) — повністю офлайн,
+  // без жодного запиту на сервер. Поки покупець ще не ввів усі 17
+  // символів, decodeVin() сам поверне { make: null, year: null } —
+  // тому окремо перевіряти довжину тут не потрібно
+  const vinDecoded = useMemo(() => decodeVin(vinCode), [vinCode]);
 
   const closeVinModal = () => {
     setVinModalOpen(false);
@@ -622,7 +636,7 @@ export default function StorefrontHome() {
   const hasSearched = submittedQuery !== null;
 
   return (
-    <div className="min-h-screen relative" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+    <div className="min-h-screen relative" style={{ background: BG, color: TEXT, fontFamily: BODY_FONT }}>
       {/* тонка зернистість по всій сторінці — фірмова текстура "Wasteland" */}
       <svg
         aria-hidden="true"
@@ -643,7 +657,7 @@ export default function StorefrontHome() {
           <div
             key={announcement.id}
             className="text-center text-xs md:text-sm py-2 px-4 font-semibold"
-            style={{ background: RED, color: PAPER }}
+            style={{ background: RED, color: INK }}
           >
             {announcement.text}
           </div>
@@ -858,8 +872,39 @@ export default function StorefrontHome() {
                     onChange={(e) => setVinCode(e.target.value.toUpperCase())}
                     placeholder="VIN-код, напр. WVWZZZ1JZXW000001"
                     className="w-full px-3.5 py-2.5 text-sm font-mono outline-none placeholder:text-[#8A7F70]"
-                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: PAPER }}
+                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: TEXT }}
                   />
+
+                  {/* Розшифровка VIN "на льоту" — без запиту на сервер
+                      (lib/vinDecode.ts). З'являється одразу, як тільки
+                      розпізнано марку по перших символах VIN, і дає
+                      миттєвий результат замість очікування дзвінка
+                      менеджера */}
+                  {vinDecoded.make && (
+                    <div
+                      className="flex items-center justify-between gap-3 p-3 text-sm"
+                      style={{ background: SUCCESS_BG, color: SUCCESS_TEXT }}
+                    >
+                      <span>
+                        Схоже, це <strong>{vinDecoded.make}</strong>
+                        {vinDecoded.year ? `, прибл. ${vinDecoded.year} р.` : ''}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const params = new URLSearchParams({ carMake: vinDecoded.make as string, pageSize: '24' });
+                          setSearchMode('car');
+                          setCarMake(vinDecoded.make as string);
+                          runSearch(params, vinDecoded.make as string);
+                          closeVinModal();
+                        }}
+                        className="shrink-0 px-3 py-1.5 text-xs font-bold uppercase tracking-wide whitespace-nowrap"
+                        style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                      >
+                        Показати запчастини
+                      </button>
+                    </div>
+                  )}
 
                   <input
                     type="tel"
@@ -867,7 +912,7 @@ export default function StorefrontHome() {
                     onChange={(e) => setVinPhone(e.target.value)}
                     placeholder="Номер телефону"
                     className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
-                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: PAPER }}
+                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: TEXT }}
                   />
 
                   <textarea
@@ -876,7 +921,7 @@ export default function StorefrontHome() {
                     placeholder="Що шукаєте? Наприклад: гальмівні колодки передні"
                     rows={3}
                     className="w-full px-3.5 py-2.5 text-sm outline-none resize-none placeholder:text-[#8A7F70]"
-                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: PAPER }}
+                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: TEXT }}
                   />
 
                   {vinError && (
@@ -922,14 +967,14 @@ export default function StorefrontHome() {
             </p>
 
             {/* ---- перемикач режиму пошуку ---- */}
-            <div className="max-w-2xl mx-auto flex gap-1 p-1 mb-3" style={{ background: 'rgba(237,230,221,0.08)' }}>
+            <div className="max-w-2xl mx-auto flex gap-1 p-1 mb-3" style={{ background: PANEL_SOFT }}>
               <button
                 type="button"
                 onClick={() => setSearchMode('article')}
                 className="flex-1 py-2 text-sm font-semibold uppercase tracking-wide transition-colors"
                 style={
                   searchMode === 'article'
-                    ? { fontFamily: LABEL_FONT, background: PAPER, color: INK }
+                    ? { fontFamily: LABEL_FONT, background: PANEL, color: INK }
                     : { fontFamily: LABEL_FONT, background: 'transparent', color: MUTED }
                 }
               >
@@ -941,7 +986,7 @@ export default function StorefrontHome() {
                 className="flex-1 py-2 text-sm font-semibold uppercase tracking-wide transition-colors"
                 style={
                   searchMode === 'car'
-                    ? { fontFamily: LABEL_FONT, background: PAPER, color: INK }
+                    ? { fontFamily: LABEL_FONT, background: PANEL, color: INK }
                     : { fontFamily: LABEL_FONT, background: 'transparent', color: MUTED }
                 }
               >
@@ -953,7 +998,7 @@ export default function StorefrontHome() {
               <form
                 onSubmit={handleSearchSubmit}
                 className="max-w-2xl mx-auto flex flex-col sm:flex-row"
-                style={{ background: PAPER }}
+                style={{ background: PANEL }}
               >
                 <div className="flex-1 flex items-center gap-2.5 px-4">
                   <SearchIcon />
@@ -979,7 +1024,7 @@ export default function StorefrontHome() {
               <form
                 onSubmit={handleCarSearchSubmit}
                 className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-2 p-2"
-                style={{ background: PAPER }}
+                style={{ background: PANEL }}
               >
                 <select
                   value={carMake}
@@ -1342,7 +1387,7 @@ export default function StorefrontHome() {
                     type="button"
                     onClick={() => setOpenFaqIndex(isOpen ? null : index)}
                     className="w-full flex items-center justify-between gap-4 py-4 text-left text-sm font-semibold"
-                    style={{ fontFamily: LABEL_FONT, color: PAPER }}
+                    style={{ fontFamily: LABEL_FONT, color: TEXT }}
                     aria-expanded={isOpen}
                   >
                     <span>{item.question}</span>
@@ -1417,7 +1462,7 @@ function fieldStyle(hasError: boolean): React.CSSProperties {
   return {
     background: PANEL_SOFT,
     border: `1px solid ${hasError ? DANGER_TEXT : BORDER}`,
-    color: PAPER,
+    color: TEXT,
   };
 }
 
@@ -1682,7 +1727,7 @@ function CartRow({
             disabled={item.quantity <= 1}
             aria-label="Зменшити кількість"
             className="w-6 h-6 flex items-center justify-center text-sm font-semibold disabled:opacity-30"
-            style={{ background: PANEL_SOFT, color: PAPER }}
+            style={{ background: PANEL_SOFT, color: TEXT }}
           >
             −
           </button>
@@ -1695,7 +1740,7 @@ function CartRow({
             disabled={atStockLimit}
             aria-label="Збільшити кількість"
             className="w-6 h-6 flex items-center justify-center text-sm font-semibold disabled:opacity-30"
-            style={{ background: PANEL_SOFT, color: PAPER }}
+            style={{ background: PANEL_SOFT, color: TEXT }}
           >
             +
           </button>
@@ -1742,7 +1787,7 @@ function OrderSuccessScreen({ orderId, onClose }: { orderId: string | null; onCl
       <h3 className="text-lg font-semibold mb-2">Дякуємо за замовлення!</h3>
       <p className="text-sm mb-1" style={{ color: MUTED }}>
         Номер вашого замовлення:{' '}
-        <span className="font-semibold" style={{ color: PAPER }}>
+        <span className="font-semibold" style={{ color: TEXT }}>
           №{orderId ? orderId.slice(0, 8) : ''}
         </span>
       </p>

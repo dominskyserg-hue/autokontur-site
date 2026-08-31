@@ -101,10 +101,14 @@ export async function generateMetadata({
   };
 }
 
-const BG = '#15100E';
+// Світла палітра "Workshop" — узгоджена з components/StorefrontHome.tsx
+const BG = '#FAF7F2';
+const PANEL_SOFT = '#F1EBE0';
+const BORDER_SOFT = '#E3DAC9';
 const RED = '#E5231C';
-const YELLOW = '#F0B429';
-const PAPER = '#EDE6DD';
+const YELLOW = '#B45309';
+const PAPER = '#1C1917';
+const SUCCESS_TEXT = '#15803D';
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
 
@@ -160,7 +164,7 @@ export default async function CarMakePage({
         {products.length === 0 ? (
           <div
             className="p-6 rounded-md text-sm"
-            style={{ background: 'rgba(255,255,255,0.05)', border: `1px dashed ${RED}` }}
+            style={{ background: PANEL_SOFT, border: `1px dashed ${RED}` }}
           >
             Немає товарів {make.name} у наявності просто зараз. Скористайтесь{' '}
             <Link href="/" className="underline" style={{ color: YELLOW }}>
@@ -175,8 +179,8 @@ export default async function CarMakePage({
                 <Link
                   key={product.id}
                   href={`/?article=${encodeURIComponent(product.article)}`}
-                  className="block p-4 rounded-md transition-colors hover:opacity-90"
-                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(237,230,221,0.15)' }}
+                  className="block p-4 rounded-md transition-colors hover:opacity-90 hover:shadow-sm"
+                  style={{ background: '#FFFFFF', border: `1px solid ${BORDER_SOFT}` }}
                 >
                   <div className="text-xs uppercase mb-1" style={{ color: YELLOW, opacity: 0.9 }}>
                     {product.brand || 'Без бренду'} · {product.article}
@@ -191,8 +195,8 @@ export default async function CarMakePage({
                     <span
                       className="text-xs px-2 py-0.5 rounded"
                       style={{
-                        background: product.stock > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
-                        color: product.stock > 0 ? '#4ADE80' : PAPER,
+                        background: product.stock > 0 ? '#DCFCE7' : PANEL_SOFT,
+                        color: product.stock > 0 ? SUCCESS_TEXT : PAPER,
                       }}
                     >
                       {product.stock > 0 ? 'В наявності' : 'Під замовлення'}
@@ -222,7 +226,7 @@ export default async function CarMakePage({
           </>
         )}
 
-        <div className="pt-6" style={{ borderTop: '1px solid rgba(237,230,221,0.15)' }}>
+        <div className="pt-6" style={{ borderTop: `1px solid ${BORDER_SOFT}` }}>
           <h2 className="text-sm font-semibold mb-3" style={{ color: PAPER }}>
             Інші марки
           </h2>

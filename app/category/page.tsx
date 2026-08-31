@@ -19,10 +19,12 @@ export const metadata: Metadata = {
     'Гальмівні колодки та диски, амортизатори, сайлентблоки, фільтри, свічки та інші деталі для Toyota, Ford, Volkswagen, Audi, Skoda з доставкою по Україні.',
 };
 
-const BG = '#15100E';
+// Світла палітра "Workshop" — узгоджена з components/StorefrontHome.tsx
+const BG = '#FAF7F2';
+const BORDER_SOFT = '#E3DAC9';
 const RED = '#E5231C';
-const YELLOW = '#F0B429';
-const PAPER = '#EDE6DD';
+const YELLOW = '#B45309';
+const PAPER = '#1C1917';
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
 
@@ -49,8 +51,8 @@ export default function CategoryIndexPage() {
             <Link
               key={c.slug}
               href={`/category/${c.slug}`}
-              className="block p-4 rounded-md hover:opacity-90"
-              style={{ background: 'rgba(255,255,255,0.05)', border: `1px solid ${RED}` }}
+              className="block p-4 rounded-md hover:shadow-sm transition-shadow"
+              style={{ background: '#FFFFFF', border: `1px solid ${BORDER_SOFT}`, borderLeft: `3px solid ${RED}` }}
             >
               <div className="text-lg mb-1" style={{ fontFamily: DISPLAY_FONT, color: PAPER }}>
                 {c.name}
