@@ -34,6 +34,10 @@ const WMI_TO_MAKE: Record<string, string> = {
   JT: 'TOYOTA',
   // Nissan (Японія)
   JN: 'NISSAN',
+  // Nissan, зібраний у Великобританії (завод Сандерленд) — окремий
+  // WMI від японського JN, тому потрібен окремим записом. Саме такий
+  // код у VIN, наприклад, Nissan Qashqai/Juke/Note європейської збірки
+  SJN: 'NISSAN',
   // Mitsubishi (Японія)
   JA: 'MITSUBISHI',
   JM: 'MAZDA',
