@@ -1,0 +1,275 @@
+// ============================================================
+// SEO-сторінка категорії деталей — /category/[slug]
+//
+// На відміну від Головної (components/StorefrontHome.tsx, client
+// component з пошуком через fetch), ця сторінка — звичайний Server
+// Component: рендериться на сервері з готовим HTML і мета-тегами під
+// конкретний запит ("гальмівні колодки купити" тощо), тому Google
+// має що індексувати — раніше під ці запити взагалі не було сторінки.
+//
+// Категорія товару НЕ зберігається в базі окремим полем — вона
+// визначається на льоту пошуком ключових слів у products.name (див.
+// lib/categories.ts). Це свідомий компроміс: без міграції бази і
+// без ручної розмітки тисяч товарів з прайсів постачальників.
+//
+// runtime = 'nodejs', бо використовується бібліотека "pg" (як і в
+// усіх API-роутах проекту) — вона не працює в Edge Runtime
+// ============================================================
+
+import { cache } from 'react';
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { Pool } from 'pg';
+import { CATEGORIES, getCategoryBySlug, buildCategoryWhereClause } from '@/lib/categories';
+
+export const runtime = 'nodejs';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var pgPool: Pool | undefined;
+}
+
+const pool =
+  globalThis.pgPool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.pgPool = pool;
+}
+
+const PAGE_SIZE = 24;
+
+interface CategoryProduct {
+  id: string;
+  article: string;
+  brand: string | null;
+  name: string | null;
+  retailPrice: number;
+  stock: number;
+}
+
+// cache() від React дедуплікує виклик У МЕЖАХ ОДНОГО HTTP-запиту —
+// generateMetadata() і сам компонент сторінки викликають цю функцію
+// з однаковими аргументами, але SQL-запит реально піде в базу лише
+// один раз
+const loadCategoryProducts = cache(async function loadCategoryProducts(
+  slug: string,
+  page: number
+): Promise<{ products: CategoryProduct[]; total: number }> {
+  const category = getCategoryBySlug(slug);
+  if (!category) return { products: [], total: 0 };
+
+  const { clause, params } = buildCategoryWhereClause(category, 1);
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const [productsResult, countResult] = await Promise.all([
+    pool.query(
+      `
+      SELECT id, article, brand, name, retail_price, stock
+      FROM products
+      WHERE ${clause}
+      ORDER BY (stock > 0) DESC, name ASC NULLS LAST
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `,
+      [...params, PAGE_SIZE, offset]
+    ),
+    pool.query(`SELECT COUNT(*)::int AS total FROM products WHERE ${clause}`, params),
+  ]);
+
+  const products: CategoryProduct[] = productsResult.rows.map((row) => ({
+    id: row.id,
+    article: row.article,
+    brand: row.brand,
+    name: row.name,
+    retailPrice: parseFloat(row.retail_price),
+    stock: row.stock,
+  }));
+
+  return { products, total: countResult.rows[0]?.total ?? 0 };
+});
+
+// Next.js 15: params і searchParams — Promise
+type PageParams = { slug: string };
+type PageSearchParams = { page?: string };
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<PageParams>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const category = getCategoryBySlug(slug);
+  if (!category) return {};
+
+  const { total } = await loadCategoryProducts(slug, 1);
+
+  return {
+    title: category.metaTitle,
+    description: category.metaDescription,
+    // Порожня категорія (поки що немає жодного відповідного товару в
+    // каталозі) навмисно не індексується — сторінка без товарів
+    // виглядає для Google як "тонкий" неякісний контент і може
+    // зашкодити довірі до решти сайту. Як тільки товари з'являться,
+    // noindex зникне сам собою при наступному обході
+    robots: total === 0 ? { index: false, follow: true } : undefined,
+  };
+}
+
+const BG = '#15100E';
+const RED = '#E5231C';
+const YELLOW = '#F0B429';
+const PAPER = '#EDE6DD';
+const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
+const BODY_FONT = "'Barlow', sans-serif";
+
+function formatMoney(value: number): string {
+  return value.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+export default async function CategoryPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<PageParams>;
+  searchParams: Promise<PageSearchParams>;
+}) {
+  const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+
+  const category = getCategoryBySlug(slug);
+  if (!category) notFound();
+
+  const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
+  const { products, total } = await loadCategoryProducts(slug, page);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  return (
+    <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+      <div className="max-w-6xl mx-auto px-5 md:px-8 py-8">
+        {/* ==================== ХЛІБНІ КРИХТИ ==================== */}
+        <nav className="text-xs mb-5 opacity-70" aria-label="Хлібні крихти">
+          <Link href="/" className="underline">
+            Головна
+          </Link>{' '}
+          /{' '}
+          <Link href="/category" className="underline">
+            Категорії
+          </Link>{' '}
+          / <span>{category.name}</span>
+        </nav>
+
+        {/* ==================== ЗАГОЛОВОК ==================== */}
+        <header className="mb-6">
+          <h1
+            className="text-3xl md:text-4xl mb-3"
+            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
+          >
+            {category.h1}
+          </h1>
+          <p className="text-sm max-w-2xl" style={{ color: PAPER, opacity: 0.85 }}>
+            {category.intro}
+          </p>
+        </header>
+
+        {/* ==================== СПИСОК ТОВАРІВ ==================== */}
+        {products.length === 0 ? (
+          <div
+            className="p-6 rounded-md text-sm"
+            style={{ background: 'rgba(255,255,255,0.05)', border: `1px dashed ${RED}` }}
+          >
+            Зараз у цій категорії немає товарів у наявності. Скористайтесь пошуком за артикулом або підбором за
+            VIN на{' '}
+            <Link href="/" className="underline" style={{ color: YELLOW }}>
+              Головній сторінці
+            </Link>{' '}
+            — можливо, потрібна деталь просто ще не завантажена в каталог, і ми зможемо підібрати її під
+            замовлення.
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+              {products.map((product) => (
+                <Link
+                  key={product.id}
+                  href={`/?article=${encodeURIComponent(product.article)}`}
+                  className="block p-4 rounded-md transition-colors hover:opacity-90"
+                  style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(237,230,221,0.15)' }}
+                >
+                  <div className="text-xs uppercase mb-1" style={{ color: YELLOW, opacity: 0.9 }}>
+                    {product.brand || 'Без бренду'} · {product.article}
+                  </div>
+                  <div className="text-sm mb-2" style={{ color: PAPER }}>
+                    {product.name || category.name}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: PAPER }}>
+                      {formatMoney(product.retailPrice)} грн
+                    </span>
+                    <span
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{
+                        background: product.stock > 0 ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.08)',
+                        color: product.stock > 0 ? '#4ADE80' : PAPER,
+                      }}
+                    >
+                      {product.stock > 0 ? 'В наявності' : 'Під замовлення'}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+            {/* ==================== ПАГІНАЦІЯ ==================== */}
+            {totalPages > 1 && (
+              <div className="flex items-center gap-3 text-sm mb-8">
+                {page > 1 && (
+                  <Link
+                    href={`/category/${slug}?page=${page - 1}`}
+                    className="underline"
+                    style={{ color: YELLOW }}
+                  >
+                    ← Попередня
+                  </Link>
+                )}
+                <span style={{ opacity: 0.7 }}>
+                  Сторінка {page} з {totalPages}
+                </span>
+                {page < totalPages && (
+                  <Link
+                    href={`/category/${slug}?page=${page + 1}`}
+                    className="underline"
+                    style={{ color: YELLOW }}
+                  >
+                    Наступна →
+                  </Link>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* ==================== ІНШІ КАТЕГОРІЇ (внутрішні посилання) ==================== */}
+        <div className="pt-6" style={{ borderTop: '1px solid rgba(237,230,221,0.15)' }}>
+          <h2 className="text-sm font-semibold mb-3" style={{ color: PAPER }}>
+            Інші категорії
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {CATEGORIES.filter((c) => c.slug !== slug).map((c) => (
+              <Link
+                key={c.slug}
+                href={`/category/${c.slug}`}
+                className="text-xs px-3 py-1.5 rounded-full"
+                style={{ border: `1px solid ${RED}`, color: PAPER }}
+              >
+                {c.name}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

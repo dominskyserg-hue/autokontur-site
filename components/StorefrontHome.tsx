@@ -48,6 +48,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
+import { CATEGORIES } from '@/lib/categories';
+import { CAR_MAKES } from '@/lib/carMakes';
+import { FAQ_ITEMS } from '@/lib/faq';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -90,7 +93,7 @@ const VIEW_MODE_STORAGE_KEY = 'autokontur-view-mode';
 
 // Значения по умолчанию — показываются, пока /api/site-settings ещё
 // не ответил (или если админ ни разу не менял их через "Настройки")
-const DEFAULT_SHOP_NAME = 'AUTOKONTUR';
+const DEFAULT_SHOP_NAME = 'DominatorParts';
 const DEFAULT_PHONE = '+38 (050) 123-45-67';
 const DEFAULT_WORKING_HOURS = 'Щодня 9:00–19:00';
 
@@ -192,6 +195,12 @@ export default function StorefrontHome() {
   const [results, setResults] = useState<Product[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+
+  // ---- FAQ-акордеон (lib/faq.ts) ----
+  // Питання/відповіді ті самі, що й у розмітці FAQPage (JSON-LD) у
+  // app/page.tsx — тут лише інтерактивність (розгорнути/згорнути),
+  // сам текст спільний
+  const [openFaqIndex, setOpenFaqIndex] = useState<number | null>(null);
 
   // Вигляд результатів пошуку — плиткою (картки) або таблицею.
   // Запам'ятовуємо вибір у localStorage, щоб покупець не перемикав
@@ -576,6 +585,22 @@ export default function StorefrontHome() {
     runSearch(new URLSearchParams({ search: query, pageSize: '24' }), query);
   };
 
+  // ---- перехід із SEO-сторінок категорій (?article=...) ----
+  // Сторінки /category/[slug] (app/category/[slug]/page.tsx) ведуть
+  // сюди з конкретним артикулом обраного товару — одразу виконуємо
+  // пошук за ним, щоб покупець не вводив артикул вручну ще раз.
+  // window.location.search замість useSearchParams() — щоб не тягнути
+  // Suspense-обгортку заради єдиного разового читання параметра при
+  // завантаженні сторінки
+  useEffect(() => {
+    const articleFromUrl = new URLSearchParams(window.location.search).get('article');
+    if (!articleFromUrl) return;
+    setSearchMode('article');
+    setSearchInput(articleFromUrl);
+    runSearch(new URLSearchParams({ search: articleFromUrl, pageSize: '24' }), articleFromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Підбір за автомобілем — марка обов'язкова (без неї запит повернув
   // би взагалі весь каталог), рік і об'єм двигуна — необов'язкові
   // уточнення поверх марки
@@ -663,6 +688,32 @@ export default function StorefrontHome() {
             </div>
 
             <div className="flex items-center gap-2.5">
+              {/* ---- Категорії деталей ---- */}
+              {/* Внутрішнє посилання на /category — потрібне не тільки
+                  покупцю, а й Google: саме через такі посилання з
+                  Головної пошуковик знаходить нові SEO-сторінки категорій
+                  (див. app/category/[slug]/page.tsx) */}
+              <Link
+                href="/category"
+                className="hidden sm:flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
+                style={{ fontFamily: LABEL_FONT, border: `2px solid ${BORDER}`, color: MUTED }}
+              >
+                <span>Категорії</span>
+              </Link>
+
+              {/* ---- Марки авто ---- */}
+              {/* Те саме, що й "Категорії" вище, але для сторінок
+                  /marky/[slug] (див. lib/carMakes.ts) — сховано на
+                  вужчих екранах поруч із "Категорії", щоб шапка не
+                  переповнювалась */}
+              <Link
+                href="/marky"
+                className="hidden lg:flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
+                style={{ fontFamily: LABEL_FONT, border: `2px solid ${BORDER}`, color: MUTED }}
+              >
+                <span>Марки авто</span>
+              </Link>
+
               {/* ---- Особистий кабінет ---- */}
               <Link
                 href="/account"
@@ -1217,6 +1268,94 @@ export default function StorefrontHome() {
               description="Не знайшли за артикулом? Надішліть VIN — підберемо точно"
               onClick={() => setVinModalOpen(true)}
             />
+          </div>
+        </section>
+
+        {/* ==================== КАТЕГОРІЇ ДЕТАЛЕЙ ==================== */}
+        {/* Список посилань на SEO-сторінки категорій (app/category/[slug]) —
+            і зручність для покупця, і сигнал для Google приходити сюди
+            за новими сторінками */}
+        <section className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
+          <h2
+            className="text-sm font-semibold uppercase tracking-wide mb-3"
+            style={{ fontFamily: LABEL_FONT, color: MUTED }}
+          >
+            Популярні категорії
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {CATEGORIES.map((c) => (
+              <Link
+                key={c.slug}
+                href={`/category/${c.slug}`}
+                className="text-xs px-3 py-1.5 rounded-full"
+                style={{ border: `1px solid ${BORDER}`, color: MUTED }}
+              >
+                {c.name}
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* ==================== МАРКИ АВТО ==================== */}
+        {/* Те саме, що й блок категорій вище, але для сторінок
+            /marky/[slug] (lib/carMakes.ts) — список складений за
+            реальними марками з каталогу, а не довільний */}
+        <section className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
+          <h2
+            className="text-sm font-semibold uppercase tracking-wide mb-3"
+            style={{ fontFamily: LABEL_FONT, color: MUTED }}
+          >
+            Популярні марки авто
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {CAR_MAKES.map((m) => (
+              <Link
+                key={m.slug}
+                href={`/marky/${m.slug}`}
+                className="text-xs px-3 py-1.5 rounded-full"
+                style={{ border: `1px solid ${BORDER}`, color: MUTED }}
+              >
+                {m.name}
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        {/* ==================== FAQ ==================== */}
+        {/* Текст питань/відповідей — з lib/faq.ts, ТОЧНО той самий, що
+            й у розмітці FAQPage (JSON-LD) в app/page.tsx: Google звіряє
+            видимий текст із структурованими даними, і розбіжність може
+            коштувати розширеного сніппета у видачі */}
+        <section className="max-w-3xl mx-auto px-5 md:px-8 pb-14">
+          <h2
+            className="text-2xl md:text-3xl mb-6"
+            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
+          >
+            Питання, які нам часто задають
+          </h2>
+          <div className="flex flex-col gap-2">
+            {FAQ_ITEMS.map((item, index) => {
+              const isOpen = openFaqIndex === index;
+              return (
+                <div key={item.question} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaqIndex(isOpen ? null : index)}
+                    className="w-full flex items-center justify-between gap-4 py-4 text-left text-sm font-semibold"
+                    style={{ fontFamily: LABEL_FONT, color: PAPER }}
+                    aria-expanded={isOpen}
+                  >
+                    <span>{item.question}</span>
+                    <span style={{ color: YELLOW, fontSize: 20, lineHeight: 1 }}>{isOpen ? '−' : '+'}</span>
+                  </button>
+                  {isOpen && (
+                    <p className="pb-4 text-sm" style={{ color: MUTED }}>
+                      {item.answer}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
 

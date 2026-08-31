@@ -1,10 +1,56 @@
 import type { Metadata } from 'next';
+import { Pool } from 'pg';
 import './globals.css';
 
-export const metadata: Metadata = {
-  title: 'AUTOKONTUR — автозапчастини з доставкою по Україні',
-  description: 'Пошук запчастин за артикулом, швидка доставка, оригінальні деталі.',
-};
+// Библиотека pg использует Node.js API, поэтому layout должен
+// рендериться в окружении Node.js, а не в "Edge"-окружении Next.js
+export const runtime = 'nodejs';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var pgPool: Pool | undefined;
+}
+
+const pool =
+  globalThis.pgPool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+  });
+
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.pgPool = pool;
+}
+
+// Назва магазину раніше була "зашита" тут текстом ("AUTOKONTUR") —
+// а фактична назва, яку бачить покупець (зараз "DominatorParts"),
+// зберігається в site_settings.shop_name і підставлялась ТІЛЬКИ на
+// клієнті через document.title (див. components/StorefrontHome.tsx).
+// Через це Google, соцмережі та будь-хто без виконання JS бачили в
+// заголовку сторінки застарілу назву. generateMetadata() читає той
+// самий рядок з бази, що й сам магазин, — тому назва в <title> завжди
+// збігається з тим, що показано на сторінці, і сама оновиться, якщо
+// адмін ще раз перейменує магазин через /admin/settings
+const FALLBACK_SHOP_NAME = 'DominatorParts';
+
+export async function generateMetadata(): Promise<Metadata> {
+  let shopName = FALLBACK_SHOP_NAME;
+
+  try {
+    const result = await pool.query('SELECT shop_name FROM site_settings WHERE id = 1');
+    if (result.rows[0]?.shop_name) {
+      shopName = result.rows[0].shop_name;
+    }
+  } catch (error) {
+    // Base недоступна під час білда/деплою — не валимо весь сайт
+    // через це, просто показуємо запасну назву
+    console.error('Не вдалося отримати назву магазину для metadata:', error);
+  }
+
+  return {
+    title: `${shopName} — автозапчастини з доставкою по Україні`,
+    description: 'Пошук запчастин за артикулом, швидка доставка, оригінальні деталі.',
+  };
+}
 
 // lang="uk" — основной язык сайта теперь украинский (клиентская
 // витрина для покупателей). Админ-панель под /admin осталась на
