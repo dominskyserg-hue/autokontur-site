@@ -17,6 +17,14 @@ import { CAR_MAKES } from '@/lib/carMakes';
 
 export const runtime = 'nodejs';
 
+// Без параметрів в адресі ця сторінка за замовчуванням намагалась би
+// зібратись ЗАЗДАЛЕГІДЬ під час білда на Vercel (Static Generation) —
+// а білд-середовище не має доступу до бази (саме це й зламало прод:
+// "Error occurred prerendering page /marky", getaddrinfo ENOTFOUND).
+// force-dynamic змушує рендерити сторінку на кожен запит з робочого
+// сервера (де підключення до бази є), а не під час збірки
+export const dynamic = 'force-dynamic';
+
 declare global {
   // eslint-disable-next-line no-var
   var pgPool: Pool | undefined;

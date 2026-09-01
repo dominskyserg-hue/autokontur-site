@@ -17,6 +17,9 @@ import { Pool } from 'pg';
 import { CAR_MAKES, getCarMakeBySlug, buildMakeWhereClause } from '@/lib/carMakes';
 
 export const runtime = 'nodejs';
+// Захист від спроби зібрати сторінку заздалегідь під час білда на
+// Vercel (де немає доступу до бази) — див. app/marky/page.tsx
+export const dynamic = 'force-dynamic';
 
 declare global {
   // eslint-disable-next-line no-var
