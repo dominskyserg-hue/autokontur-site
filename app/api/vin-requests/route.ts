@@ -37,6 +37,12 @@ const pool =
   globalThis.pgPool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
+    // Serverless: кожен файл створює СВІЙ Pool (кеш через globalThis
+    // працює тільки в dev — див. умову NODE_ENV нижче), тому тримаємо
+    // ліміт з'єднань НА ОДИН інстанс низьким. Без цього ліміту сума
+    // з'єднань з усіх функцій одного разу вичерпала ліміт Supabase
+    // і поклала весь прод ("Application error" на кількох сторінках)
+    max: 3,
   });
 
 if (process.env.NODE_ENV !== 'production') {
