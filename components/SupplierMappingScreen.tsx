@@ -56,6 +56,7 @@ interface Supplier {
   email: string | null;
   currency: string;
   isActive: boolean;
+  deliveryTime: string | null;
   createdAt: string;
   lastSyncedAt: string | null;
   mapping: MappingData | null;
@@ -101,6 +102,7 @@ interface FormState {
   startRow: string;
   markup: string;
   currency: string;
+  deliveryTime: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -120,6 +122,7 @@ const EMPTY_FORM: FormState = {
   startRow: '1',
   markup: '0',
   currency: LOCAL_CURRENCY,
+  deliveryTime: '',
 };
 
 // ------------------------------------------------------------
@@ -282,6 +285,7 @@ export default function SupplierMappingScreen() {
         startRow: m ? String(m.startRow) : '1',
         markup: m ? String(m.markup) : '0',
         currency: selectedSupplier.currency,
+        deliveryTime: selectedSupplier.deliveryTime || '',
       });
     }
     setSelectedFile(null);
@@ -329,6 +333,7 @@ export default function SupplierMappingScreen() {
           phone: form.phone || undefined,
           email: form.email || undefined,
           currency: form.currency,
+          deliveryTime: form.deliveryTime,
           mapping: hasAnyMappingField
             ? {
                 article: form.article,
@@ -379,6 +384,7 @@ export default function SupplierMappingScreen() {
           phone: supplier.phone || undefined,
           email: supplier.email || undefined,
           currency: supplier.currency,
+          deliveryTime: supplier.deliveryTime || undefined,
           isActive: !supplier.isActive,
           // mapping не передаём — существующие настройки маппинга
           // остаются нетронутыми (см. app/api/suppliers/route.ts)
@@ -780,6 +786,23 @@ export default function SupplierMappingScreen() {
                     ))}
                   </select>
                 </div>
+              </div>
+              <div className="mt-3.5">
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                  Термін поставки під замовлення
+                </label>
+                <input
+                  type="text"
+                  placeholder="Наприклад: 2-3 дні, тиждень, під замовлення з Польщі 5-7 днів"
+                  className="w-full px-3 py-2 text-sm rounded-md"
+                  style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                  value={form.deliveryTime}
+                  onChange={(e) => setForm({ ...form, deliveryTime: e.target.value })}
+                />
+                <p className="text-[11px] mt-1" style={{ color: 'var(--ink-faint)' }}>
+                  Показывается покупателю на карточке товара ЭТОГО поставщика, только если товара нет в
+                  наличии — при наличии доставка и так день-в-день.
+                </p>
               </div>
               <p className="text-[11px] mt-2" style={{ color: 'var(--ink-faint)' }}>
                 Розничная цена считается так: (цена из Excel × глобальный курс валюты) × (1 + наценка / 100).

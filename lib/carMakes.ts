@@ -65,7 +65,11 @@ export function getCarMakeBySlug(slug: string): CarMakeDef | undefined {
 // слово з цими літерами всередині
 export function buildMakeWhereClause(make: CarMakeDef, paramIndex: number): { clause: string; param: string[] } {
   return {
-    clause: `UPPER(car_make) = ANY($${paramIndex})`,
+    // p. — розраховано на запит виду "FROM products p" (не голе
+    // car_make): сторінки марок JOIN'ять suppliers за delivery_time,
+    // а без префіксу car_make був би неоднозначним відносно
+    // suppliers.* при такому JOIN
+    clause: `UPPER(p.car_make) = ANY($${paramIndex})`,
     param: make.dbValues.map((v) => v.toUpperCase()),
   };
 }

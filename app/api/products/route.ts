@@ -125,6 +125,11 @@ interface ProductResponse {
   stock: number;
   supplierId: string;
   supplierName: string;
+  // Термін поставки під замовлення ЦЬОГО постачальника (suppliers.
+  // delivery_time) — вільний текст, напр. "2-3 дні". Показується на
+  // вітрині ТІЛЬКИ якщо товару немає в наявності (stock = 0), див.
+  // components/StorefrontHome.tsx
+  deliveryTime: string | null;
   updatedAt: string;
 }
 
@@ -276,6 +281,7 @@ export async function GET(request: NextRequest) {
         p.stock,
         p.supplier_id,
         s.name AS supplier_name,
+        s.delivery_time,
         p.updated_at,
         COUNT(*) OVER() AS total_count
       FROM products p
@@ -311,6 +317,7 @@ export async function GET(request: NextRequest) {
       stock: row.stock,
       supplierId: row.supplier_id,
       supplierName: row.supplier_name,
+      deliveryTime: row.delivery_time,
       updatedAt: row.updated_at,
     }));
 

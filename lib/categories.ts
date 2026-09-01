@@ -219,9 +219,12 @@ export function getToCategories(): CategoryDef[] {
 }
 
 // Перетворює matchGroups категорії на SQL-умову вигляду
-//   (name ILIKE ANY($1)) AND (name ILIKE ANY($2)) ...
+//   (p.name ILIKE ANY($1)) AND (p.name ILIKE ANY($2)) ...
 // і повертає готовий масив параметрів (%слово%) для кожної групи —
-// одним рухом підставляється в pool.query(...)
+// одним рухом підставляється в pool.query(...). Розраховано на запит
+// виду "FROM products p" — саме тому з префіксом p., а не голим name
+// (щоб не було неоднозначності з products.name/suppliers.name, коли
+// сторінка ще й приєднує JOIN suppliers за delivery_time)
 export function buildCategoryWhereClause(
   category: CategoryDef,
   startParamIndex: number
@@ -229,7 +232,7 @@ export function buildCategoryWhereClause(
   const params: string[][] = [];
   const conditions = category.matchGroups.map((group, i) => {
     params.push(group.map((word) => `%${word}%`));
-    return `name ILIKE ANY($${startParamIndex + i})`;
+    return `p.name ILIKE ANY($${startParamIndex + i})`;
   });
   return { clause: conditions.join(' AND '), params };
 }

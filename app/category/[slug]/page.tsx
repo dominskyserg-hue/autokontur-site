@@ -60,6 +60,7 @@ interface CategoryProduct {
   name: string | null;
   retailPrice: number;
   stock: number;
+  deliveryTime: string | null;
 }
 
 // cache() від React дедуплікує виклик У МЕЖАХ ОДНОГО HTTP-запиту —
@@ -81,15 +82,16 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
   const [productsResult, countResult] = await Promise.all([
     pool.query(
       `
-      SELECT id, article, brand, name, retail_price, stock
-      FROM products
+      SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, s.delivery_time
+      FROM products p
+      JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${clause}
-      ORDER BY (stock > 0) DESC, name ASC NULLS LAST
+      ORDER BY (p.stock > 0) DESC, p.name ASC NULLS LAST
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
       `,
       [...params, PAGE_SIZE, offset]
     ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM products WHERE ${clause}`, params),
+    pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`, params),
   ]);
 
   const products: CategoryProduct[] = productsResult.rows.map((row) => ({
@@ -99,6 +101,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
     name: row.name,
     retailPrice: parseFloat(row.retail_price),
     stock: row.stock,
+    deliveryTime: row.delivery_time,
   }));
 
   return { products, total: countResult.rows[0]?.total ?? 0 };
@@ -266,6 +269,11 @@ export default async function CategoryPage({
                       {product.stock > 0 ? 'В наявності' : 'Під замовлення'}
                     </span>
                   </div>
+                  {product.stock <= 0 && product.deliveryTime && (
+                    <div className="text-xs mt-1.5" style={{ color: PAPER, opacity: 0.7 }}>
+                      Термін поставки: {product.deliveryTime}
+                    </div>
+                  )}
                 </Link>
               ))}
             </div>

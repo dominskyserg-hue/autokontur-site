@@ -121,6 +121,15 @@ CREATE TABLE IF NOT EXISTS suppliers (
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'UAH' CHECK (currency ~ '^[A-Z]{3}$');
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 
+-- Термін поставки під замовлення — вільний текст ("2-3 дні", "тиждень",
+-- "під замовлення з Польщі: 5-7 днів"), а не число: реальні терміни
+-- постачальники описують по-різному, і жорсткий формат тут тільки
+-- заважав би. Стосується ЛИШЕ товарів БЕЗ наявності (stock = 0) —
+-- товар в наявності й так відправляється того ж дня (це вже сказано
+-- на вітрині), тому окремо термін для нього не потрібен. NULL —
+-- постачальник ще не вказав термін
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS delivery_time TEXT;
+
 -- А колонку exchange_rate, наоборот, теперь УДАЛЯЕМ: курс переехал
 -- из поставщика в отдельную таблицу global_exchange_rates (см. выше
 -- в этом же файле). DROP COLUMN IF EXISTS безопасен и для тех, у

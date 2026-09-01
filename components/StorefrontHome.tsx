@@ -71,6 +71,9 @@ interface Product {
   imageUrl: string | null;
   retailPrice: number;
   stock: number;
+  // Термін поставки під замовлення постачальника цього товару —
+  // показуємо ЛИШЕ якщо stock === 0 (див. app/api/products/route.ts)
+  deliveryTime: string | null;
 }
 
 // Одна позиция в корзине — "снимок" товара на момент добавления
@@ -1198,6 +1201,16 @@ export default function StorefrontHome() {
                       <span style={{ fontFamily: DISPLAY_FONT, fontSize: 22 }}>{formatMoney(product.retailPrice)} ГРН</span>
                     </div>
 
+                    {/* Термін поставки під замовлення — тільки якщо товару
+                        немає в наявності, і постачальник цей термін вказав
+                        (див. поле "Термін поставки" у формі поставщика в
+                        адмінці, components/SupplierMappingScreen.tsx) */}
+                    {product.stock <= 0 && product.deliveryTime && (
+                      <p className="text-xs -mt-2" style={{ color: MUTED }}>
+                        Термін поставки: {product.deliveryTime}
+                      </p>
+                    )}
+
                     <button
                       type="button"
                       disabled={product.stock <= 0}
@@ -1259,9 +1272,9 @@ export default function StorefrontHome() {
                           {product.article}
                           {product.brand ? ` · ${product.brand}` : ''}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
+                        <td className="px-4 py-3">
                           <span
-                            className="text-xs px-2 py-1 font-medium"
+                            className="text-xs px-2 py-1 font-medium whitespace-nowrap inline-block"
                             style={
                               product.stock > 0
                                 ? { background: SUCCESS_BG, color: SUCCESS_TEXT }
@@ -1270,6 +1283,11 @@ export default function StorefrontHome() {
                           >
                             {product.stock > 0 ? `В наявності: ${product.stock}` : 'Немає в наявності'}
                           </span>
+                          {product.stock <= 0 && product.deliveryTime && (
+                            <p className="text-xs mt-1" style={{ color: MUTED }}>
+                              Термін поставки: {product.deliveryTime}
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-sm font-semibold whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
                           {formatMoney(product.retailPrice)} грн

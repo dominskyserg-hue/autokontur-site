@@ -57,6 +57,7 @@ interface ToProduct {
   name: string | null;
   retailPrice: number;
   stock: number;
+  deliveryTime: string | null;
 }
 
 interface ToSection {
@@ -78,15 +79,19 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
       const [productsResult, countResult] = await Promise.all([
         pool.query(
           `
-          SELECT id, article, brand, name, retail_price, stock
-          FROM products
+          SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, s.delivery_time
+          FROM products p
+          JOIN suppliers s ON s.id = p.supplier_id
           WHERE ${clause}
-          ORDER BY (stock > 0) DESC, name ASC NULLS LAST
+          ORDER BY (p.stock > 0) DESC, p.name ASC NULLS LAST
           LIMIT $${params.length + 1}
           `,
           [...params, PREVIEW_SIZE]
         ),
-        pool.query(`SELECT COUNT(*)::int AS total FROM products WHERE ${clause}`, params),
+        pool.query(
+          `SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`,
+          params
+        ),
       ]);
 
       const products: ToProduct[] = productsResult.rows.map((row) => ({
@@ -96,6 +101,7 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
         name: row.name,
         retailPrice: parseFloat(row.retail_price),
         stock: row.stock,
+        deliveryTime: row.delivery_time,
       }));
 
       return { category, products, total: countResult.rows[0]?.total ?? 0 };
@@ -229,6 +235,11 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
                           {product.stock > 0 ? 'В наявності' : 'Під замовлення'}
                         </span>
                       </div>
+                      {product.stock <= 0 && product.deliveryTime && (
+                        <div className="text-[11px] mt-1" style={{ color: PAPER, opacity: 0.7 }}>
+                          Термін поставки: {product.deliveryTime}
+                        </div>
+                      )}
                     </Link>
                   ))}
                 </div>
