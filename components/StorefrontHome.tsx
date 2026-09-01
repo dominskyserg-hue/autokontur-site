@@ -1405,6 +1405,17 @@ export default function StorefrontHome() {
         </section>
 
         <footer className="py-8 text-center text-xs" style={{ color: FAINT }}>
+          <div className="flex items-center justify-center gap-4 mb-3">
+            <Link href="/about" className="underline">
+              Про нас
+            </Link>
+            <Link href="/delivery" className="underline">
+              Доставка
+            </Link>
+            <Link href="/contacts" className="underline">
+              Контакти
+            </Link>
+          </div>
           © {new Date().getFullYear()} {shopName} — автозапчастини з доставкою по Україні
         </footer>
       </div>

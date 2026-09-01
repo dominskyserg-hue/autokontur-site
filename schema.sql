@@ -672,6 +672,31 @@ CREATE INDEX IF NOT EXISTS idx_vin_requests_status ON vin_requests (status);
 
 
 -- ============================================================
+-- ТАБЛИЦЯ site_pages — контент статичних інформаційних сторінок
+-- (Про нас, Доставка, Контакти), який редагується в адмін-панелі
+-- ============================================================
+-- Фіксований набір із трьох slug'ів (CHECK), а не довільна CMS —
+-- на сайті рівно три такі сторінки, і додавати механізм створення
+-- довільних нових сторінок поки що не потрібно
+CREATE TABLE IF NOT EXISTS site_pages (
+  slug TEXT PRIMARY KEY CHECK (slug IN ('about', 'delivery', 'contacts')),
+  title TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Створюємо три рядки з порожнім content — адмін заповнить пізніше
+-- через екран "Настройки" (components/SitePagesManager.tsx). Публічна
+-- сторінка (app/about/page.tsx і т.п.) показує заглушку "ще не
+-- заповнено", поки content порожній
+INSERT INTO site_pages (slug, title, content) VALUES
+  ('about', 'Про нас', ''),
+  ('delivery', 'Доставка та оплата', ''),
+  ('contacts', 'Контакти', '')
+ON CONFLICT (slug) DO NOTHING;
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не

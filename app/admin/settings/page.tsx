@@ -7,6 +7,7 @@ import AdminLayout from '@/components/AdminLayout';
 import GlobalRatesWidget from '@/components/GlobalRatesWidget';
 import ContactSettingsForm from '@/components/ContactSettingsForm';
 import AnnouncementsManager from '@/components/AnnouncementsManager';
+import SitePagesManager from '@/components/SitePagesManager';
 
 export default function SettingsPage() {
   return (
@@ -23,6 +24,7 @@ export default function SettingsPage() {
 
       <GlobalRatesWidget />
       <ContactSettingsForm />
+      <SitePagesManager />
       <AnnouncementsManager />
     </AdminLayout>
   );
