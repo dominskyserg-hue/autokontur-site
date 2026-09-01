@@ -1006,7 +1006,7 @@ export default function StorefrontHome() {
                     type="text"
                     value={searchInput}
                     onChange={(e) => setSearchInput(e.target.value)}
-                    placeholder="Наприклад: 555-66 або AB 12"
+                    placeholder="Введіть артикул або назву запчастини"
                     className="w-full py-4 text-base outline-none bg-transparent placeholder:text-[#8A7F70]"
                     style={{ color: INK }}
                   />
