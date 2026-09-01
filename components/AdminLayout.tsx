@@ -32,6 +32,7 @@ export type AdminSection =
   | 'suppliers'
   | 'products'
   | 'crossReferences'
+  | 'searchSynonyms'
   | 'orders'
   | 'vinRequests'
   | 'analytics'
@@ -55,6 +56,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'suppliers', label: 'Поставщики', href: '/admin' },
       { key: 'products', label: 'Товары', href: '/admin/products' },
       { key: 'crossReferences', label: 'Кроссы', href: '/admin/cross-references' },
+      { key: 'searchSynonyms', label: 'Словник пошуку', href: '/admin/search-synonyms' },
     ],
   },
   {

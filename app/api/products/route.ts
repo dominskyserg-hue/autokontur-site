@@ -13,10 +13,15 @@
 //   pageSize    — сколько товаров на странице (по умолчанию 50,
 //                 максимум 200 — чтобы случайно не запросили всю базу
 //                 разом через строку адреса)
-//   search      — ищет совпадение по артикулу, бренду ИЛИ по
-//                 кросс-номеру товара (регистронезависимо, по
-//                 подстроке) — см. таблицу product_cross_references
-//                 и экран "Кроссы" в админке
+//   search      — ищет совпадение по артикулу, бренду, кросс-номеру
+//                 товара (регистронезависимо, по подстроке — см.
+//                 таблицу cross_reference_members и экран "Кроссы"
+//                 в админке), А ТАКЖЕ по ключевым словам из названия
+//                 товара с учётом многоязычного словаря синонимов
+//                 (search_synonym_groups, см. lib/searchSynonyms.ts
+//                 и экран "Словник пошуку" в админке) — запрос
+//                 "гальмівні колодки rav 4" находит товар с названием
+//                 "brake pads RAV4" или "тормозные колодки rav-4"
 //   supplierId  — если передан, показывает товары только этого
 //                 поставщика (UUID)
 //   carMake, carYear, engineVolume — "Підбір за автомобілем" на
@@ -35,6 +40,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { loadSynonymDictionary, expandSearchQuery, buildSynonymWhereClause } from '@/lib/searchSynonyms';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -184,20 +190,33 @@ export async function GET(request: NextRequest) {
       values.push(`%${cleanedArticle}%`, `%${search}%`);
       const articlePlaceholder = `$${values.length - 1}`;
       const textPlaceholder = `$${values.length}`;
-      conditions.push(
-        `(
-          p.article ILIKE ${articlePlaceholder}
-          OR p.brand ILIKE ${textPlaceholder}
-          OR p.car_make ILIKE ${textPlaceholder}
-          OR p.car_model ILIKE ${textPlaceholder}
-          OR EXISTS (
-            SELECT 1
-            FROM cross_reference_members mine
-            JOIN cross_reference_members other ON other.group_id = mine.group_id
-            WHERE mine.product_id = p.id AND other.part_number ILIKE ${articlePlaceholder}
-          )
-        )`
-      );
+
+      const orParts = [
+        `p.article ILIKE ${articlePlaceholder}`,
+        `p.brand ILIKE ${textPlaceholder}`,
+        `p.car_make ILIKE ${textPlaceholder}`,
+        `p.car_model ILIKE ${textPlaceholder}`,
+        `EXISTS (
+          SELECT 1
+          FROM cross_reference_members mine
+          JOIN cross_reference_members other ON other.group_id = mine.group_id
+          WHERE mine.product_id = p.id AND other.part_number ILIKE ${articlePlaceholder}
+        )`,
+      ];
+
+      // Пошук за КЛЮЧОВИМИ СЛОВАМИ з назви товару, з урахуванням
+      // багатомовного словника синонімів (search_synonym_groups) —
+      // "гальмівні колодки rav 4" знайде товар з назвою "brake pads
+      // rav4" чи "тормозные колодки RAV4". Див. lib/searchSynonyms.ts
+      const dictionary = await loadSynonymDictionary(pool);
+      const expanded = expandSearchQuery(search, dictionary);
+      const synonymClause = buildSynonymWhereClause(expanded, values.length + 1);
+      if (synonymClause) {
+        orParts.push(`(${synonymClause.clause})`);
+        values.push(...synonymClause.params);
+      }
+
+      conditions.push(`(${orParts.join('\n          OR ')})`);
     }
 
     if (supplierId) {
@@ -221,6 +240,13 @@ export async function GET(request: NextRequest) {
     }
 
     const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // При пошуку (є текст search) пріоритет видачі: спершу те, що
+    // швидше доїде (є в наявності — stock > 0), потім за ціною від
+    // більшої до меншої. Без пошуку (звичайний перегляд каталогу,
+    // напр. в адмінці) лишаємо алфавітний порядок за артикулом —
+    // його там очікують бачити стабільним при гортанні сторінок
+    const orderBySql = search ? 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC' : 'ORDER BY p.article ASC';
 
     // ---- сам запрос ----
     // COUNT(*) OVER() — считает общее количество подходящих строк
@@ -255,7 +281,7 @@ export async function GET(request: NextRequest) {
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       ${whereSql}
-      ORDER BY p.article ASC
+      ${orderBySql}
       LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
       `,
       values
