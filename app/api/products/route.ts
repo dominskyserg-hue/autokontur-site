@@ -38,13 +38,19 @@
 // отдельным запросом на каждый товар.
 // ============================================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { loadSynonymDictionary, expandSearchQuery, buildSynonymWhereClause } from '@/lib/searchSynonyms';
+import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
 export const runtime = 'nodejs';
+
+// after() ниже продолжает работать уже ПОСЛЕ того, как ответ ушёл
+// покупателю — на это нужно больше времени, чем 10с по умолчанию на
+// тарифе Hobby (см. такой же maxDuration в app/api/cron/fetch-product-images)
+export const maxDuration = 60;
 
 // ------------------------------------------------------------
 // ПОДКЛЮЧЕНИЕ К POSTGRESQL (общий пул соединений)
@@ -274,6 +280,7 @@ export async function GET(request: NextRequest) {
         p.engine_volume,
         p.meta_description,
         p.image_url,
+        p.image_search_attempted_at,
         p.cost_price,
         p.retail_price,
         p.stock,
@@ -318,6 +325,49 @@ export async function GET(request: NextRequest) {
       deliveryTime: row.delivery_time,
       updatedAt: row.updated_at,
     }));
+
+    // ------------------------------------------------------------
+    // ФОТО ТОВАРІВ, ЯКІ ПОКУПЕЦЬ РЕАЛЬНО БАЧИТЬ ПРЯМО ЗАРАЗ У ПОШУКУ
+    // ------------------------------------------------------------
+    // Фонова черга (app/api/cron/fetch-product-images) рухається по
+    // всій базі за 8 товарів на тик і може дійти до конкретного
+    // товару через місяці — покупець стільки чекати не буде. Тому
+    // тут, ЯКЩО це саме пошук (є текст search, а не звичайний перегляд
+    // каталогу в адмінці), одразу ставимо в чергу пошук фото для
+    // товарів БЕЗ фото з видачі — але вже ПІСЛЯ того, як відповідь
+    // пішла покупцю (after()), щоб пошук на сайті не гальмував,
+    // чекаючи на Bing. Фото з'явиться не в цій самій відповіді, а
+    // при наступному відкритті сторінки (за кілька секунд).
+    //
+    // ON_DEMAND_RETRY_AFTER_DAYS — той самий сенс, що і
+    // RETRY_AFTER_DAYS у cron-черзі: не пробувати знову товар, для
+    // якого вже недавно шукали фото і не знайшли, навіть якщо його
+    // знову шукають — інакше популярний, але "непошуковий" артикул
+    // бив би по Bing при кожному повторному пошуку
+    if (search) {
+      const ON_DEMAND_RETRY_AFTER_DAYS = 7;
+      const MAX_ON_DEMAND = 6;
+      const retryThreshold = Date.now() - ON_DEMAND_RETRY_AFTER_DAYS * 24 * 60 * 60 * 1000;
+
+      const candidates: ProductToProcess[] = result.rows
+        .filter((row) => {
+          if (row.image_url) return false;
+          if (!row.image_search_attempted_at) return true;
+          return new Date(row.image_search_attempted_at).getTime() < retryThreshold;
+        })
+        .slice(0, MAX_ON_DEMAND)
+        .map((row) => ({ id: row.id, article: row.article, brand: row.brand, name: row.name }));
+
+      if (candidates.length > 0) {
+        after(async () => {
+          try {
+            await processBatch(pool, candidates);
+          } catch (error) {
+            console.error('Ошибка фонового поиска фото по результатам поиска:', error);
+          }
+        });
+      }
+    }
 
     return NextResponse.json({
       success: true,
