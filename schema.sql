@@ -283,6 +283,15 @@ CREATE TABLE IF NOT EXISTS products (
   -- при каждом импорте, поэтому и флаг "override" ему не нужен
   image_url TEXT,
 
+  -- Когда в последний раз ПЫТАЛИСЬ найти фото автоматически (см.
+  -- app/api/cron/fetch-product-images/route.ts и lib/productImagePipeline.ts) —
+  -- независимо от того, нашли фото или нет. Нужно, чтобы фоновая
+  -- очередь не пыталась искать фото для одного и того же товара на
+  -- каждом запуске подряд: если попытка была неудачной, товар не
+  -- берётся в очередь повторно ближайшие несколько дней (см.
+  -- RETRY_AFTER_DAYS в коде роута)
+  image_search_attempted_at TIMESTAMPTZ,
+
   -- Оптовая цена поставщика (столбец называется cost_price, как
   -- вы и просили). NUMERIC(12,2) — до 9 999 999 999,99, с точностью
   -- до копейки; для денег всегда используем NUMERIC, а не FLOAT,
@@ -318,6 +327,7 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_title TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_description TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_description_override BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_search_attempted_at TIMESTAMPTZ;
 
 
 -- ============================================================
@@ -343,6 +353,15 @@ CREATE INDEX IF NOT EXISTS idx_products_car_search ON products (car_make, car_ye
 -- article — тогда такой поиск останется мгновенным при любом
 -- количестве товаров
 CREATE INDEX IF NOT EXISTS idx_products_article ON products (article);
+
+-- Частковий індекс лише на рядки БЕЗ фото — саме такі вибирає фонова
+-- черга пошуку фото (app/api/cron/fetch-product-images/route.ts).
+-- Частковий (WHERE image_url IS NULL), а не по всій таблиці — бо як
+-- тільки товар отримає фото, він назавжди випадає з цієї вибірки, і
+-- індексувати рядки, які туди ніколи більше не потраплять, немає сенсу
+CREATE INDEX IF NOT EXISTS idx_products_missing_image
+  ON products (image_search_attempted_at)
+  WHERE image_url IS NULL;
 
 
 -- ============================================================

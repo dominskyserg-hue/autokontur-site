@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/fetch-product-images",
+      "schedule": "0 * * * *"
+    }
+  ]
+}

@@ -60,6 +60,25 @@ function isPublicApiRoute(pathname: string, method: string): boolean {
   return PUBLIC_API_ROUTES.some((rule) => rule.method === method && rule.pattern.test(pathname));
 }
 
+// Роут фонової черги пошуку фото (app/api/cron/fetch-product-images) —
+// його викликає Vercel Cron за розкладом (див. vercel.json), а не
+// браузер адміна, тому в нього НЕМАЄ cookie-сесії. Він НЕ додається в
+// PUBLIC_API_ROUTES вище (це відкрило б його для будь-кого без жодного
+// секрету) — замість цього тут окремо перевіряється секрет із
+// заголовка Authorization: Bearer, який Vercel Cron підставляє сам
+// (див. .env.example, CRON_SECRET)
+const CRON_ROUTE_PATTERN = /^\/api\/cron\//;
+
+function isAuthorizedCronRoute(request: NextRequest): boolean {
+  if (!CRON_ROUTE_PATTERN.test(request.nextUrl.pathname)) return false;
+
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) return false;
+
+  const authHeader = request.headers.get('authorization');
+  return authHeader === `Bearer ${cronSecret}`;
+}
+
 async function sha256Hex(text: string): Promise<string> {
   const data = new TextEncoder().encode(text);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
@@ -108,7 +127,7 @@ export async function middleware(request: NextRequest) {
 
   // ---- API-роуты ----
   if (pathname.startsWith('/api/')) {
-    if (isPublicApiRoute(pathname, request.method)) {
+    if (isPublicApiRoute(pathname, request.method) || isAuthorizedCronRoute(request)) {
       return NextResponse.next();
     }
     if (!authed) {
