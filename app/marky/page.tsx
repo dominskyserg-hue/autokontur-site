@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // Індекс усіх марок авто — /marky
 //
 // Та сама роль, що й у app/category/page.tsx: внутрішнє посилання
@@ -53,11 +53,11 @@ export const metadata: Metadata = {
 };
 
 // Світла палітра "Workshop" — узгоджена з components/StorefrontHome.tsx
-const BG = '#FAF7F2';
-const BORDER_SOFT = '#E3DAC9';
-const RED = '#E5231C';
-const YELLOW = '#B45309';
-const PAPER = '#1C1917';
+const BG = '#F5F6F9';
+const BORDER_SOFT = '#DDE2EA';
+const RED = '#1D5FD6';
+const YELLOW = '#1D5FD6';
+const PAPER = '#12192A';
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
 

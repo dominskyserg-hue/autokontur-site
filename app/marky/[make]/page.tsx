@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // SEO-сторінка марки авто — /marky/[make]
 //
 // Дзеркальна структура до app/category/[slug]/page.tsx (той же
@@ -114,12 +114,12 @@ export async function generateMetadata({
 }
 
 // Світла палітра "Workshop" — узгоджена з components/StorefrontHome.tsx
-const BG = '#FAF7F2';
-const PANEL_SOFT = '#F1EBE0';
-const BORDER_SOFT = '#E3DAC9';
-const RED = '#E5231C';
-const YELLOW = '#B45309';
-const PAPER = '#1C1917';
+const BG = '#F5F6F9';
+const PANEL_SOFT = '#EAEDF2';
+const BORDER_SOFT = '#DDE2EA';
+const RED = '#1D5FD6';
+const YELLOW = '#1D5FD6';
+const PAPER = '#12192A';
 const SUCCESS_TEXT = '#15803D';
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
@@ -174,7 +174,7 @@ export default async function CarMakePage({
           <Link
             href={`/marky/${slug}/to`}
             className="inline-block mt-4 px-4 py-2 text-xs font-bold uppercase tracking-wide"
-            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', background: RED, color: '#15100E' }}
+            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', background: RED, color: '#FFFFFF' }}
           >
             Що потрібно на ТО для {make.name} →
           </Link>

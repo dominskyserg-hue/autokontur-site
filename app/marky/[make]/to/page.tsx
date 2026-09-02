@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // "Регламент ТО для марки" — /marky/[make]/to
 //
 // Ідея підглянута в конкурента (cardon.com.ua): замість того, щоб
@@ -130,12 +130,12 @@ export async function generateMetadata({
   };
 }
 
-const BG = '#FAF7F2';
-const PANEL_SOFT = '#F1EBE0';
-const BORDER_SOFT = '#E3DAC9';
-const RED = '#E5231C';
-const YELLOW = '#B45309';
-const PAPER = '#1C1917';
+const BG = '#F5F6F9';
+const PANEL_SOFT = '#EAEDF2';
+const BORDER_SOFT = '#DDE2EA';
+const RED = '#1D5FD6';
+const YELLOW = '#1D5FD6';
+const PAPER = '#12192A';
 const SUCCESS_TEXT = '#15803D';
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
