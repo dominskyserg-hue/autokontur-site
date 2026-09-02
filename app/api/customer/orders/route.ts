@@ -66,9 +66,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 const STATUS_VALUES = ['new', 'processing', 'awaiting_parts', 'ready', 'cancelled'] as const;
 type OrderStatus = (typeof STATUS_VALUES)[number];

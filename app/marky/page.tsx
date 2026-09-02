@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // Індекс усіх марок авто — /marky
 //
 // Та сама роль, що й у app/category/page.tsx: внутрішнє посилання
@@ -42,9 +42,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 export const metadata: Metadata = {
   title: 'Запчастини за маркою авто — DominatorParts',

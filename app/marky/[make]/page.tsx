@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // SEO-сторінка марки авто — /marky/[make]
 //
 // Дзеркальна структура до app/category/[slug]/page.tsx (той же
@@ -38,9 +38,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 const PAGE_SIZE = 24;
 

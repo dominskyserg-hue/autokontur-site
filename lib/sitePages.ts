@@ -27,9 +27,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 export type SitePageSlug = 'about' | 'delivery' | 'contacts';
 

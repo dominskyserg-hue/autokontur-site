@@ -54,9 +54,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 // Разрешённые значения field — и одновременно соответствие "имя
 // параметра" -> "настоящее имя колонки в products" (колонку в SQL

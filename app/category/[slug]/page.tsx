@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // SEO-сторінка категорії деталей — /category/[slug]
 //
 // На відміну від Головної (components/StorefrontHome.tsx, client
@@ -47,9 +47,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 const PAGE_SIZE = 24;
 

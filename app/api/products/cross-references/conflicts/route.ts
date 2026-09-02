@@ -40,9 +40,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 const STATUS_VALUES = ['pending', 'merged', 'rejected'] as const;
 type ConflictStatus = (typeof STATUS_VALUES)[number];

@@ -45,9 +45,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 const STATUS_VALUES = ['new', 'done'] as const;
 type VinRequestStatus = (typeof STATUS_VALUES)[number];

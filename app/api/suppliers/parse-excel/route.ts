@@ -42,9 +42,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 // ------------------------------------------------------------
 // ТИПЫ ДАННЫХ

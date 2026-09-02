@@ -39,9 +39,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 // ------------------------------------------------------------
 // СТАТУСЫ ЗАКАЗА — тот же набор, что и в app/api/orders/route.ts

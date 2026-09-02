@@ -61,9 +61,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 function cleanArticle(rawValue: unknown): string {
   if (rawValue === null || rawValue === undefined) return '';

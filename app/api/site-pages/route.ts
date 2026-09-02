@@ -38,9 +38,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 const VALID_SLUGS = ['about', 'delivery', 'contacts'] as const;
 type PageSlug = (typeof VALID_SLUGS)[number];

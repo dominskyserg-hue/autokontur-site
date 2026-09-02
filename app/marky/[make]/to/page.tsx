@@ -1,4 +1,4 @@
-﻿// ============================================================
+// ============================================================
 // "Регламент ТО для марки" — /marky/[make]/to
 //
 // Ідея підглянута в конкурента (cardon.com.ua): замість того, щоб
@@ -44,9 +44,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 const PREVIEW_SIZE = 4;
 

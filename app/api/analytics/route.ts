@@ -49,9 +49,7 @@ const pool =
     max: 3,
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  globalThis.pgPool = pool;
-}
+globalThis.pgPool = pool;
 
 // Разрешённые периоды — то же самое, что показывает фронтенд в
 // переключателе периода над графиками
