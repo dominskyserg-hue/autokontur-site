@@ -1077,9 +1077,9 @@ export default function StorefrontHome() {
               className="text-4xl md:text-6xl lg:text-7xl mb-5 leading-[0.92]"
               style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em', transform: 'skewX(-2deg)', textWrap: 'balance' }}
             >
-              ДОРОГА НЕ ПРОБАЧАЄ
+              НАДІЙНІ ДЕТАЛІ.
               <br />
-              СЛАБКИХ ДЕТАЛЕЙ
+              ПЕРЕВІРЕНИЙ СЕРВІС.
             </h1>
             <p className="text-sm md:text-base mb-9 max-w-xl mx-auto" style={{ color: MUTED }}>
               {shopName} — команда професіоналів з підбору автозапчастин. Знайдіть потрібну за
