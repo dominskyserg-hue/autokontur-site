@@ -24,6 +24,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { convertToWebp } from '@/lib/imageProcessing';
+import { saveImage } from '@/lib/imageStorage';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -126,6 +128,35 @@ export async function PATCH(
     );
   }
 
+  // Фото, загруженное файлом в админке (components/ProductsScreen.tsx),
+  // приходит сюда как data:-URI (браузер сам кодирует файл в base64) —
+  // такую строку НЕЛЬЗЯ класть в image_url как есть: колонка распухнет
+  // точно так же, как раньше распухала от результатов автопошуку фото
+  // (см. lib/imageStorage.ts). Поэтому здесь её так же перекодируем в
+  // WebP и заливаем в Vercel Blob, а в базу кладём уже короткую ссылку.
+  // Ссылку, вставленную вручную (обычный http(s)-адрес чужой картинки),
+  // не трогаем — это осознанный выбор админа показывать чужое фото
+  let resolvedImageUrl = hasImageUrl ? body.imageUrl?.trim() || null : null;
+  if (resolvedImageUrl?.startsWith('data:')) {
+    const match = resolvedImageUrl.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+    if (!match) {
+      return NextResponse.json(
+        { error: 'Не удалось распознать загруженное изображение.' },
+        { status: 400 }
+      );
+    }
+    try {
+      const webp = await convertToWebp(Buffer.from(match[1], 'base64'));
+      resolvedImageUrl = await saveImage(webp);
+    } catch (error) {
+      console.error('Ошибка при сохранении загруженного вручную фото:', error);
+      return NextResponse.json(
+        { error: 'Не удалось сохранить загруженное изображение.' },
+        { status: 500 }
+      );
+    }
+  }
+
   try {
     // COALESCE($2, retail_price) — если retailPrice не передали,
     // подставляем null, и колонка остаётся прежней. Так одним и тем
@@ -158,7 +189,7 @@ export async function PATCH(
         hasMetaDescription ? body.metaDescription : null,
         hasMetaDescription,
         hasImageUrl,
-        hasImageUrl ? (body.imageUrl?.trim() ? body.imageUrl.trim() : null) : null,
+        resolvedImageUrl,
       ]
     );
 
