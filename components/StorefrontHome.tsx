@@ -1731,15 +1731,24 @@ export default function StorefrontHome() {
           >
             Популярні марки авто
           </h2>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
             {CAR_MAKES.map((m) => (
               <Link
                 key={m.slug}
                 href={`/marky/${m.slug}`}
-                className="text-xs px-3 py-1.5 rounded-full"
-                style={{ border: `1px solid ${BORDER}`, color: MUTED }}
+                title={m.name}
+                className="flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-md hover:shadow-sm transition-shadow"
+                style={{ background: PANEL_SOFT }}
               >
-                {m.name}
+                <img
+                  src={m.logo}
+                  alt={m.name}
+                  className="h-7 w-auto max-w-[64px] object-contain"
+                  loading="lazy"
+                />
+                <span className="text-[11px] leading-tight text-center" style={{ color: MUTED }}>
+                  {m.name}
+                </span>
               </Link>
             ))}
           </div>
