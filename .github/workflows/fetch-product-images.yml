@@ -1,0 +1,36 @@
+# ============================================================
+# Додатковий, ЧАСТІШИЙ виклик черги пошуку фото товарів.
+#
+# Vercel Cron (vercel.json) на тарифі Hobby дозволяє викликати
+# /api/cron/fetch-product-images лише РАЗ НА ДОБУ — за 8-12 товарів
+# на виклик (BATCH_SIZE у app/api/cron/fetch-product-images/route.ts)
+# каталог із 20 000+ товарів довелося б обробляти роками. GitHub
+# Actions для публічного репозиторію — БЕЗКОШТОВНО і БЕЗ обмежень
+# на розклад, тому тут той самий ендпоінт викликається значно
+# частіше (кожні 15 хвилин), а Vercel Cron лишається як резервний
+# незалежний виклик на випадок, якщо GitHub Actions колись вимкнуть.
+#
+# Секрет CRON_SECRET_TOKEN потрібно додати в Settings → Secrets and
+# variables → Actions цього репозиторію на GitHub (те саме значення,
+# що й CRON_SECRET у Vercel) — НЕ в сам файл, значення секретів у
+# workflow-файлах ніколи не пишуться відкритим текстом.
+# ============================================================
+
+name: Fetch product images
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  # Дозволяє запустити вручну кнопкою "Run workflow" на вкладці
+  # Actions у GitHub — зручно для одноразової перевірки без очікування
+  workflow_dispatch:
+
+jobs:
+  fetch-images:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Викликати чергу пошуку фото
+        run: |
+          curl -sf -X GET "https://dominatorparts.com.ua/api/cron/fetch-product-images" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET_TOKEN }}" \
+            -w "\nHTTP status: %{http_code}\n"
