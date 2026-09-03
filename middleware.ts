@@ -44,6 +44,7 @@ const LOGIN_PATH = '/admin/login';
 // (создание баннера), хоть адрес и общий
 const PUBLIC_API_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: 'GET', pattern: /^\/api\/products$/ },
+  { method: 'GET', pattern: /^\/api\/products\/images$/ },
   { method: 'GET', pattern: /^\/api\/products\/car-options$/ },
   { method: 'GET', pattern: /^\/api\/products\/cross-lookup$/ },
   { method: 'POST', pattern: /^\/api\/orders\/create$/ },

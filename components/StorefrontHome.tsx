@@ -45,7 +45,7 @@
 // заведено во всём остальном проекте (админ-панель, бэкенд)
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { CATEGORIES } from '@/lib/categories';
@@ -699,12 +699,58 @@ export default function StorefrontHome() {
   };
 
   // ------------------------------------------------------------
+  // ФОТО, ЯКІ ДОГРУЖАЮТЬСЯ У ФОНІ — опитування статусу без повторного
+  // пошуку. GET /api/products (нижче) сам ставить пошук фото в чергу
+  // для товарів без фото (див. app/api/products/route.ts, after()),
+  // але та відповідь встигає піти покупцю ще ДО того, як фото
+  // знайдеться (це займає кілька секунд). Замість того, щоб покупач
+  // сам здогадався повторити пошук, тут просто опитуємо легкий
+  // ендпоінт /api/products/images (без побічних ефектів, нічого не
+  // запускає) кілька разів поспіль і підставляємо фото в ту саму
+  // видачу, коли воно з'явиться.
+  //
+  // pollTokenRef — захист від "запізнілого" опитування: якщо покупець
+  // встиг ввести новий пошук, поки старий ще опитувався, попередній
+  // цикл повинен сам зупинитися й не переписати вже нові результати
+  const pollTokenRef = useRef(0);
+
+  const POLL_INTERVAL_MS = 3000;
+  const POLL_MAX_ATTEMPTS = 6; // 6 × 3с = до 18с — з запасом на пачку з 6 товарів (app/api/products/route.ts)
+
+  const pollForImages = useCallback(async (productIds: string[], token: number) => {
+    let pendingIds = productIds;
+
+    for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS && pendingIds.length > 0; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      if (pollTokenRef.current !== token) return; // покупач вже почав новий пошук
+
+      try {
+        const response = await fetch(`/api/products/images?ids=${pendingIds.join(',')}`);
+        const data = await response.json();
+        if (!response.ok) continue;
+
+        const images = data.images as Record<string, string | null>;
+        const foundIds = pendingIds.filter((id) => images[id]);
+        if (foundIds.length === 0) continue;
+
+        if (pollTokenRef.current !== token) return;
+        setResults((prev) => prev.map((p) => (images[p.id] ? { ...p, imageUrl: images[p.id] } : p)));
+        pendingIds = pendingIds.filter((id) => !images[id]);
+      } catch {
+        // мережева похибка одного опитування — не критично, спробуємо
+        // ще раз на наступній ітерації циклу
+      }
+    }
+  }, []);
+
+  // ------------------------------------------------------------
   // ПОИСК — GET /api/products?...  Общая функция для обоих режимов
   // (по артикулу и за автомобілем): отличаются только параметрами
   // запроса (params) и подписью, которая показывается над результатами
   // (label, например "555-66" или "Toyota, 2008, 2.0")
   // ------------------------------------------------------------
   const runSearch = useCallback(async (params: URLSearchParams, label: string) => {
+    const token = ++pollTokenRef.current;
     setSearching(true);
     setSearchError(null);
     setSubmittedQuery(label);
@@ -714,14 +760,20 @@ export default function StorefrontHome() {
       if (!response.ok) {
         throw new Error(data.error || 'Не вдалося виконати пошук');
       }
-      setResults(data.products as Product[]);
+      const products = data.products as Product[];
+      setResults(products);
+
+      const missingImageIds = products.filter((p) => !p.imageUrl).map((p) => p.id);
+      if (missingImageIds.length > 0) {
+        pollForImages(missingImageIds, token);
+      }
     } catch (error) {
       setSearchError(error instanceof Error ? error.message : 'Помилка мережі під час пошуку');
       setResults([]);
     } finally {
       setSearching(false);
     }
-  }, []);
+  }, [pollForImages]);
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
