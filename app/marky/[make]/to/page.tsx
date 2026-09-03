@@ -21,6 +21,8 @@ import { Pool } from 'pg';
 import { CategoryDef, getToCategories } from '@/lib/categories';
 import { CarMakeDef, getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
+import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
+import { SITE_URL } from '@/lib/siteConfig';
 
 export const runtime = 'nodejs';
 // Захист від спроби зібрати сторінку заздалегідь під час білда на
@@ -150,8 +152,36 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
 
   const sections = await loadToSections(slug);
 
+  // Товари розбиті по секціях (одна на категорію ТО) — для ItemList
+  // збираємо їх в один список, де б той самий товар не потрапив
+  // двічі, якщо раптом підпаде під дві категорії одразу
+  const uniqueProducts = Array.from(
+    new Map(sections.flatMap((s) => s.products).map((p) => [p.id, p])).values()
+  );
+
+  // Порядок ТОЧНО повторює видиму <nav> нижче — Google звіряє одне з
+  // іншим
+  const breadcrumbItems = [
+    { name: 'Головна', url: SITE_URL },
+    { name: 'Марки авто', url: `${SITE_URL}/marky` },
+    { name: make.name, url: `${SITE_URL}/marky/${slug}` },
+    { name: 'ТО', url: `${SITE_URL}/marky/${slug}/to` },
+  ];
+
   return (
     <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildBreadcrumbJsonLd(breadcrumbItems)) }}
+      />
+      {uniqueProducts.length > 0 && (
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(buildProductListJsonLd(uniqueProducts)) }}
+        />
+      )}
       <div className="max-w-6xl mx-auto px-5 md:px-8 py-8">
         <nav className="text-xs mb-5 opacity-70" aria-label="Хлібні крихти">
           <Link href="/" className="underline">

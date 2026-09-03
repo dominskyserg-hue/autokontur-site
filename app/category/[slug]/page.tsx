@@ -24,6 +24,8 @@ import { Pool } from 'pg';
 import { CATEGORIES, getCategoryBySlug } from '@/lib/categories';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
+import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
+import { SITE_URL } from '@/lib/siteConfig';
 
 export const runtime = 'nodejs';
 // Захист від спроби зібрати сторінку заздалегідь під час білда на
@@ -177,8 +179,30 @@ export default async function CategoryPage({
   const pageHref = (targetPage: number) =>
     `/category/${slug}?page=${targetPage}${make ? `&marka=${make.slug}` : ''}`;
 
+  // ==================== SCHEMA.ORG (JSON-LD) ====================
+  // Порядок хлібних крихт ТОЧНО повторює видиму <nav> нижче — Google
+  // звіряє одне з іншим
+  const breadcrumbItems = [
+    { name: 'Головна', url: SITE_URL },
+    { name: 'Категорії', url: `${SITE_URL}/category` },
+    { name: category.name, url: `${SITE_URL}/category/${slug}` },
+    ...(make ? [{ name: make.name, url: `${SITE_URL}/marky/${make.slug}` }] : []),
+  ];
+
   return (
     <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildBreadcrumbJsonLd(breadcrumbItems)) }}
+      />
+      {products.length > 0 && (
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(buildProductListJsonLd(products)) }}
+        />
+      )}
       <div className="max-w-6xl mx-auto px-5 md:px-8 py-8">
         {/* ==================== ХЛІБНІ КРИХТИ ==================== */}
         <nav className="text-xs mb-5 opacity-70" aria-label="Хлібні крихти">

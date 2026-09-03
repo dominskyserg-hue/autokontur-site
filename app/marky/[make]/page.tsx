@@ -15,6 +15,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CAR_MAKES, getCarMakeBySlug, buildMakeWhereClause } from '@/lib/carMakes';
+import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
+import { SITE_URL } from '@/lib/siteConfig';
 
 export const runtime = 'nodejs';
 // Захист від спроби зібрати сторінку заздалегідь під час білда на
@@ -144,8 +146,28 @@ export default async function CarMakePage({
   const { products, total } = await loadMakeProducts(slug, page);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  // Порядок ТОЧНО повторює видиму <nav> нижче — Google звіряє одне з
+  // іншим
+  const breadcrumbItems = [
+    { name: 'Головна', url: SITE_URL },
+    { name: 'Марки авто', url: `${SITE_URL}/marky` },
+    { name: make.name, url: `${SITE_URL}/marky/${slug}` },
+  ];
+
   return (
     <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildBreadcrumbJsonLd(breadcrumbItems)) }}
+      />
+      {products.length > 0 && (
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(buildProductListJsonLd(products)) }}
+        />
+      )}
       <div className="max-w-6xl mx-auto px-5 md:px-8 py-8">
         <nav className="text-xs mb-5 opacity-70" aria-label="Хлібні крихти">
           <Link href="/" className="underline">
