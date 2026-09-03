@@ -40,8 +40,15 @@ export const metadata: Metadata = {
 // русском — это внутренний инструмент, её это не касается
 export default function RootLayout({
   children,
+  modal,
 }: Readonly<{
   children: React.ReactNode;
+  // Паралельний слот app/@modal — модальне вікно картки товару
+  // (app/@modal/(...)p/[id]/[[...slug]]/page.tsx), яке відкривається
+  // поверх поточної сторінки при кліку по товару в каталозі. На
+  // сторінках, де такого перехопленого маршруту немає (майже всюди),
+  // сюди підставляється app/@modal/default.tsx, який рендерить null
+  modal: React.ReactNode;
 }>) {
   return (
     <html lang="uk">
@@ -70,6 +77,7 @@ export default function RootLayout({
       </head>
       <body>
         {children}
+        {modal}
 
         {/* ==================== GOOGLE ANALYTICS 4 ====================
             strategy="afterInteractive" — те саме, що рекомендує сам
