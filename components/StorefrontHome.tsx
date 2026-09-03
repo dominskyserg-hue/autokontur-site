@@ -418,6 +418,20 @@ export default function StorefrontHome() {
       .catch(() => {});
   }, [carMake, carYear]);
 
+  // ---- перегляд фото товару на весь екран (клік по мініатюрі в
+  // результатах пошуку — і в сітці карток, і в таблиці) ----
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; alt: string } | null>(null);
+  const closeLightbox = () => setLightboxImage(null);
+
+  useEffect(() => {
+    if (!lightboxImage) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeLightbox();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [lightboxImage]);
+
   // ---- заявка "Підбір за VIN" ----
   const [vinModalOpen, setVinModalOpen] = useState(false);
   const [vinCode, setVinCode] = useState('');
@@ -1064,6 +1078,34 @@ export default function StorefrontHome() {
           </div>
         )}
 
+        {/* ==================== ЛАЙТБОКС ФОТО ТОВАРУ ==================== */}
+        {/* Відкривається кліком по мініатюрі в результатах пошуку (і в
+            сітці карток, і в таблиці, див. вище) — просте збільшення
+            вже завантаженого фото, без запиту на сервер */}
+        {lightboxImage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div className="absolute inset-0" style={{ background: 'rgba(21, 16, 14, 0.85)' }} onClick={closeLightbox} />
+
+            <button
+              type="button"
+              onClick={closeLightbox}
+              aria-label="Закрити"
+              className="absolute top-4 right-4 p-2 z-10"
+              style={{ color: '#FFFFFF' }}
+            >
+              <CloseIcon />
+            </button>
+
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={lightboxImage.url}
+              alt={lightboxImage.alt}
+              onClick={(e) => e.stopPropagation()}
+              className="relative max-w-full max-h-full object-contain"
+            />
+          </div>
+        )}
+
         {/* ==================== HERO + ПОИСК ==================== */}
         <section className="relative overflow-hidden">
           <div className="max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-24 relative text-center">
@@ -1449,8 +1491,17 @@ export default function StorefrontHome() {
                       style={{ background: IMG_PLACEHOLDER_BG }}
                     >
                       {product.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={product.imageUrl} alt={product.name || product.article} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setLightboxImage({ url: product.imageUrl as string, alt: product.name || product.article })
+                          }
+                          className="w-full h-full cursor-zoom-in"
+                          aria-label="Збільшити фото товару"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={product.imageUrl} alt={product.name || product.article} className="w-full h-full object-cover" />
+                        </button>
                       ) : (
                         <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ color: '#5A4C40' }}>
                           <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
@@ -1555,12 +1606,21 @@ export default function StorefrontHome() {
                           style={{ background: IMG_PLACEHOLDER_BG }}
                         >
                           {product.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={product.imageUrl}
-                              alt={product.name || product.article}
-                              className="w-full h-full object-cover"
-                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setLightboxImage({ url: product.imageUrl as string, alt: product.name || product.article })
+                              }
+                              className="w-full h-full cursor-zoom-in"
+                              aria-label="Збільшити фото товару"
+                            >
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={product.imageUrl}
+                                alt={product.name || product.article}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
                           ) : (
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ color: '#5A4C40' }}>
                               <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
