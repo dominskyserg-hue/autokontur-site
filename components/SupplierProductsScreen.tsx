@@ -63,8 +63,9 @@ interface Pagination {
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 350;
 
+// Копейки не показываем — только целые гривны, округлённые ВВЕРХ
 function formatMoney(value: number): string {
-  return value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.ceil(value).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
 }
 
 export default function SupplierProductsScreen({ supplierId }: { supplierId: string }) {

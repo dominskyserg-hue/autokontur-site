@@ -66,8 +66,9 @@ interface AnalyticsData {
   statusBreakdown: Array<{ status: OrderStatus; count: number }>;
 }
 
+// Копейки не показываем — только целые гривны, округлённые ВВЕРХ
 function formatMoney(value: number): string {
-  return value.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.ceil(value).toLocaleString('ru-RU', { maximumFractionDigits: 0 });
 }
 
 export default function AnalyticsScreen() {

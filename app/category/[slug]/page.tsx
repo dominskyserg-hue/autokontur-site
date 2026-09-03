@@ -149,8 +149,9 @@ const SUCCESS_TEXT = '#15803D';
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
 
+// Копійки покупцю не показуємо — тільки цілі гривні, округлені ВГОРУ
 function formatMoney(value: number): string {
-  return value.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.ceil(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
 }
 
 export default async function CategoryPage({

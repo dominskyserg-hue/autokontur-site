@@ -74,8 +74,9 @@ const STATUS_META: Record<OrderStatus, { label: string; bg: string; fg: string }
 // кабинета — всё, что ещё не завершилось (готово или отменено)
 const IN_PROGRESS_STATUSES: OrderStatus[] = ['new', 'processing', 'awaiting_parts'];
 
+// Копійки покупцю не показуємо — тільки цілі гривні, округлені ВГОРУ
 function formatMoney(value: number): string {
-  return value.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.ceil(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
 }
 
 function formatDate(iso: string): string {

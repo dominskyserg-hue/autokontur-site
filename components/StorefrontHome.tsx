@@ -107,8 +107,11 @@ interface Announcement {
   text: string;
 }
 
+// Копійки покупцю не показуємо — тільки цілі гривні, округлені ВГОРУ
+// (Math.ceil, а не звичайне округлення): так ціна на вітрині ніколи
+// не виявляється дешевшою за реальну ціну товару в базі
 function formatMoney(value: number): string {
-  return value.toLocaleString('uk-UA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.ceil(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
 }
 
 // Простая проверка номера телефона: считаем только цифры и требуем,
