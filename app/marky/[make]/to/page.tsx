@@ -23,6 +23,7 @@ import { CarMakeDef, getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
+import { buildProductPath } from '@/lib/slug';
 
 export const runtime = 'nodejs';
 // Захист від спроби зібрати сторінку заздалегідь під час білда на
@@ -240,7 +241,7 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
                   {products.map((product) => (
                     <Link
                       key={product.id}
-                      href={`/?article=${encodeURIComponent(product.article)}`}
+                      href={buildProductPath(product.id, product)}
                       className="block p-4 rounded-md transition-colors hover:opacity-90 hover:shadow-sm"
                       style={{ background: '#FFFFFF', border: `1px solid ${BORDER_SOFT}` }}
                     >

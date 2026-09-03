@@ -53,6 +53,7 @@ import { CAR_MAKES } from '@/lib/carMakes';
 import { DEPARTMENTS } from '@/lib/departments';
 import { FAQ_ITEMS } from '@/lib/faq';
 import { decodeVin } from '@/lib/vinDecode';
+import { buildProductPath } from '@/lib/slug';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -1566,13 +1567,13 @@ export default function StorefrontHome() {
                       )}
                     </div>
 
-                    <div>
+                    <Link href={buildProductPath(product.id, product)} className="block hover:underline">
                       <p className="text-xs font-mono uppercase tracking-wide mb-1" style={{ fontFamily: LABEL_FONT, color: YELLOW }}>
                         {product.article}
                         {product.brand ? ` · ${product.brand}` : ''}
                       </p>
                       <p className="text-sm font-medium leading-snug">{product.name || 'Без назви'}</p>
-                    </div>
+                    </Link>
 
                     <div className="flex items-center justify-between mt-auto">
                       <span
@@ -1648,12 +1649,12 @@ export default function StorefrontHome() {
                         borderTop: `1px solid ${BORDER}`,
                       }}
                     >
-                      <div className="min-w-0">
+                      <Link href={buildProductPath(product.id, product)} className="min-w-0 hover:underline">
                         <p className="text-[11px] font-bold uppercase tracking-wide truncate" style={{ fontFamily: LABEL_FONT, color: YELLOW }}>
                           {product.brand || 'Без бренду'}
                         </p>
                         <p className="text-sm font-mono font-semibold truncate">{product.article}</p>
-                      </div>
+                      </Link>
 
                       <div className="flex items-center gap-3 min-w-0">
                         <div
@@ -1684,7 +1685,9 @@ export default function StorefrontHome() {
                             </svg>
                           )}
                         </div>
-                        <span className="text-sm font-medium leading-snug truncate">{product.name || 'Без назви'}</span>
+                        <Link href={buildProductPath(product.id, product)} className="text-sm font-medium leading-snug truncate hover:underline">
+                          {product.name || 'Без назви'}
+                        </Link>
                       </div>
 
                       <div>

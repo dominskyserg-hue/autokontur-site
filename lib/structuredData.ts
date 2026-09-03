@@ -7,18 +7,16 @@
 // до бази — тому, на відміну від пулу з'єднань (навмисно дубльованого
 // в кожному роуті під serverless), тут звичайний спільний імпорт.
 //
-// Немає окремої сторінки товару (/product/[id]) — картки товарів
-// показуються тільки списком на цих трьох сторінках і на Головній
-// (де ведуть на /?article=...). Тому Offer.url і Product.url ведуть
-// на Головну з параметром артикула — це прийнятно для розмітки
-// "списку товарів" (ItemList), але щоб Google почав показувати
-// повноцінні rich-результати (зірки/ціна прямо під синім посиланням)
-// для КОНКРЕТНОГО товару — рано чи пізно знадобиться окрема сторінка
-// на кожен товар. Поки її нема, ІtemList — правильний і документований
-// Google формат саме для сторінок-каталогів.
+// Product.url/Offer.url ведуть на справжню сторінку товару
+// (app/p/[id]/[[...slug]]/page.tsx, lib/slug.ts) — там же
+// buildSingleProductJsonLd() використовується для розмітки ОДНОГО
+// товару, а buildProductListJsonLd() тут, нижче, — для ItemList на
+// сторінках-каталогах (категорія, марка). Обидва варіанти офіційно
+// документовані Google, кожен для свого типу сторінки.
 // ============================================================
 
 import { SITE_URL } from './siteConfig';
+import { buildProductPath } from './slug';
 
 export interface SchemaProduct {
   id: string;
@@ -37,7 +35,7 @@ export interface SchemaProduct {
 const REFURBISHED_PATTERN = /реставрац|відновлен|восстановлен|б\/у/i;
 
 function productUrl(product: SchemaProduct): string {
-  return `${SITE_URL}/?article=${encodeURIComponent(product.article)}`;
+  return `${SITE_URL}${buildProductPath(product.id, product)}`;
 }
 
 // priceValidUntil — Google рекомендує вказувати цю дату для Offer,
@@ -50,7 +48,9 @@ function priceValidUntil(): string {
   return date.toISOString().slice(0, 10);
 }
 
-function productJsonLd(product: SchemaProduct) {
+// Експортована — сторінка одного товару (app/p/[id]/[[...slug]]) бере
+// цю саму функцію напряму, без обгортки в ItemList/ListItem
+export function productJsonLd(product: SchemaProduct) {
   const displayName =
     product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
 
@@ -78,6 +78,15 @@ function productJsonLd(product: SchemaProduct) {
         : 'https://schema.org/NewCondition',
       priceValidUntil: priceValidUntil(),
     },
+  };
+}
+
+// Розмітка ОДНОГО товару — для сторінки app/p/[id]/[[...slug]], на
+// відміну від buildProductListJsonLd() нижче (для сторінок-каталогів)
+export function buildSingleProductJsonLd(product: SchemaProduct) {
+  return {
+    '@context': 'https://schema.org',
+    ...productJsonLd(product),
   };
 }
 

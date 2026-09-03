@@ -64,6 +64,17 @@ export function getCarMakeBySlug(slug: string): CarMakeDef | undefined {
   return CAR_MAKES.find((m) => m.slug === slug);
 }
 
+// Зворотний пошук — за значенням products.car_make конкретного товару
+// знайти відповідну марку зі списку (для хлібних крихт на сторінці
+// товару, app/p/[id]/[[...slug]]/page.tsx). null/невідоме значення —
+// не помилка, просто товар без розпізнаної марки (крихта тоді не
+// показується)
+export function getCarMakeByDbValue(value: string | null | undefined): CarMakeDef | undefined {
+  if (!value) return undefined;
+  const upper = value.trim().toUpperCase();
+  return CAR_MAKES.find((m) => m.dbValues.includes(upper));
+}
+
 // (name ILIKE ANY(...) з lib/categories.ts тут не підходить — car_make
 // порівнюємо ТОЧНИМ значенням, регістронезалежно, а не пошуком
 // підрядка: інакше "VW" підхопив би, наприклад, помилково будь-яке
