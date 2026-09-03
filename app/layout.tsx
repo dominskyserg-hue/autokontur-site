@@ -30,6 +30,17 @@ export default function RootLayout({
           components/StorefrontHome.tsx; на адмін-панель (/admin) не впливають,
           бо там ці font-family ніде не задаються */}
       <head>
+        {/* ==================== ФАВІКОНКА ====================
+            Файли лежать у /public (тому шляхи нижче — від кореня
+            сайту, без /public у самому шляху) — див. коментар з
+            повним списком файлів і їх призначенням в кінці цього
+            файлу */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="icon" href="/favicon-16x16.png" type="image/png" sizes="16x16" />
+        <link rel="icon" href="/favicon-32x32.png" type="image/png" sizes="32x32" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
@@ -41,3 +52,32 @@ export default function RootLayout({
     </html>
   );
 }
+
+// ============================================================
+// ФАЙЛИ ФАВІКОНКИ — де лежать і як згенеровані (public/favicon.svg,
+// public/favicon.ico, public/favicon-16x16.png, public/favicon-32x32.png,
+// public/apple-touch-icon.png). Next.js віддає все з /public напряму
+// з кореня сайту, тому файл public/favicon.ico доступний за адресою
+// /favicon.ico — саме такий шлях і використаний у <link> вище.
+//
+// Малюнок — фірмовий значок DominatorParts (шестерня + свічка
+// запалювання), той самий, що і в шапці сайту (компонент
+// DominatorMark у components/StorefrontHome.tsx), у кольорі бренду
+// #1D5FD6. favicon.svg сам перемикається на світліший відтінок
+// #6FA0FF у темній темі браузера (@media prefers-color-scheme: dark
+// прямо всередині SVG) — це і є "підтримка теми" з файлу, а не
+// два окремих light/dark файли.
+//
+// Якщо картинку захочете замінити на іншу — досить перегенерувати
+// ці ж 5 файлів (розміри й імена мають лишитись точно такими самими,
+// інакше треба міняти й шляхи в <link> вище):
+//   favicon.svg           — вихідний вектор, будь-який розмір
+//   favicon.ico           — 16×16 + 32×32 + 48×48 в одному файлі
+//                            (для старих браузерів, які SVG не вміють)
+//   favicon-16x16.png     — PNG-фолбек, прозорий фон
+//   favicon-32x32.png     — PNG-фолбек, прозорий фон
+//   apple-touch-icon.png  — 180×180, ФОН ОБОВ'ЯЗКОВО НЕПРОЗОРИЙ
+//                            (iOS сам додає скруглені кути; прозорі
+//                            ділянки на "домашньому екрані" iPhone
+//                            стануть чорними)
+// ============================================================

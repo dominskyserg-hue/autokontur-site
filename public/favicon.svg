@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" aria-hidden="true">
+  <!--
+    Фавіконка DominatorParts — той самий фірмовий значок (шестерня +
+    свічка запалювання), що й у шапці сайту (components/StorefrontHome.tsx,
+    компонент DominatorMark), винесений в окремий файл. currentColor
+    керується через клас .mark нижче — завдяки цьому один SVG-файл сам
+    підлаштовується під темну/світлу тему браузера (prefers-color-scheme),
+    без потреби класти два окремих файли
+  -->
+  <style>
+    .mark { color: #1D5FD6; }
+    @media (prefers-color-scheme: dark) {
+      .mark { color: #6FA0FF; }
+    }
+  </style>
+  <g class="mark" fill="currentColor">
+    <circle cx="60" cy="60" r="42" fill="none" stroke="currentColor" stroke-width="9" />
+    <g>
+      <rect x="53" y="2" width="14" height="20" />
+      <rect x="53" y="98" width="14" height="20" />
+      <rect x="2" y="53" width="20" height="14" />
+      <rect x="98" y="53" width="20" height="14" />
+      <rect x="53" y="2" width="14" height="20" transform="rotate(45 60 60)" />
+      <rect x="53" y="2" width="14" height="20" transform="rotate(135 60 60)" />
+      <rect x="53" y="2" width="14" height="20" transform="rotate(225 60 60)" />
+      <rect x="53" y="2" width="14" height="20" transform="rotate(315 60 60)" />
+    </g>
+    <rect x="49" y="20" width="22" height="18" rx="3" />
+    <g stroke="currentColor" stroke-width="7" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M60 38 L60 50" />
+      <path d="M50 50 L70 50 L50 59 L70 59 L50 68 L70 68 L50 77 L70 77" />
+    </g>
+    <circle cx="60" cy="88" r="5" />
+  </g>
+</svg>
