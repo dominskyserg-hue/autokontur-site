@@ -30,6 +30,9 @@ const TABS: { slug: string; label: string }[] = [
   { slug: 'about', label: 'Про нас' },
   { slug: 'delivery', label: 'Доставка' },
   { slug: 'contacts', label: 'Контакти' },
+  { slug: 'privacy', label: 'Конфіденційність' },
+  { slug: 'terms', label: 'Оферта' },
+  { slug: 'returns', label: 'Повернення' },
 ];
 
 export default function SitePagesManager() {
@@ -116,8 +119,8 @@ export default function SitePagesManager() {
     >
       <h2 className="text-base font-semibold mb-1">Информационные страницы</h2>
       <p className="text-xs mb-4" style={{ color: 'var(--ink-muted)' }}>
-        Текст страниц "Про нас", "Доставка" и "Контакти" — пока страница пустая, на витрине вместо неё
-        показывается заглушка "Сторінка ще наповнюється".
+        Текст статичных страниц сайта, включая юридические (Конфіденційність, Оферта, Повернення) — пока
+        страница пустая, на витрине вместо неё показывается заглушка "Сторінка ще наповнюється".
       </p>
 
       {loadError && (

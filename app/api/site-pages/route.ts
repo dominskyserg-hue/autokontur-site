@@ -1,12 +1,14 @@
 // ============================================================
 // API Route для Next.js App Router. Адрес: /api/site-pages
 //
-// Контент трёх статичных информационных страниц (Про нас, Доставка,
-// Контакти) — редактируется в админ-панели (экран "Настройки", см.
+// Контент шести статичных информационных страниц (Про нас, Доставка,
+// Контакти, Політика конфіденційності, Публічна оферта, Повернення) —
+// редактируется в админ-панели (экран "Настройки", см.
 // components/SitePagesManager.tsx), показывается на публичных
-// сторінках app/about, app/delivery, app/contacts (они читают базу
-// НАПРЯМУЮ, серверним компонентом — так само, як app/category/[slug],
-// без звернення до цього API; цей роут потрібен ТІЛЬКИ адмін-панелі).
+// сторінках app/about, app/delivery, app/contacts, app/privacy,
+// app/terms, app/returns (вони читають базу НАПРЯМУЮ, серверним
+// компонентом — так само, як app/category/[slug], без звернення до
+// цього API; цей роут потрібен ТІЛЬКИ адмін-панелі).
 //
 //   GET   /api/site-pages         — отримати всі три сторінки
 //   PATCH /api/site-pages         — оновити одну сторінку (за slug)
@@ -40,7 +42,7 @@ const pool =
 
 globalThis.pgPool = pool;
 
-const VALID_SLUGS = ['about', 'delivery', 'contacts'] as const;
+const VALID_SLUGS = ['about', 'delivery', 'contacts', 'privacy', 'terms', 'returns'] as const;
 type PageSlug = (typeof VALID_SLUGS)[number];
 
 function isValidSlug(value: unknown): value is PageSlug {

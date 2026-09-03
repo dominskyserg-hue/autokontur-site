@@ -1911,7 +1911,7 @@ export default function StorefrontHome() {
         </section>
 
         <footer className="py-8 text-center text-xs" style={{ color: FAINT }}>
-          <div className="flex items-center justify-center gap-4 mb-3">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 mb-3">
             <Link href="/about" className="underline">
               Про нас
             </Link>
@@ -1920,6 +1920,15 @@ export default function StorefrontHome() {
             </Link>
             <Link href="/contacts" className="underline">
               Контакти
+            </Link>
+            <Link href="/returns" className="underline">
+              Повернення та обмін
+            </Link>
+            <Link href="/terms" className="underline">
+              Публічна оферта
+            </Link>
+            <Link href="/privacy" className="underline">
+              Політика конфіденційності
             </Link>
           </div>
           © {new Date().getFullYear()} {shopName} — автозапчастини з доставкою по Україні

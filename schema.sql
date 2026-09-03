@@ -701,26 +701,46 @@ CREATE INDEX IF NOT EXISTS idx_vin_requests_status ON vin_requests (status);
 
 -- ============================================================
 -- ТАБЛИЦЯ site_pages — контент статичних інформаційних сторінок
--- (Про нас, Доставка, Контакти), який редагується в адмін-панелі
+-- (Про нас, Доставка, Контакти, Політика конфіденційності, Публічна
+-- оферта, Повернення та обмін), який редагується в адмін-панелі
 -- ============================================================
--- Фіксований набір із трьох slug'ів (CHECK), а не довільна CMS —
--- на сайті рівно три такі сторінки, і додавати механізм створення
+-- Фіксований набір slug'ів (CHECK), а не довільна CMS — на сайті
+-- рівно ці статичні сторінки, і додавати механізм створення
 -- довільних нових сторінок поки що не потрібно
 CREATE TABLE IF NOT EXISTS site_pages (
-  slug TEXT PRIMARY KEY CHECK (slug IN ('about', 'delivery', 'contacts')),
+  slug TEXT PRIMARY KEY CHECK (slug IN ('about', 'delivery', 'contacts', 'privacy', 'terms', 'returns')),
   title TEXT NOT NULL,
   content TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Створюємо три рядки з порожнім content — адмін заповнить пізніше
--- через екран "Настройки" (components/SitePagesManager.tsx). Публічна
+-- ------------------------------------------------------------
+-- МІГРАЦІЯ ДЛЯ ТИХ, ХТО ВЖЕ ЗАПУСКАВ ЦЕЙ СКРИПТ РАНІШЕ
+-- ------------------------------------------------------------
+-- CREATE TABLE IF NOT EXISTS вище не змінить CHECK-обмеження в уже
+-- існуючій таблиці (а вона у вас уже створена в Supabase лише з трьома
+-- дозволеними slug'ами) — тому окремо перевипускаємо це обмеження.
+-- DROP CONSTRAINT IF EXISTS + повторний ADD CONSTRAINT безпечний для
+-- повторного запуску: ім'я обмеження стандартне (Postgres сам генерує
+-- його як "<таблиця>_<колонка>_check", коли CHECK заданий інлайн)
+ALTER TABLE site_pages DROP CONSTRAINT IF EXISTS site_pages_slug_check;
+ALTER TABLE site_pages ADD CONSTRAINT site_pages_slug_check
+  CHECK (slug IN ('about', 'delivery', 'contacts', 'privacy', 'terms', 'returns'));
+
+-- Створюємо рядки з порожнім content — адмін заповнить пізніше через
+-- екран "Настройки" (components/SitePagesManager.tsx). Публічна
 -- сторінка (app/about/page.tsx і т.п.) показує заглушку "ще не
--- заповнено", поки content порожній
+-- заповнено", поки content порожній. Реальний стартовий текст для
+-- трьох юридичних сторінок (privacy/terms/returns) заведений окремо,
+-- напряму в базу — не сюди, щоб не тримати кілька кілобайт
+-- юридичного тексту прямо в SQL-скрипті
 INSERT INTO site_pages (slug, title, content) VALUES
   ('about', 'Про нас', ''),
   ('delivery', 'Доставка та оплата', ''),
-  ('contacts', 'Контакти', '')
+  ('contacts', 'Контакти', ''),
+  ('privacy', 'Політика конфіденційності', ''),
+  ('terms', 'Публічна оферта', ''),
+  ('returns', 'Умови повернення та обміну', '')
 ON CONFLICT (slug) DO NOTHING;
 
 

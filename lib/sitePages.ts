@@ -29,7 +29,7 @@ const pool =
 
 globalThis.pgPool = pool;
 
-export type SitePageSlug = 'about' | 'delivery' | 'contacts';
+export type SitePageSlug = 'about' | 'delivery' | 'contacts' | 'privacy' | 'terms' | 'returns';
 
 export interface SitePageContent {
   title: string;
