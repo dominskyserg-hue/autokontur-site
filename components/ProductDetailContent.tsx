@@ -14,6 +14,7 @@ import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@
 import { SITE_URL } from '@/lib/siteConfig';
 import type { CrossRefItem, ProductPageData, TecdocCompatibilityItem, TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
+import ProductViewTracker from '@/components/ProductViewTracker';
 
 export const BG = '#F5F6F9';
 export const PANEL_SOFT = '#EAEDF2';
@@ -40,6 +41,16 @@ export default function ProductDetailContent({
 
   return (
     <>
+      {/* Аналитика (Google Analytics 4 + Meta Pixel) — событие
+          "просмотр товара", см. components/ProductViewTracker.tsx.
+          Ничего не рендерит, просто отправляет событие один раз при
+          открытии страницы */}
+      <ProductViewTracker
+        id={product.id}
+        name={displayName}
+        brand={product.brand}
+        price={product.retailPrice}
+      />
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger

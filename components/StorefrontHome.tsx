@@ -54,6 +54,7 @@ import { DEPARTMENTS } from '@/lib/departments';
 import { FAQ_ITEMS } from '@/lib/faq';
 import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
+import { trackAddToCart, trackBeginCheckout, trackPurchase } from '@/lib/analytics';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -591,6 +592,15 @@ export default function StorefrontHome() {
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
 
   const addToCart = (product: Product) => {
+    // Аналитика (Google Analytics 4 + Meta Pixel) — событие
+    // "добавление в корзину", см. lib/analytics.ts
+    trackAddToCart({
+      id: product.id,
+      name: product.name || product.article,
+      brand: product.brand,
+      price: product.retailPrice,
+    });
+
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
@@ -672,6 +682,20 @@ export default function StorefrontHome() {
     setOrderStatus('submitting');
     setOrderError(null);
 
+    // Аналитика (Google Analytics 4 + Meta Pixel) — событие "начало
+    // оформления заказа", см. lib/analytics.ts. Отправляем ДО запроса
+    // на сервер — покупатель уже нажал кнопку и решил оформить заказ,
+    // независимо от того, пройдёт запрос успешно или нет
+    trackBeginCheckout(
+      cart.map((item) => ({
+        id: item.id,
+        name: item.name,
+        brand: item.brand,
+        price: item.price,
+        quantity: item.quantity,
+      }))
+    );
+
     try {
       const response = await fetch('/api/orders/create', {
         method: 'POST',
@@ -703,6 +727,21 @@ export default function StorefrontHome() {
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Не вдалося оформити замовлення');
       }
+
+      // Аналитика (Google Analytics 4 + Meta Pixel) — событие
+      // "оформленный заказ", см. lib/analytics.ts. Обязательно ДО
+      // setCart([]) ниже — иначе к моменту вызова корзина уже будет
+      // пустой и в событие попадёт сумма 0 вместо реальной суммы заказа
+      trackPurchase(
+        data.orderId,
+        cart.map((item) => ({
+          id: item.id,
+          name: item.name,
+          brand: item.brand,
+          price: item.price,
+          quantity: item.quantity,
+        }))
+      );
 
       // Успех: показываем экран "Дякуємо..." и полностью очищаем
       // корзину — и React-state (setCart), и localStorage (это уже
@@ -1207,8 +1246,8 @@ export default function StorefrontHome() {
               ПЕРЕВІРЕНИЙ СЕРВІС.
             </h1>
             <p className="text-sm md:text-base mb-9 max-w-xl mx-auto" style={{ color: MUTED }}>
-              {shopName} — команда професіоналів з підбору автозапчастин. Знайдіть потрібну за
-              артикулом, або доручіть це нам.
+              {shopName} — команда професіоналів з підбору автозапчастин. Знайдіть потрібну
+              запчастину за артикулом, або доручіть це нам.
             </p>
 
             {/* ---- перемикач режиму пошуку ---- */}

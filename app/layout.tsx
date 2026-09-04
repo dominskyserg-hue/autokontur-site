@@ -14,6 +14,13 @@ import './globals.css';
 const GA_MEASUREMENT_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 const GSC_VERIFICATION = process.env.NEXT_PUBLIC_GSC_VERIFICATION;
 
+// ID пикселя Meta (Facebook) — business.facebook.com → Events Manager →
+// выбрать пиксель → Настройки → "ID пикселя" (число вида 1234567890123456).
+// Тот же принцип, что и с GA_MEASUREMENT_ID выше: значение задаётся через
+// переменную окружения NEXT_PUBLIC_META_PIXEL_ID (см. пояснение в конце
+// файла), а не прямо в коде — так его можно менять без правки кода
+const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID;
+
 // ВАЖЛИВО: тут навмисно СТАТИЧНІ дані, без звернення до бази.
 // Раніше тут була generateMetadata() з pg-запитом до site_settings —
 // але layout.tsx рендериться АБСОЛЮТНО на кожен запит до сайту
@@ -76,8 +83,57 @@ export default function RootLayout({
         />
       </head>
       <body>
+        {/* ==================== META (FACEBOOK) PIXEL — <noscript>-ФОЛБЭК ====================
+            Обязательная часть стандартного кода Meta Pixel: если у
+            покупателя отключён JavaScript в браузере, обычный fbq()
+            ниже вообще не выполнится — эта картинка <img> с тем же
+            pixel_id выполняет роль "счётчика" вместо него. Она должна
+            стоять СРАЗУ ПОСЛЕ открывающего тега <body> — это требование
+            самой Meta. Рендерится, только если задана переменная
+            окружения NEXT_PUBLIC_META_PIXEL_ID (см. пояснение в конце
+            файла) */}
+        {META_PIXEL_ID && (
+          <noscript>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              height="1"
+              width="1"
+              style={{ display: 'none' }}
+              src={`https://www.facebook.com/tr?id=${META_PIXEL_ID}&ev=PageView&noscript=1`}
+              alt=""
+            />
+          </noscript>
+        )}
+
         {children}
         {modal}
+
+        {/* ==================== META (FACEBOOK) PIXEL — базовый код ====================
+            Стандартный код инициализации fbq() — ровно такой же, какой
+            выдаёт сам Facebook Events Manager, только перенесённый в
+            формат Next.js <Script> вместо обычного <script>. strategy=
+            "afterInteractive" — та же причина, что и у GA4 ниже: не
+            задерживать первую отрисовку страницы ради стороннего
+            скрипта аналитики. 'track', 'PageView' сразу после
+            инициализации — это базовое событие "покупатель открыл
+            страницу", которое Meta Pixel ожидает видеть на КАЖДОЙ
+            странице сайта */}
+        {META_PIXEL_ID && (
+          <Script id="meta-pixel-init" strategy="afterInteractive">
+            {`
+              !function(f,b,e,v,n,t,s)
+              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
+              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
+              n.queue=[];t=b.createElement(e);t.async=!0;
+              t.src=v;s=b.getElementsByTagName(e)[0];
+              s.parentNode.insertBefore(t,s)}(window, document,'script',
+              'https://connect.facebook.net/en_US/fbevents.js');
+              fbq('init', '${META_PIXEL_ID}');
+              fbq('track', 'PageView');
+            `}
+          </Script>
+        )}
 
         {/* ==================== GOOGLE ANALYTICS 4 ====================
             strategy="afterInteractive" — те саме, що рекомендує сам
@@ -156,4 +212,29 @@ export default function RootLayout({
 //
 // Локально (.env.local) можна лишити обидві порожніми — тоді ні
 // лічильник, ні тег верифікації просто не рендеряться, помилки не буде
+// ============================================================
+
+// ============================================================
+// META (FACEBOOK) PIXEL — куда вписать реальное значение
+//
+// Тот же принцип, что и с GA4 выше: значение задаётся через переменную
+// окружения, а не прямо в коде.
+//
+// Vercel Dashboard → проект → Settings → Environment Variables →
+// добавить (Production, и Preview по желанию):
+//
+//   NEXT_PUBLIC_META_PIXEL_ID=1234567890123456
+//     Источник: business.facebook.com → Events Manager → выбрать
+//     пиксель → Настройки → "ID пикселя" (число из 15-16 цифр)
+//
+// Локально (.env.local) можно оставить пустым — тогда пиксель просто
+// не рендерится, ошибки не будет.
+//
+// ЧТО ДАЛЬШЕ (события электронной торговли): базовый код пикселя
+// (этот файл) отправляет только событие "просмотр страницы" на КАЖДОЙ
+// странице. Отслеживание конкретных действий покупателя — просмотр
+// товара, добавление в корзину, начало и завершение оформления заказа —
+// подключено отдельно, через функции-обёртки в lib/analytics.ts
+// (вызываются из components/ProductDetailContent.tsx,
+// components/AddToCartButton.tsx и components/StorefrontHome.tsx)
 // ============================================================

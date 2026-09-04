@@ -16,6 +16,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { trackAddToCart } from '@/lib/analytics';
 
 const CART_STORAGE_KEY = 'autokontur-cart';
 
@@ -65,6 +66,16 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
           ];
 
       window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(nextCart));
+
+      // Аналитика (Google Analytics 4 + Meta Pixel) — событие
+      // "добавление в корзину", см. lib/analytics.ts
+      trackAddToCart({
+        id: product.id,
+        name: product.name || product.article,
+        brand: product.brand,
+        price: product.retailPrice,
+      });
+
       setAdded(true);
     } catch {
       // localStorage недоступний (приватний режим тощо) — не критично,
