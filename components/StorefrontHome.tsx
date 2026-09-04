@@ -1208,7 +1208,7 @@ export default function StorefrontHome() {
             </h1>
             <p className="text-sm md:text-base mb-9 max-w-xl mx-auto" style={{ color: MUTED }}>
               {shopName} — команда професіоналів з підбору автозапчастин. Знайдіть потрібну за
-              артикулом або підберіть деталь за вашим автомобілем.
+              артикулом, або доручіть це нам.
             </p>
 
             {/* ---- перемикач режиму пошуку ---- */}
