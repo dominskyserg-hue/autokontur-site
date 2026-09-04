@@ -205,6 +205,11 @@ export interface TecdocCrossItem {
 export interface TecdocCompatibilityItem {
   make: string;
   makeSlug: string | null;
+  // Реальна назва моделі (напр. "AVENSIS Liftback (_T22_)") — TecDoc
+  // зберігає її аж до конкретного кузова/шасі. Порожній рядок (не
+  // null) для тих небагатьох рядків, де назву не вдалось розпізнати
+  // (див. scripts/tecdoc/modelNames.ts) — тоді просто не показуємо її
+  model: string;
   yearFrom: number | null;
   yearTo: number | null;
 }
@@ -274,11 +279,17 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
 ): Promise<TecdocCompatibilityItem[]> {
   const result = await pool.query(
     `
-    SELECT DISTINCT make, year_from, year_to
+    SELECT DISTINCT make, model, year_from, year_to
     FROM tecdoc_compatibility
     WHERE article = $1
     ORDER BY make, year_from
-    LIMIT 60
+    -- Ліміт вище за TECDOC_COMPATIBILITY_LIMIT: тепер, коли model
+    -- теж бере участь у DISTINCT (кожен кузов/покоління — окремий
+    -- рядок, а не один на марку+роки), у деталей з дуже широкою
+    -- застосовністю перші рядки за алфавітом можуть цілком зайняти
+    -- рідкісні марки — запас потрібен, щоб після сортування нижче
+    -- (спершу марки з власною сторінкою) не загубились популярні
+    LIMIT 300
     `,
     [article]
   );
@@ -291,6 +302,7 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
       // TecDoc -> "Mercedes-Benz") — інакше сирий текст із TecDoc як є
       make: carMake?.name || row.make,
       makeSlug: carMake?.slug || null,
+      model: row.model || '',
       yearFrom: row.year_from,
       yearTo: row.year_to,
     };

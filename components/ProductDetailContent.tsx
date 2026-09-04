@@ -293,9 +293,17 @@ function formatYearRange(yearFrom: number | null, yearTo: number | null): string
   return '';
 }
 
+// TecDoc записує кузов/покоління підкресленнями на кшталт
+// "(_T22_)" — прибираємо їх для показу покупцю (лишається "(T22)"),
+// самі дані в базі не чіпаємо
+function cleanModelDisplay(model: string): string {
+  return model.replace(/_/g, '').replace(/\s+/g, ' ').trim();
+}
+
 function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
   const yearRange = formatYearRange(item.yearFrom, item.yearTo);
-  const label = `Запчастини для ${item.make}`;
+  const modelDisplay = item.model ? cleanModelDisplay(item.model) : '';
+  const label = `Запчастини для ${item.make}${modelDisplay ? ' ' + modelDisplay : ''}`;
 
   return item.makeSlug ? (
     <Link
