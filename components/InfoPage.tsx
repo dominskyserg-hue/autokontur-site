@@ -8,11 +8,13 @@
 import Link from 'next/link';
 import { loadSitePage, SitePageSlug } from '@/lib/sitePages';
 
-const BG = '#FAF7F2';
-const RED = '#E5231C';
-const YELLOW = '#B45309';
-const PAPER = '#1C1917';
-const MUTED = '#6B6560';
+// Ті самі кольори бренду, що й на вітрині (components/StorefrontHome.tsx) —
+// раніше тут була стара червоно-жовта палітра, яка не збігалася з рештою
+// сайту (там уже давно синій акцент)
+const BG = '#F5F6F9';
+const ACCENT = '#1D5FD6';
+const PAPER = '#12192A';
+const MUTED = '#5C6678';
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
 
@@ -44,22 +46,22 @@ export default async function InfoPage({
         </nav>
 
         <h1
-          className="text-3xl md:text-4xl mb-6"
-          style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
+          className="text-6xl md:text-7xl mb-6"
+          style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: ACCENT }}
         >
           {title}
         </h1>
 
         {paragraphs.length === 0 ? (
-          <p className="text-sm" style={{ color: MUTED }}>
+          <p className="text-xl" style={{ color: MUTED }}>
             Сторінка ще наповнюється. Якщо у вас є питання просто зараз — скористайтесь{' '}
-            <Link href="/" className="underline" style={{ color: RED }}>
+            <Link href="/" className="underline" style={{ color: ACCENT }}>
               пошуком або підбором за VIN на Головній
             </Link>
             .
           </p>
         ) : (
-          <div className="flex flex-col gap-4 text-sm leading-relaxed">
+          <div className="flex flex-col gap-4 text-xl leading-relaxed">
             {paragraphs.map((paragraph, index) => (
               <p key={index}>{paragraph}</p>
             ))}
