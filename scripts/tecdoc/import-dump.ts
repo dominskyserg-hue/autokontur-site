@@ -13,6 +13,9 @@
 //   manufacturers(id, ..., code, full_name, ...)   — марки авто
 //   models(id, manufacturer_id, tecdoc_code, year_from_yyyymm,
 //          year_to_yyyymm, ...)
+//   country_designations(tecdoc_code, country_id, des_text_id) —
+//          tecdoc_code = 110 000 000 + models.id (див. referenceData.ts)
+//   des_texts(id, text)                              — сам текст назви
 //   art_lookup(article_id, clean_number, type_byte, other_brand_id,
 //              raw_number, ...)                     — кроси/OEM
 //   link_art(id, article_id, ?, model_id)            — застосовність
@@ -21,26 +24,30 @@
 //            прив'язкою до модифікації, її семантику по 4 рядках
 //            надійно не розібрати — свідомо не використовується)
 //
-// Двофазний алгоритм (обидві фази — весь час стрімінг, RAM обмежена):
+// Тритифазний алгоритм (кожна фаза — стрімінг, RAM обмежена):
 //
 //   ФАЗА 1 (scripts/tecdoc/referenceData.ts) — ОДИН прохід по дампу.
 //     Тримає в пам'яті ЛИШЕ: brands (3068 рядків), manufacturers
-//     (657), models (12 500) — усі крихітні — і "matchedArticles":
+//     (657), models (12 500) — усі крихітні — "matchedArticles":
 //     tecdoc article_id -> {brand, article} ЛИШЕ для рядків articles,
-//     чий очищений артикул є у вашому products.article. Це і є те
-//     звуження, що не дає пам'яті рости з розміром TecDoc (5 млн
-//     articles), а лише з розміром ВАШОГО каталогу
+//     чий очищений артикул є у вашому products.article — і
+//     modelDesTextId: models.id -> des_texts.id з назвою (ще не сам
+//     текст). Пам'ять росте з розміром ВАШОГО каталогу, а не TecDoc
 //
-//   ФАЗА 2 (нижче) — ДРУГИЙ прохід по дампу. Стрімить дві найбільші
-//     таблиці (art_lookup 64,8 млн рядків, link_art 21,2 млн рядків),
-//     для кожного рядка перевіряє належність article_id до
+//   ФАЗА 2 (scripts/tecdoc/modelNames.ts) — ДРУГИЙ прохід, лише по
+//     des_texts (1,25 млн рядків), резолвить des_texts.id -> текст
+//     ЛИШЕ для id, знайдених у фазі 1 (максимум 12 500) — звідси й
+//     готові людські назви моделей ("Avensis", "Camry"...)
+//
+//   ФАЗА 3 (нижче) — ТРЕТІЙ прохід. Стрімить дві найбільші таблиці
+//     (art_lookup 64,8 млн рядків, link_art 21,2 млн рядків), для
+//     кожного рядка перевіряє належність article_id до
 //     matchedArticles (просте O(1) звернення до Map) і ОДРАЗУ пише
-//     збіги пакетами в Supabase — рядки, що не стосуються вашого
-//     каталогу, просто пропускаються, у пам'яті не накопичуються
+//     збіги пакетами в Supabase
 //
-// Через те, що дамп доводиться читати ДВІЧІ (фаза 1 + фаза 2),
-// повний прогін на 11+ ГБ файлі займає порядку 20-35 хвилин — це
-// нормально для одноразового скрипта наповнення бази
+// Через те, що дамп доводиться читати ТРИЧІ, повний прогін на
+// 11+ ГБ файлі займає порядку 55-70 хвилин — це нормально для
+// одноразового скрипта наповнення бази
 //
 // ПЕРЕД ЗАПУСКОМ: застосуйте scripts/tecdoc/schema.sql у Supabase
 // (якщо ще не застосовували)
@@ -56,6 +63,7 @@ import { BatchInserter } from './batchInserter';
 import { cleanArticle } from './cleanArticle';
 import { loadOurArticles } from './loadOurArticles';
 import { loadReferenceData } from './referenceData';
+import { resolveDesTexts } from './modelNames';
 
 loadEnvLocal();
 
@@ -80,21 +88,22 @@ async function main() {
 
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
 
-  console.log('Крок 1/3: читаємо власний каталог (SELECT DISTINCT article FROM products)...');
+  console.log('Крок 1/5: читаємо власний каталог (SELECT DISTINCT article FROM products)...');
   const ourArticles = await loadOurArticles(pool);
   console.log(`  Знайдено ${ourArticles.size.toLocaleString('uk-UA')} унікальних артикулів у вашому каталозі.\n`);
 
-  console.log('Крок 2/3: ФАЗА 1 — довідники (brands/manufacturers/models) + пошук збігів у articles...');
+  console.log('Крок 2/5: ФАЗА 1 — довідники (brands/manufacturers/models) + пошук збігів у articles...');
   const startPhase1 = Date.now();
   const reference = await loadReferenceData(filePath, ourArticles, (linesRead, elapsedMs) => {
     console.log(`  ... ${(linesRead / 1e6).toFixed(0)}М рядків файлу, ${(elapsedMs / 1000).toFixed(0)}с`);
   });
+  const phase1DurationMs = Date.now() - startPhase1;
   console.log(
-    `  Готово за ${((Date.now() - startPhase1) / 1000 / 60).toFixed(1)} хв: ` +
+    `  Готово за ${(phase1DurationMs / 1000 / 60).toFixed(1)} хв: ` +
       `${reference.matchedArticles.size.toLocaleString('uk-UA')} tecdoc-артикулів збігається з вашим каталогом ` +
       `(з ${ourArticles.size.toLocaleString('uk-UA')} власних), ` +
       `brands: ${reference.brandsById.size}, manufacturers: ${reference.manufacturersById.size}, ` +
-      `models: ${reference.modelsById.size}.\n`
+      `models: ${reference.modelsById.size}, назв моделей знайдено (des_text id): ${reference.modelDesTextId.size}.\n`
   );
 
   if (reference.matchedArticles.size === 0) {
@@ -103,7 +112,34 @@ async function main() {
     return;
   }
 
-  console.log('Крок 3/3: ФАЗА 2 — art_lookup (кроси) + link_art (застосовність), пишемо в Supabase...');
+  console.log('Крок 3/5: ФАЗА 2 — резолвимо людські назви моделей (des_texts)...');
+  const startPhase2 = Date.now();
+  const neededDesTextIds = new Set(reference.modelDesTextId.values());
+  const desTextsById = await resolveDesTexts(filePath, neededDesTextIds, (linesRead, elapsedMs, found) => {
+    console.log(
+      `  ... ${(linesRead / 1e6).toFixed(0)}М рядків файлу, ${(elapsedMs / 1000).toFixed(0)}с, ` +
+        `знайдено назв: ${found.toLocaleString('uk-UA')}/${neededDesTextIds.size.toLocaleString('uk-UA')}`
+    );
+  });
+  const phase2DurationMs = Date.now() - startPhase2;
+
+  // modelsById.id -> текст назви (об'єднуємо modelDesTextId +
+  // щойно зрезолвлений текст в одну зручну мапу для фази 3)
+  const modelNamesById = new Map<number, string>();
+  for (const [modelId, desTextId] of reference.modelDesTextId) {
+    const text = desTextsById.get(desTextId);
+    if (text) modelNamesById.set(modelId, text);
+  }
+  console.log(
+    `  Готово за ${(phase2DurationMs / 1000 / 60).toFixed(1)} хв: ` +
+      `розпізнано назв для ${modelNamesById.size.toLocaleString('uk-UA')} з ${reference.modelsById.size.toLocaleString('uk-UA')} моделей.\n`
+  );
+
+  console.log('Крок 4/5: очищаємо стару tecdoc_compatibility (щоб не змішати старі порожні model= з новими)...');
+  await pool.query('TRUNCATE tecdoc_compatibility');
+  console.log('  Готово.\n');
+
+  console.log('Крок 5/5: ФАЗА 3 — art_lookup (кроси) + link_art (застосовність), пишемо в Supabase...');
 
   const crossesInserter = new BatchInserter(
     pool,
@@ -118,7 +154,7 @@ async function main() {
     BATCH_SIZE
   );
 
-  const startPhase2 = Date.now();
+  const startPhase3 = Date.now();
 
   const stats = await readDump(filePath, {
     progressEveryLines: 5_000_000,
@@ -152,7 +188,8 @@ async function main() {
           const ourMatch = reference.matchedArticles.get(Number(row[1]));
           if (!ourMatch) continue;
 
-          const model = reference.modelsById.get(Number(row[3]));
+          const modelId = Number(row[3]);
+          const model = reference.modelsById.get(modelId);
           if (!model) continue;
 
           const make = reference.manufacturersById.get(model.manufacturerId);
@@ -162,12 +199,12 @@ async function main() {
             ourMatch.brand,
             ourMatch.article,
             make,
-            // model/generation/engine — порожні: TecDoc зберігає лише
-            // внутрішній числовий код моделі (models.tecdoc_code), а
-            // не людську назву ("Camry", "Golf") — показувати вигаданий
-            // чи сирий код замість реальної назви моделі гірше, ніж
-            // чесно лишити поле порожнім (див. пояснення в чаті)
-            '',
+            // Тепер РЕАЛЬНА назва моделі (напр. "Avensis"), якщо
+            // вдалось розпізнати через ланцюжок models -> tecdoc_code
+            // -> country_designations -> des_texts (див. коментар на
+            // початку файлу) — інакше чесно порожньо, а не вигадана
+            // чи сира назва
+            modelNamesById.get(modelId) || '',
             '',
             '',
             model.yearFrom,
@@ -185,18 +222,19 @@ async function main() {
   console.log('\n============================================================');
   console.log('ІМПОРТ ЗАВЕРШЕНО');
   console.log('============================================================');
-  console.log(`Фаза 1 (довідники):          ${((Date.now() - startPhase1) / 1000 / 60).toFixed(1)} хв`);
-  console.log(`Фаза 2 (кроси/застосовність): ${((Date.now() - startPhase2) / 1000 / 60).toFixed(1)} хв`);
-  console.log(`Рядків файлу прочитано (фаза 2): ${stats.linesRead.toLocaleString('uk-UA')}`);
+  console.log(`Фаза 1 (довідники):           ${(phase1DurationMs / 1000 / 60).toFixed(1)} хв`);
+  console.log(`Фаза 2 (назви моделей):       ${(phase2DurationMs / 1000 / 60).toFixed(1)} хв`);
+  console.log(`Фаза 3 (кроси/застосовність): ${((Date.now() - startPhase3) / 1000 / 60).toFixed(1)} хв`);
+  console.log(`Рядків файлу прочитано (фаза 3): ${stats.linesRead.toLocaleString('uk-UA')}`);
   console.log(`Кросів вставлено:             ${crossesInserter.getTotalInserted().toLocaleString('uk-UA')}`);
   console.log(`Записів застосовності:        ${compatibilityInserter.getTotalInserted().toLocaleString('uk-UA')}`);
+  console.log(`З них із розпізнаною моделлю: ${modelNamesById.size.toLocaleString('uk-UA')} моделей мають назву`);
   console.log('============================================================\n');
   console.log(
-    'Порада: значення make (марка авто) походить з таблиці manufacturers TecDoc —\n' +
-      'звірте кілька рядків tecdoc_compatibility вручну перед тим, як показувати їх\n' +
-      'покупцям (семантику цієї таблиці розпізнано по зразках даних, а не по\n' +
-      'офіційній документації — модель авто (model) свідомо не заповнена, див.\n' +
-      'коментар у коді вище).'
+    'Порада: значення make і model походять із таблиць manufacturers/des_texts\n' +
+      'TecDoc — звірте кілька рядків tecdoc_compatibility вручну перед тим, як\n' +
+      'показувати їх покупцям (семантику розпізнано по зразках даних, а не по\n' +
+      'офіційній документації TecDoc).'
   );
 }
 
