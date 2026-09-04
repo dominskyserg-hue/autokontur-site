@@ -207,13 +207,28 @@ export default function ProductDetailContent({
           TecDoc (scripts/tecdoc/, таблиця tecdoc_crosses): мільйони
           зв'язків без ручної перевірки кожного. Товари, яких немає в
           нашому каталозі, все одно показуються текстом — саме вони
-          дають SEO-текст під запити на кшталт "0986424815 купити" */}
+          дають SEO-текст під запити на кшталт "0986424815 купити".
+          Згорнуто в <details> (не видалено!) — весь список і далі
+          лежить у HTML сторінки, тому пошуковики бачать його так само,
+          як і раніше; звичайний покупець просто не бачить довгий
+          список одразу, а розгортає його за бажанням */}
       {tecdocCrosses.length > 0 && (
         <section className="mb-10">
-          <h2 className="text-lg font-semibold mb-3" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
-            Аналоги та OEM-номери
-          </h2>
-          <TecdocCrossList items={tecdocCrosses} />
+          <details className="group">
+            <summary
+              className="flex items-center gap-2 text-lg font-semibold mb-3 cursor-pointer select-none [&::-webkit-details-marker]:hidden"
+              style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}
+            >
+              <span className="inline-block transition-transform duration-200 group-open:rotate-90" aria-hidden="true">
+                ▸
+              </span>
+              Аналоги та OEM-номери
+              <span className="text-sm font-normal" style={{ opacity: 0.6 }}>
+                ({tecdocCrosses.length})
+              </span>
+            </summary>
+            <TecdocCrossList items={tecdocCrosses} />
+          </details>
         </section>
       )}
 
