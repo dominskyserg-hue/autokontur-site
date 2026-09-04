@@ -212,6 +212,10 @@ export interface TecdocCompatibilityItem {
   model: string;
   yearFrom: number | null;
   yearTo: number | null;
+  // Об'єм двигуна цієї конкретної модифікації (напр. "1.6"), з
+  // types.TYP_LITRES/TYP_CCM (див. scripts/tecdoc/import-dump.ts).
+  // Порожній рядок, якщо TecDoc для цієї модифікації його не вказав
+  engine: string;
 }
 
 const TECDOC_CROSSES_LIMIT = 30;
@@ -279,7 +283,7 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
 ): Promise<TecdocCompatibilityItem[]> {
   const result = await pool.query(
     `
-    SELECT DISTINCT make, model, year_from, year_to
+    SELECT DISTINCT make, model, year_from, year_to, engine
     FROM tecdoc_compatibility
     WHERE article = $1
     ORDER BY make, year_from
@@ -305,6 +309,7 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
       model: row.model || '',
       yearFrom: row.year_from,
       yearTo: row.year_to,
+      engine: row.engine || '',
     };
   });
 

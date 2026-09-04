@@ -36,15 +36,16 @@
 //                 app/api/products/car-options/route.ts), поэтому
 //                 опечаток тут не бывает. Можно передать любую
 //                 комбинацию — например, только carMake, чтобы показать
-//                 вообще все детали для этой марки. carMake/carModel/
-//                 carYear ищут не только среди собственных полей товара
-//                 (car_make/car_model/car_year — их вручную заполняет
+//                 вообще все детали для этой марки. Все четыре ищут не
+//                 только среди собственных полей товара (car_make/
+//                 car_model/car_year/engine_volume — их вручную заполняет
 //                 поставщик и часто оставляет пустыми), но и среди
 //                 массового SEO-индекса tecdoc_compatibility
-//                 (scripts/tecdoc/) — точных диапазонов годов из дампа
-//                 TecDoc для этого же артикула. Так товар без заполненных
-//                 car_make/car_year всё равно найдётся при подборе по
-//                 автомобилю, если для него есть данные в TecDoc
+//                 (scripts/tecdoc/) — точных диапазонов годов и объёма
+//                 двигателя конкретной модификации из дампа TecDoc для
+//                 этого же артикула. Так товар без заполненных собственных
+//                 полей всё равно найдётся при подборе по автомобилю, если
+//                 для него есть данные в TecDoc
 //
 // Название компании-поставщика — через JOIN с suppliers, а не
 // отдельным запросом на каждый товар.
@@ -268,17 +269,20 @@ export async function GET(request: NextRequest) {
 
     // "Підбір за автомобілем" — точное совпадение (без учёта регистра),
     // каждый параметр применяется независимо от остальных, если передан.
-    // carMake/carModel/carYear проверяются ДВУМЯ способами разом (через
-    // OR): (1) собственные поля товара p.car_make/car_model/car_year —
-    // как и раньше, и (2) EXISTS по tecdoc_compatibility для ТОГО ЖЕ
-    // товара (join по brand+article — на это есть индекс
-    // idx_tecdoc_compat_part, см. schema.sql) — так товар находится по
-    // подбору авто, даже если поставщик не заполнил car_make/car_year
-    // вручную, но для его артикула есть данные из дампа TecDoc.
-    // engineVolume — не трогаем: в tecdoc_compatibility двигатель пока
-    // не заполняется (см. schema.sql), поэтому фильтр остаётся только
-    // по собственному полю товара, как и был
-    if (carMake || carModel || carYear) {
+    // carMake/carModel/carYear/engineVolume проверяются ДВУМЯ способами
+    // разом (через OR): (1) собственные поля товара p.car_make/car_model/
+    // car_year/engine_volume — как и раньше, и (2) EXISTS по
+    // tecdoc_compatibility для ТОГО ЖЕ товара (join по brand+article — на
+    // это есть индекс idx_tecdoc_compat_part, см. schema.sql) — так товар
+    // находится по подбору авто, даже если поставщик не заполнил
+    // car_make/car_year/engine_volume вручную, но для его артикула есть
+    // данные из дампа TecDoc (включая объём двигателя КОНКРЕТНОЙ
+    // модификации — types.TYP_LITRES/TYP_CCM, см. scripts/tecdoc/
+    // import-dump.ts). Все параметры внутри ОДНОЙ ветки (own или tecdoc)
+    // проверяются ВМЕСТЕ (AND), а не по отдельности — иначе марка+год
+    // могли бы совпасть по одному источнику, а объём двигателя — по
+    // совсем другой, не связанной модификации того же товара
+    if (carMake || carModel || carYear || engineVolume) {
       // carMake, обраний покупцем у випадаючому списку (див.
       // app/api/products/car-options/route.ts), — це або курована назва
       // марки ("Volkswagen"), або сире значення з products.car_make.
@@ -302,6 +306,10 @@ export async function GET(request: NextRequest) {
         values.push(carYear);
         ownParts.push(`p.car_year ILIKE $${values.length}`);
       }
+      if (engineVolume) {
+        values.push(engineVolume);
+        ownParts.push(`p.engine_volume ILIKE $${values.length}`);
+      }
       const ownMatchSql = ownParts.length > 0 ? ownParts.join(' AND ') : 'FALSE';
 
       const tecdocParts: string[] = [];
@@ -319,6 +327,10 @@ export async function GET(request: NextRequest) {
           `$${values.length}::int BETWEEN COALESCE(tc.year_from, 1900) AND COALESCE(tc.year_to, 2100)`
         );
       }
+      if (engineVolume) {
+        values.push(engineVolume);
+        tecdocParts.push(`tc.engine ILIKE $${values.length}`);
+      }
       const tecdocWhereSql = tecdocParts.length > 0 ? `AND ${tecdocParts.join(' AND ')}` : '';
 
       conditions.push(`(
@@ -329,10 +341,6 @@ export async function GET(request: NextRequest) {
           ${tecdocWhereSql}
         )
       )`);
-    }
-    if (engineVolume) {
-      values.push(engineVolume);
-      conditions.push(`p.engine_volume ILIKE $${values.length}`);
     }
 
     const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';

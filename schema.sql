@@ -878,7 +878,11 @@ CREATE TABLE IF NOT EXISTS tecdoc_compatibility (
   -- Текстові поля навмисно NOT NULL DEFAULT '' (а не NULL) — щоб
   -- UNIQUE-обмеження нижче реально захищало від дублів: у Postgres
   -- NULL ніколи "не дорівнює" іншому NULL, тому рядки з NULL замість
-  -- порожнього рядка проходили б повз ON CONFLICT DO NOTHING
+  -- порожнього рядка проходили б повз ON CONFLICT DO NOTHING.
+  -- engine заповнюється реальним об'ємом двигуна конкретної модифікації
+  -- (types.TYP_LITRES/TYP_CCM з дампа TecDoc, див. scripts/tecdoc/
+  -- import-dump.ts) — generation поки завжди порожній, окремих даних
+  -- про покоління/кузов у використовуваному ланцюжку TecDoc немає
   model TEXT NOT NULL DEFAULT '',
   generation TEXT NOT NULL DEFAULT '',
   engine TEXT NOT NULL DEFAULT '',

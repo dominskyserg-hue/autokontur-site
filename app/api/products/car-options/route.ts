@@ -45,9 +45,10 @@
 //        tecdoc_compatibility.year_from..year_to (generate_series)
 //
 //   GET /api/products/car-options?field=engineVolume&make=Toyota&year=2008
-//     -> об'єми двигуна у товарів Toyota 2008 року (тільки
-//        products.engine_volume — у tecdoc_compatibility двигун поки
-//        не заповнюється)
+//     -> об'єми двигуна у товарів Toyota 2008 року: products.engine_volume
+//        (власне поле товару) ∪ tecdoc_compatibility.engine (об'єм
+//        КОНКРЕТНОЇ модифікації з дампа TecDoc — types.TYP_LITRES/
+//        TYP_CCM, див. scripts/tecdoc/import-dump.ts)
 //
 // field — обязательный параметр: make, model, year, engineVolume.
 // ============================================================
@@ -205,30 +206,91 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: true, options });
     }
 
-    // ---- ОБ'ЄМ ДВИГУНА (як і раніше — лише products, tecdoc поки без двигуна) ----
-    const conditions: string[] = [`engine_volume IS NOT NULL`, `engine_volume <> ''`];
-    const values: unknown[] = [];
+    // ---- ОБ'ЄМ ДВИГУНА ----
+    // Два джерела, як марка/рік вище: products.engine_volume (власне
+    // поле товару — часто порожнє) ∪ tecdoc_compatibility.engine (об'єм
+    // КОНКРЕТНОЇ модифікації авто з дампа TecDoc — types.TYP_LITRES/
+    // TYP_CCM, див. scripts/tecdoc/import-dump.ts). Перше джерело
+    // додатково шукає товар за маркою/роком і БЕЗ власних car_make/
+    // car_year — через EXISTS по tecdoc_compatibility (join по
+    // brand+article), так само, як в основному пошуку
+    // (app/api/products/route.ts) — без цього об'єм двигуна товару,
+    // знайденого лише через TecDoc, у списку не з'являвся б
+    const ownConditions: string[] = [`p.engine_volume IS NOT NULL`, `p.engine_volume <> ''`];
+    const ownValues: unknown[] = [];
 
-    if (make) {
-      values.push(makeDbValues);
-      conditions.push(`UPPER(car_make) = ANY($${values.length}::text[])`);
-    }
-    if (year) {
-      values.push(year);
-      conditions.push(`car_year ILIKE $${values.length}`);
+    if (make || year) {
+      const ownParts: string[] = [];
+      if (make) {
+        ownValues.push(makeDbValues);
+        ownParts.push(`UPPER(p.car_make) = ANY($${ownValues.length}::text[])`);
+      }
+      if (year) {
+        ownValues.push(year);
+        ownParts.push(`p.car_year ILIKE $${ownValues.length}`);
+      }
+      const ownMatchSql = ownParts.join(' AND ');
+
+      const tecdocParts: string[] = [];
+      if (make) {
+        ownValues.push(makeDbValues);
+        tecdocParts.push(`UPPER(tc.make) = ANY($${ownValues.length}::text[])`);
+      }
+      if (year) {
+        ownValues.push(year);
+        tecdocParts.push(
+          `$${ownValues.length}::int BETWEEN COALESCE(tc.year_from, 1900) AND COALESCE(tc.year_to, 2100)`
+        );
+      }
+      const tecdocWhereSql = tecdocParts.length > 0 ? `AND ${tecdocParts.join(' AND ')}` : '';
+
+      ownConditions.push(`(
+        (${ownMatchSql})
+        OR EXISTS (
+          SELECT 1 FROM tecdoc_compatibility tc
+          WHERE tc.brand = p.brand AND tc.article = p.article
+          ${tecdocWhereSql}
+        )
+      )`);
     }
 
-    const result = await pool.query(
-      `
-      SELECT DISTINCT engine_volume AS value
-      FROM products
-      WHERE ${conditions.join(' AND ')}
-      ORDER BY value ASC
-      `,
-      values
+    const ownResultPromise = pool.query(
+      `SELECT DISTINCT p.engine_volume AS value FROM products p WHERE ${ownConditions.join(' AND ')}`,
+      ownValues
     );
 
-    return NextResponse.json({ success: true, options: result.rows.map((row) => row.value) });
+    // Друге джерело — напряму з tecdoc_compatibility (той самий підхід,
+    // що й для моделі/року вище): без фільтру по марці довелось би
+    // сканувати всю таблицю, тому запитуємо лише коли марка передана
+    // (на практиці з вітрини так і буває — вибір об'єму двигуна завжди
+    // йде вже після марки й року, див. components/StorefrontHome.tsx)
+    const tecdocResultPromise = make
+      ? (() => {
+          const tecdocConditions: string[] = [`engine <> ''`, `UPPER(make) = ANY($1::text[])`];
+          const tecdocValues: unknown[] = [makeDbValues];
+          if (year) {
+            tecdocValues.push(year);
+            tecdocConditions.push(
+              `$${tecdocValues.length}::int BETWEEN COALESCE(year_from, 1900) AND COALESCE(year_to, 2100)`
+            );
+          }
+          return pool.query(
+            `SELECT DISTINCT engine AS value FROM tecdoc_compatibility WHERE ${tecdocConditions.join(' AND ')}`,
+            tecdocValues
+          );
+        })()
+      : Promise.resolve({ rows: [] as { value: string }[] });
+
+    const [ownResult, tecdocResult] = await Promise.all([ownResultPromise, tecdocResultPromise]);
+
+    const options = dedupeCaseInsensitive(
+      ownResult.rows.map((row) => row.value as string),
+      tecdocResult.rows.map((row) => row.value as string)
+    );
+    // Об'єм двигуна — сортуємо як числа (напр. "1.6" перед "2.0")
+    options.sort((a, b) => parseFloat(a) - parseFloat(b) || a.localeCompare(b));
+
+    return NextResponse.json({ success: true, options });
   } catch (error) {
     console.error('Ошибка при получении списка значений для подбора по автомобилю:', error);
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка';

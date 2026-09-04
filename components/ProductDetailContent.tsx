@@ -214,7 +214,10 @@ export default function ProductDetailContent({
           </h2>
           <div className="flex flex-wrap gap-2">
             {tecdocCompatibility.map((item, index) => (
-              <CompatibilityBadge key={`${item.make}-${item.yearFrom ?? ''}-${item.yearTo ?? ''}-${index}`} item={item} />
+              <CompatibilityBadge
+                key={`${item.make}-${item.model}-${item.yearFrom ?? ''}-${item.yearTo ?? ''}-${item.engine}-${index}`}
+                item={item}
+              />
             ))}
           </div>
         </section>
@@ -304,6 +307,8 @@ function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
   const yearRange = formatYearRange(item.yearFrom, item.yearTo);
   const modelDisplay = item.model ? cleanModelDisplay(item.model) : '';
   const label = `Запчастини для ${item.make}${modelDisplay ? ' ' + modelDisplay : ''}`;
+  // Дужки-примітка: рік і об'єм двигуна разом, напр. "(1997–2003, 1.6)"
+  const note = [yearRange, item.engine ? `${item.engine} л` : ''].filter(Boolean).join(', ');
 
   return item.makeSlug ? (
     <Link
@@ -312,7 +317,7 @@ function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
       style={{ border: `1px solid ${BORDER_SOFT}`, color: ACCENT }}
     >
       {label}
-      {yearRange ? ` (${yearRange})` : ''}
+      {note ? ` (${note})` : ''}
     </Link>
   ) : (
     <span
@@ -320,7 +325,7 @@ function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
       style={{ border: `1px solid ${BORDER_SOFT}`, opacity: 0.6 }}
     >
       {label}
-      {yearRange ? ` (${yearRange})` : ''}
+      {note ? ` (${note})` : ''}
     </span>
   );
 }
