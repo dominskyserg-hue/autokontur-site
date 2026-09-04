@@ -112,10 +112,6 @@ export default function ProductDetailContent({
             </p>
           )}
 
-          <p className="text-xs mb-5" style={{ opacity: 0.6 }}>
-            Постачальник: {product.supplierName}
-          </p>
-
           <AddToCartButton
             product={{
               id: product.id,
