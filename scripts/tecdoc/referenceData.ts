@@ -47,6 +47,7 @@ const KNOWN_ROW_COUNTS = {
   articles: 4_981_555,
   brands: 3_068,
   manufacturers: 657,
+  models: 12_500,
 };
 
 export interface ModelInfo {
@@ -143,6 +144,7 @@ export async function loadReferenceData(
         if (
           brandsById.size >= KNOWN_ROW_COUNTS.brands &&
           manufacturersById.size >= KNOWN_ROW_COUNTS.manufacturers &&
+          modelsById.size >= KNOWN_ROW_COUNTS.models &&
           articlesSeen >= KNOWN_ROW_COUNTS.articles
         ) {
           throw new EarlyExit();
