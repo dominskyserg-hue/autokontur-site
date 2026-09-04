@@ -1212,7 +1212,7 @@ export default function StorefrontHome() {
             </p>
 
             {/* ---- перемикач режиму пошуку ---- */}
-            <div className="max-w-2xl mx-auto flex gap-1 p-1 mb-3" style={{ background: PANEL_SOFT }}>
+            <div className="max-w-3xl mx-auto flex gap-1 p-1 mb-3" style={{ background: PANEL_SOFT }}>
               <button
                 type="button"
                 onClick={() => setSearchMode('article')}
@@ -1242,7 +1242,7 @@ export default function StorefrontHome() {
             {searchMode === 'article' ? (
               <form
                 onSubmit={handleSearchSubmit}
-                className="max-w-2xl mx-auto flex flex-col sm:flex-row"
+                className="max-w-3xl mx-auto flex flex-col sm:flex-row"
                 style={{ background: PANEL }}
               >
                 <div className="flex-1 flex items-center gap-2.5 px-4">
@@ -1268,13 +1268,13 @@ export default function StorefrontHome() {
             ) : (
               <form
                 onSubmit={handleCarSearchSubmit}
-                className="max-w-2xl mx-auto flex flex-col sm:flex-row gap-2 p-2"
+                className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-2 p-2"
                 style={{ background: PANEL }}
               >
                 <select
                   value={carMake}
                   onChange={(e) => setCarMake(e.target.value)}
-                  className="flex-1 px-3 py-3.5 text-base bg-transparent outline-none"
+                  className="flex-1 min-w-0 px-3 py-3.5 text-base bg-transparent outline-none"
                   style={{ color: carMake ? DARK_TEXT : '#8A7F70' }}
                 >
                   <option value="">Марка авто</option>
@@ -1289,7 +1289,7 @@ export default function StorefrontHome() {
                   value={carModel}
                   onChange={(e) => setCarModel(e.target.value)}
                   disabled={!carMake}
-                  className="flex-1 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
+                  className="flex-1 min-w-0 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
                   style={{ color: carModel ? DARK_TEXT : '#8A7F70' }}
                 >
                   <option value="">Модель</option>
@@ -1304,7 +1304,7 @@ export default function StorefrontHome() {
                   value={carYear}
                   onChange={(e) => setCarYear(e.target.value)}
                   disabled={!carMake}
-                  className="flex-1 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
+                  className="flex-1 min-w-0 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
                   style={{ color: carYear ? DARK_TEXT : '#8A7F70' }}
                 >
                   <option value="">Рік</option>
@@ -1319,7 +1319,7 @@ export default function StorefrontHome() {
                   value={carEngineVolume}
                   onChange={(e) => setCarEngineVolume(e.target.value)}
                   disabled={!carYear}
-                  className="flex-1 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
+                  className="flex-1 min-w-0 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
                   style={{ color: carEngineVolume ? DARK_TEXT : '#8A7F70' }}
                 >
                   <option value="">Об&apos;єм двигуна</option>
