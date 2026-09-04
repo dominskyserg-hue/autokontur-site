@@ -16,12 +16,16 @@
 //   search      — ищет совпадение по артикулу, бренду, кросс-номеру
 //                 товара (регистронезависимо, по подстроке — см.
 //                 таблицу cross_reference_members и экран "Кроссы"
-//                 в админке), А ТАКЖЕ по ключевым словам из названия
-//                 товара с учётом многоязычного словаря синонимов
-//                 (search_synonym_groups, см. lib/searchSynonyms.ts
-//                 и экран "Словник пошуку" в админке) — запрос
-//                 "гальмівні колодки rav 4" находит товар с названием
-//                 "brake pads RAV4" или "тормозные колодки rav-4"
+//                 в админке; а ТАКЖЕ точным совпадением по массовому
+//                 SEO-индексу tecdoc_crosses, scripts/tecdoc/ — если
+//                 покупатель ввёл чужой OEM/кросс-номер детали, а не
+//                 её собственный артикул), А ТАКЖЕ по ключевым словам
+//                 из названия товара с учётом многоязычного словаря
+//                 синонимов (search_synonym_groups, см.
+//                 lib/searchSynonyms.ts и экран "Словник пошуку" в
+//                 админке) — запрос "гальмівні колодки rav 4" находит
+//                 товар с названием "brake pads RAV4" или "тормозные
+//                 колодки rav-4"
 //   supplierId  — если передан, показывает товары только этого
 //                 поставщика (UUID)
 //   carMake, carYear, engineVolume — "Підбір за автомобілем" на
@@ -196,9 +200,15 @@ export async function GET(request: NextRequest) {
       // проверка part_number = p.article — потому что нужно найти
       // товар ПО ЧУЖОМУ кросс-номеру, а не только по своему
       const cleanedArticle = cleanArticle(search);
-      values.push(`%${cleanedArticle}%`, `%${search}%`);
-      const articlePlaceholder = `$${values.length - 1}`;
-      const textPlaceholder = `$${values.length}`;
+      values.push(`%${cleanedArticle}%`, `%${search}%`, cleanedArticle);
+      const articlePlaceholder = `$${values.length - 2}`;
+      const textPlaceholder = `$${values.length - 1}`;
+      // Точний (без ILIKE-підстановки з %) — для пошуку по tecdoc_crosses
+      // нижче: там ЗАВЖДИ порівняння на РІВНІСТЬ з уже очищеним
+      // article_a, щоб запит міг скористатись індексом
+      // idx_tecdoc_crosses_article_a замість повного сканування 1,8 млн
+      // рядків при кожному пошуку на сайті
+      const exactArticlePlaceholder = `$${values.length}`;
 
       const orParts = [
         `p.article ILIKE ${articlePlaceholder}`,
@@ -210,6 +220,19 @@ export async function GET(request: NextRequest) {
           FROM cross_reference_members mine
           JOIN cross_reference_members other ON other.group_id = mine.group_id
           WHERE mine.product_id = p.id AND other.part_number ILIKE ${articlePlaceholder}
+        )`,
+        // Масовий SEO-індекс TecDoc (tecdoc_crosses, scripts/tecdoc/) —
+        // окрема від cross_reference_members таблиця (курована модель
+        // вище). Кожен зв'язок записаний ОБОМА напрямками при імпорті
+        // (див. коментар у schema.sql), тому досить одного простого
+        // порівняння: "чи є рядок, де введений покупцем номер — це
+        // article_a, а article_b — це артикул САМЕ ЦЬОГО товару". Так
+        // покупець, що вводить чужий кросс/OEM-номер (напр. "KL0111312"),
+        // знаходить товар з нашим власним артикулом ("19035165B"), а не
+        // отримує "нічого не знайдено"
+        `EXISTS (
+          SELECT 1 FROM tecdoc_crosses tc
+          WHERE tc.article_a = ${exactArticlePlaceholder} AND tc.article_b = p.article
         )`,
       ];
 

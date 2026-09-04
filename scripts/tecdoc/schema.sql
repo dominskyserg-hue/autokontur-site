@@ -90,11 +90,16 @@ CREATE TABLE IF NOT EXISTS tecdoc_crosses (
   UNIQUE (brand_a, article_a, brand_b, article_b, relation_type)
 );
 
--- Головний і єдиний потрібний індекс: "дано брен+артикул нашого
--- товару — знайти всі його кроси". UNIQUE вище вже створює індекс,
--- що починається з (brand_a, article_a), тому окремого CREATE INDEX
--- для цього не треба — лишаємо явний коментар, щоб це було видно
--- без відкриття \d tecdoc_crosses
+-- Головний індекс для читання: "дано лише артикул (без бренду) —
+-- знайти всі його кроси". УВАГА: UNIQUE вище НЕ підходить для цього —
+-- складений індекс (brand_a, article_a, ...) ефективний лише коли
+-- фільтр йде ПО ПЕРШІЙ колонці (brand_a) або по обох одразу, а не
+-- коли фільтруємо ЛИШЕ по другій (article_a), як роблять і
+-- lib/productDetail.ts (loadTecdocCrosses), і пошук на сайті
+-- (app/api/products/route.ts) — без окремого індексу саме на
+-- article_a Postgres змушений сканувати всю таблицю (мільйони рядків)
+-- на кожен пошук
+CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (article_a);
 
 
 -- ------------------------------------------------------------
