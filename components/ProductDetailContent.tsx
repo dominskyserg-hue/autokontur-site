@@ -12,7 +12,7 @@ import Link from 'next/link';
 import { buildProductPath } from '@/lib/slug';
 import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
-import type { CrossRefItem, ProductPageData } from '@/lib/productDetail';
+import type { CrossRefItem, ProductPageData, TecdocCompatibilityItem, TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 
 export const BG = '#F5F6F9';
@@ -28,7 +28,14 @@ function formatMoney(value: number): string {
   return Math.ceil(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
 }
 
-export default function ProductDetailContent({ product, otherOffers, crossRefs, breadcrumbItems }: ProductPageData) {
+export default function ProductDetailContent({
+  product,
+  otherOffers,
+  crossRefs,
+  tecdocCrosses,
+  tecdocCompatibility,
+  breadcrumbItems,
+}: ProductPageData) {
   const displayName = product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ');
 
   return (
@@ -186,6 +193,36 @@ export default function ProductDetailContent({ product, otherOffers, crossRefs, 
           )}
         </section>
       )}
+
+      {/* ==================== АНАЛОГИ ТА OEM-НОМЕРИ (TecDoc) ==================== */}
+      {/* На відміну від секції вище (курована адміном модель
+          cross_reference_members), тут — масовий SEO-індекс з дампа
+          TecDoc (scripts/tecdoc/, таблиця tecdoc_crosses): мільйони
+          зв'язків без ручної перевірки кожного. Товари, яких немає в
+          нашому каталозі, все одно показуються текстом — саме вони
+          дають SEO-текст під запити на кшталт "0986424815 купити" */}
+      {tecdocCrosses.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-lg font-semibold mb-3" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
+            Аналоги та OEM-номери
+          </h2>
+          <TecdocCrossList items={tecdocCrosses} />
+        </section>
+      )}
+
+      {/* ==================== ЗАСТОСОВНІСТЬ ДО АВТО (TecDoc) ==================== */}
+      {tecdocCompatibility.length > 0 && (
+        <section className="mb-10">
+          <h2 className="text-lg font-semibold mb-3" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
+            Запчастина підходить для авто
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {tecdocCompatibility.map((item, index) => (
+              <CompatibilityBadge key={`${item.make}-${item.yearFrom ?? ''}-${item.yearTo ?? ''}-${index}`} item={item} />
+            ))}
+          </div>
+        </section>
+      )}
     </>
   );
 }
@@ -215,5 +252,71 @@ function CrossRefList({ items, product }: { items: CrossRefItem[]; product: Prod
         )
       )}
     </div>
+  );
+}
+
+function TecdocCrossList({ items }: { items: TecdocCrossItem[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {items.map((item) =>
+        item.productPath ? (
+          <Link
+            key={`${item.brand}-${item.article}`}
+            href={item.productPath}
+            className="text-xs px-3 py-1.5 rounded-full underline"
+            style={{ border: `1px solid ${BORDER_SOFT}`, color: ACCENT }}
+          >
+            {item.brand} {item.article}
+            {item.stock !== null && item.stock > 0 ? ` · ${formatMoney(item.retailPrice || 0)} грн` : ''}
+          </Link>
+        ) : (
+          // Немає в наявності в нашому каталозі — просто текст. Це і є
+          // той SEO-текст під запити на кшталт "OEM 0986424815 купити":
+          // сторінка згадує номер, навіть коли товару зараз немає на складі
+          <span
+            key={`${item.brand}-${item.article}`}
+            className="text-xs px-3 py-1.5 rounded-full"
+            style={{ border: `1px solid ${BORDER_SOFT}`, opacity: 0.6 }}
+            title={`OEM / Кросс-номер: ${item.brand} ${item.article}`}
+          >
+            OEM / Кросс-номер: {item.brand} {item.article}
+          </span>
+        )
+      )}
+    </div>
+  );
+}
+
+// "1998–2003" / "з 1998" / "до 2003" / '' — компактний людський формат
+// діапазону років. Порожній рядок (а не null), щоб просто конкатенувати
+// в JSX без додаткових перевірок на виклику
+function formatYearRange(yearFrom: number | null, yearTo: number | null): string {
+  if (yearFrom && yearTo) return `${yearFrom}–${yearTo}`;
+  if (yearFrom) return `з ${yearFrom}`;
+  if (yearTo) return `до ${yearTo}`;
+  return '';
+}
+
+function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
+  const yearRange = formatYearRange(item.yearFrom, item.yearTo);
+  const label = `Запчастини для ${item.make}`;
+
+  return item.makeSlug ? (
+    <Link
+      href={`/marky/${item.makeSlug}`}
+      className="text-xs px-3 py-1.5 rounded-full underline"
+      style={{ border: `1px solid ${BORDER_SOFT}`, color: ACCENT }}
+    >
+      {label}
+      {yearRange ? ` (${yearRange})` : ''}
+    </Link>
+  ) : (
+    <span
+      className="text-xs px-3 py-1.5 rounded-full"
+      style={{ border: `1px solid ${BORDER_SOFT}`, opacity: 0.6 }}
+    >
+      {label}
+      {yearRange ? ` (${yearRange})` : ''}
+    </span>
   );
 }

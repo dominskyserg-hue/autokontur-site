@@ -179,10 +179,138 @@ const loadCrossReferences = cache(async function loadCrossReferences(
   return { oem, aftermarket };
 });
 
+// Аналог/OEM-номер із масового SEO-індексу TecDoc (scripts/tecdoc/,
+// таблиця tecdoc_crosses) — НЕ те саме, що CrossRefItem вище
+// (cross_reference_members — курована адміном модель, тут же —
+// мільйони рядків з дампа TecDoc, без ручної перевірки кожного
+// зв'язку, див. коментар у schema.sql біля CREATE TABLE tecdoc_crosses)
+export interface TecdocCrossItem {
+  brand: string;
+  article: string;
+  // Якщо ця пара бренд+артикул реально є в наявності серед НАШИХ
+  // товарів — посилання на її картку (+ ціна/наявність цього
+  // конкретного товару); якщо ні — обидва null, і рядок показується
+  // просто текстом (саме це і дає SEO-текст під запити на кшталт
+  // "OEM 0986424815 купити", навіть якщо такого товару прямо зараз
+  // немає в каталозі)
+  productPath: string | null;
+  retailPrice: number | null;
+  stock: number | null;
+}
+
+// Застосовність до авто з таблиці tecdoc_compatibility. makeSlug —
+// null, якщо для цієї марки немає власної сторінки /marky/[slug]
+// (курований список, lib/carMakes.ts) — тоді рядок теж просто текст,
+// без посилання в нікуди
+export interface TecdocCompatibilityItem {
+  make: string;
+  makeSlug: string | null;
+  yearFrom: number | null;
+  yearTo: number | null;
+}
+
+const TECDOC_CROSSES_LIMIT = 30;
+const TECDOC_COMPATIBILITY_LIMIT = 20;
+
+// article — уже ОЧИЩЕНИЙ (products.article в базі і так зберігається
+// очищеним, повторно чистити не треба — див. коментар біля products
+// у schema.sql). tecdoc_crosses.article_a заповнений тією ж функцією
+// cleanArticle() під час імпорту (scripts/tecdoc/cleanArticle.ts),
+// тому пряме порівняння текстом коректне
+const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string): Promise<TecdocCrossItem[]> {
+  const result = await pool.query(
+    `
+    SELECT
+      tc.brand_b,
+      tc.article_b,
+      p.id AS product_id,
+      p.brand AS product_brand,
+      p.article AS product_article,
+      p.name AS product_name,
+      p.retail_price,
+      p.stock
+    FROM (
+      SELECT DISTINCT brand_b, article_b
+      FROM tecdoc_crosses
+      -- LENGTH(article_b) >= 3 — відсікає сміттєві "номери" з дампа
+      -- на кшталт голого "0" чи "12" (53 420 таких рядків з довжиною
+      -- 1 у всій таблиці на момент імпорту) — жоден справжній
+      -- OEM/крос-номер настільки коротким не буває
+      WHERE article_a = $1 AND article_b <> $1 AND LENGTH(article_b) >= 3
+    ) tc
+    LEFT JOIN LATERAL (
+      SELECT id, brand, article, name, retail_price, stock
+      FROM products p2
+      WHERE p2.article = tc.article_b AND UPPER(p2.brand) = UPPER(tc.brand_b)
+      ORDER BY (p2.stock > 0) DESC, p2.retail_price ASC
+      LIMIT 1
+    ) p ON true
+    -- Спершу ті, що реально є в нашому каталозі (клікабельні,
+    -- корисніші покупцю) — потім решта, просто текстом
+    ORDER BY (p.id IS NOT NULL) DESC, tc.brand_b, tc.article_b
+    LIMIT ${TECDOC_CROSSES_LIMIT}
+    `,
+    [article]
+  );
+
+  return result.rows.map((row) => ({
+    brand: row.brand_b,
+    article: row.article_b,
+    productPath:
+      row.product_id !== null
+        ? buildProductPath(row.product_id, {
+            brand: row.product_brand,
+            article: row.product_article,
+            name: row.product_name,
+          })
+        : null,
+    retailPrice: row.retail_price !== null ? parseFloat(row.retail_price) : null,
+    stock: row.stock,
+  }));
+});
+
+const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
+  article: string
+): Promise<TecdocCompatibilityItem[]> {
+  const result = await pool.query(
+    `
+    SELECT DISTINCT make, year_from, year_to
+    FROM tecdoc_compatibility
+    WHERE article = $1
+    ORDER BY make, year_from
+    LIMIT 60
+    `,
+    [article]
+  );
+
+  const items: TecdocCompatibilityItem[] = result.rows.map((row) => {
+    const carMake = getCarMakeByDbValue(row.make);
+    return {
+      // Показуємо власну (гарно відформатовану) назву марки, якщо вона
+      // є в курованому списку lib/carMakes.ts (напр. "MERCEDES-BENZ" з
+      // TecDoc -> "Mercedes-Benz") — інакше сирий текст із TecDoc як є
+      make: carMake?.name || row.make,
+      makeSlug: carMake?.slug || null,
+      yearFrom: row.year_from,
+      yearTo: row.year_to,
+    };
+  });
+
+  // Спершу марки з власною сторінкою /marky/[slug] (клікабельні) —
+  // потім решта. Стабільність порядку всередині кожної групи не
+  // критична (ORDER BY make, year_from у запиті вище вже дав розумний
+  // базовий порядок)
+  items.sort((a, b) => Number(b.makeSlug !== null) - Number(a.makeSlug !== null));
+
+  return items.slice(0, TECDOC_COMPATIBILITY_LIMIT);
+});
+
 export interface ProductPageData {
   product: ProductDetail;
   otherOffers: OtherOffer[];
   crossRefs: { oem: CrossRefItem[]; aftermarket: CrossRefItem[] };
+  tecdocCrosses: TecdocCrossItem[];
+  tecdocCompatibility: TecdocCompatibilityItem[];
   breadcrumbItems: BreadcrumbItem[];
 }
 
@@ -210,9 +338,11 @@ export async function loadProductPageData(
     permanentRedirect(buildProductPath(id, product));
   }
 
-  const [otherOffers, crossRefs] = await Promise.all([
+  const [otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility] = await Promise.all([
     loadOtherOffers(product),
     loadCrossReferences(product),
+    loadTecdocCrosses(product.article),
+    loadTecdocCompatibility(product.article),
   ]);
 
   const make = getCarMakeByDbValue(product.carMake);
@@ -225,5 +355,5 @@ export async function loadProductPageData(
     },
   ];
 
-  return { product, otherOffers, crossRefs, breadcrumbItems };
+  return { product, otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility, breadcrumbItems };
 }
