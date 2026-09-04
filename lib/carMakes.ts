@@ -75,6 +75,32 @@ export function getCarMakeByDbValue(value: string | null | undefined): CarMakeDe
   return CAR_MAKES.find((m) => m.dbValues.includes(upper));
 }
 
+// Зворотний пошук — за КУРОВАНОЮ назвою марки (тим, що показує сам
+// покупець у випадаючому списку на вітрині, напр. "Volkswagen") знайти
+// її означення зі списком усіх варіантів написання. Потрібен там, де
+// покупач вже обрав марку зі списку card-options (field=make — див.
+// app/api/products/car-options/route.ts), а її треба зіставити з
+// products.car_make/tecdoc_compatibility.make, де ця сама марка може
+// бути записана як завгодно ("VW", "VOLKSWAGEN"...)
+export function getCarMakeByName(name: string | null | undefined): CarMakeDef | undefined {
+  if (!name) return undefined;
+  const trimmed = name.trim().toLowerCase();
+  return CAR_MAKES.find((m) => m.name.toLowerCase() === trimmed);
+}
+
+// Приводить значення марки, обране покупцем у випадаючому списку, до
+// масиву варіантів написання для точного (регістронезалежного) SQL-
+// порівняння через "UPPER(колонка) = ANY($N::text[])" — однаково
+// придатний і для products.car_make, і для tecdoc_compatibility.make.
+// Якщо марка курована (є в CAR_MAKES) — повертає ВСІ її варіанти
+// написання одразу (наприклад, для Volkswagen — і "VW", і "VOLKSWAGEN"),
+// інакше — просто саме передане значення (некурована марка, є лише в
+// products.car_make одним написанням)
+export function resolveMakeDbValues(make: string): string[] {
+  const curated = getCarMakeByName(make);
+  return curated ? curated.dbValues : [make.trim().toUpperCase()];
+}
+
 // (name ILIKE ANY(...) з lib/categories.ts тут не підходить — car_make
 // порівнюємо ТОЧНИМ значенням, регістронезалежно, а не пошуком
 // підрядка: інакше "VW" підхопив би, наприклад, помилково будь-яке

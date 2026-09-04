@@ -3,32 +3,58 @@
 // Адрес: /api/products/car-options
 //
 // Отдаёт списки значений для выпадающих списков экрана "Підбір за
-// автомобілем" на витрине (components/StorefrontHome.tsx): реальные
-// марки/годы/объёмы двигателя, которые ДЕЙСТВИТЕЛЬНО встречаются в
-// каталоге прямо сейчас — а не произвольный текст, который покупатель
-// мог бы напечатать сам. Так исключены и опечатки ("Тойота" вместо
-// "Toyota"), и заведомо пустой поиск (марка, для которой в базе вообще
-// нет ни одного товара).
+// автомобілем" на витрине (components/StorefrontHome.tsx) — марка,
+// модель, год, объём двигателя. Раньше все значения брались ТОЛЬКО из
+// products.car_make/car_model/car_year — свободного текста, который
+// вручную вписывает поставщик в Excel-прайсе (часто пусто или
+// несогласованно). Теперь марка/модель/год ДОПОЛНИТЕЛЬНО берутся из
+// tecdoc_compatibility (см. schema.sql, scripts/tecdoc/) — массового
+// SEO-индекса из дампа TecDoc с точными диапазонами годов. Оба
+// источника объединяются (не заменяют друг друга).
 //
-// Списки СВЯЗАНЫ каскадом — год предлагается только среди марки, что
-// уже выбрана, а объём двигателя — среди уже выбранных марки И года:
+// ВАЖНО про марки: tecdoc_compatibility.make — это СЫРОЕ название
+// производителя из дампа TecDoc, а он содержит ВСЕХ производителей
+// (включая тракторы, мотоциклы, спецтехніку — напр. "AGCO", "AEBI",
+// "VW (FAW)") — их там за 600 штук, и подавляющее большинство не имеет
+// отношения к покупателю легкового авто на этом сайте. Поэтому в
+// список марки попадают ТОЛЬКО те значения tecdoc, которые совпадают
+// с курованим списком реальних марок каталогу (lib/carMakes.ts) —
+// решта відкидається. Той самий курований довідник вирішує і зворотну
+// задачу: одна марка може бути записана по-різному ("VW" і
+// "VOLKSWAGEN", "MERCEDES" і "MERCEDES-BENZ") — щоб обраний покупцем
+// варіант однаково знаходив рядки в обох джерелах, порівняння марки
+// завжди йде через resolveMakeDbValues() (усі варіанти написання
+// одразу), а не буквальним текстом.
 //
 //   GET /api/products/car-options?field=make
-//     -> все марки, для которых в каталоге есть хоть один товар
+//     -> усі марки: products.car_make (як є) ∪ tecdoc-марки, звірені
+//        з lib/carMakes.ts
 //
-//   GET /api/products/car-options?field=year&make=Toyota
-//     -> года, которые встречаются у товаров именно марки Toyota
+//   GET /api/products/car-options?field=model&make=Toyota
+//     -> моделі саме цієї марки — ЛИШЕ з tecdoc_compatibility.model,
+//        НОВЕ поле, якого раніше не було зовсім. products.car_model
+//        свідомо НЕ використовується як джерело: на практиці там не
+//        назви моделей, а довільний текст постачальника (коди
+//        двигунів на кшталт "1AZ-FE", назви мастил тощо) — перевірено
+//        емпірично на реальних даних каталогу, домішувати це до
+//        списку моделей — тільки сміття
+//
+//   GET /api/products/car-options?field=year&make=Toyota&model=...
+//     -> роки саме цієї марки (+моделі, якщо передана): products.car_year
+//        як є, плюс КОЖЕН окремий рік з діапазонів
+//        tecdoc_compatibility.year_from..year_to (generate_series)
 //
 //   GET /api/products/car-options?field=engineVolume&make=Toyota&year=2008
-//     -> объёмы двигателя у товаров Toyota 2008 года
+//     -> об'єми двигуна у товарів Toyota 2008 року (тільки
+//        products.engine_volume — у tecdoc_compatibility двигун поки
+//        не заповнюється)
 //
-// field — обязательный параметр, один из: make, year, engineVolume.
-// make/year — необязательные фильтры-предки в каскаде (year без make
-// и engineVolume без make/year тоже работают, просто без сужения).
+// field — обязательный параметр: make, model, year, engineVolume.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { getCarMakeByDbValue, resolveMakeDbValues } from '@/lib/carMakes';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -46,62 +72,155 @@ const pool =
   globalThis.pgPool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
-    // Serverless: кожен файл створює СВІЙ Pool (кеш через globalThis
-    // працює тільки в dev — див. умову NODE_ENV нижче), тому тримаємо
-    // ліміт з'єднань НА ОДИН інстанс низьким. Без цього ліміту сума
-    // з'єднань з усіх функцій одного разу вичерпала ліміт Supabase
-    // і поклала весь прод ("Application error" на кількох сторінках)
     max: 3,
   });
 
 globalThis.pgPool = pool;
 
-// Разрешённые значения field — и одновременно соответствие "имя
-// параметра" -> "настоящее имя колонки в products" (колонку в SQL
-// никогда нельзя подставлять из значения запроса напрямую, поэтому
-// сверяемся с этой картой, а не доверяем строке из URL как есть)
-const FIELD_TO_COLUMN: Record<string, string> = {
-  make: 'car_make',
-  year: 'car_year',
-  engineVolume: 'engine_volume',
-};
+const VALID_FIELDS = ['make', 'model', 'year', 'engineVolume'] as const;
+type Field = (typeof VALID_FIELDS)[number];
+
+function isValidField(value: string): value is Field {
+  return (VALID_FIELDS as readonly string[]).includes(value);
+}
+
+// Об'єднує кілька списків значень РЕГІСТРОНЕЗАЛЕЖНО (щоб однакові за
+// змістом значення не потрапили в спадний список ДВІЧІ) — перший
+// знайдений варіант написання лишається як відображуваний, він же йде
+// першим у пріоритеті переданих масивів
+function dedupeCaseInsensitive(...lists: string[][]): string[] {
+  const seen = new Map<string, string>();
+  for (const list of lists) {
+    for (const value of list) {
+      const key = value.toUpperCase();
+      if (!seen.has(key)) seen.set(key, value);
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.localeCompare(b, 'uk'));
+}
 
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
 
     const field = (searchParams.get('field') || '').trim();
-    const column = FIELD_TO_COLUMN[field];
-
-    if (!column) {
+    if (!isValidField(field)) {
       return NextResponse.json(
-        { error: `Параметр field должен быть одним из: ${Object.keys(FIELD_TO_COLUMN).join(', ')}.` },
+        { error: `Параметр field должен быть одним из: ${VALID_FIELDS.join(', ')}.` },
         { status: 400 }
       );
     }
 
     const make = (searchParams.get('make') || '').trim();
+    const model = (searchParams.get('model') || '').trim();
     const year = (searchParams.get('year') || '').trim();
 
-    // Каскад: year учитывает make (если оно передано), engineVolume
-    // учитывает и make, и year. Условия/параметры собираются
-    // динамически, как и в app/api/products/route.ts
-    const conditions: string[] = [`${column} IS NOT NULL`, `${column} <> ''`];
-    const values: unknown[] = [];
+    // ---- МАРКА ----
+    if (field === 'make') {
+      const [productsResult, tecdocResult] = await Promise.all([
+        pool.query(`SELECT DISTINCT car_make AS value FROM products WHERE car_make IS NOT NULL AND car_make <> ''`),
+        pool.query(`SELECT DISTINCT make AS value FROM tecdoc_compatibility`),
+      ]);
 
-    if (field !== 'make' && make) {
-      values.push(make);
-      conditions.push(`car_make ILIKE $${values.length}`);
+      // tecdoc — беремо ЛИШЕ ті значення, які впізнані як реальна
+      // легкова марка з курованого довідника (lib/carMakes.ts).
+      // Нерозпізнані (трактори, спецтехніка тощо) відкидаємо повністю —
+      // інакше список маркою роздувається до 600+ пунктів сміття
+      const tecdocMakes = tecdocResult.rows
+        .map((row) => getCarMakeByDbValue(row.value as string)?.name)
+        .filter((name): name is string => Boolean(name));
+
+      // products — показуємо куровану назву, якщо марка впізнана
+      // (щоб "MERCEDES" з прайсу і "Mercedes-Benz" з tecdoc злились в
+      // один пункт списку), інакше — як є (некурована, але реальна
+      // марка з інвентарю, її не відкидаємо)
+      const productMakes = productsResult.rows.map(
+        (row) => getCarMakeByDbValue(row.value as string)?.name || (row.value as string)
+      );
+
+      // tecdocMakes іде ПЕРШИМ у пріоритеті — курована назва краще за
+      // сирий текст постачальника при збігу написання
+      const options = dedupeCaseInsensitive(tecdocMakes, productMakes);
+      return NextResponse.json({ success: true, options });
     }
 
-    if (field === 'engineVolume' && year) {
+    // Марка, обрана покупцем (курована назва АБО сире значення з
+    // products.car_make), — приводимо до всіх варіантів написання одразу,
+    // щоб однаково знайти рядки і в products, і в tecdoc_compatibility
+    const makeDbValues = make ? resolveMakeDbValues(make) : [];
+
+    // ---- МОДЕЛЬ (нове поле) ----
+    if (field === 'model') {
+      if (!make) {
+        return NextResponse.json({ error: 'Для поля model потрібно передати make.' }, { status: 400 });
+      }
+
+      const tecdocResult = await pool.query(
+        `SELECT DISTINCT model AS value FROM tecdoc_compatibility WHERE UPPER(make) = ANY($1::text[]) AND model <> ''`,
+        [makeDbValues]
+      );
+
+      const options = dedupeCaseInsensitive(tecdocResult.rows.map((row) => row.value as string));
+      return NextResponse.json({ success: true, options });
+    }
+
+    // ---- РІК ----
+    if (field === 'year') {
+      if (!make) {
+        return NextResponse.json({ success: true, options: [] });
+      }
+
+      const [productsResult, tecdocResult] = await Promise.all([
+        pool.query(
+          `SELECT DISTINCT car_year AS value FROM products WHERE UPPER(car_make) = ANY($1::text[]) AND car_year IS NOT NULL AND car_year <> ''`,
+          [makeDbValues]
+        ),
+        // generate_series розгортає КОЖЕН діапазон [year_from, year_to]
+        // в окремі роки — покупець обирає САМЕ РІК свого авто, а не
+        // "діапазон", тому список має бути з конкретних років.
+        // year_to NULL (модель ще випускається) обмежуємо поточним
+        // роком+1, щоб не породжувати нескінченний список
+        pool.query(
+          `
+          SELECT DISTINCT year::text AS value
+          FROM tecdoc_compatibility tc,
+               LATERAL generate_series(
+                 COALESCE(tc.year_from, 1980),
+                 LEAST(COALESCE(tc.year_to, EXTRACT(YEAR FROM now())::int + 1), EXTRACT(YEAR FROM now())::int + 1)
+               ) AS year
+          WHERE UPPER(tc.make) = ANY($1::text[]) AND ($2 = '' OR tc.model = $2)
+          `,
+          [makeDbValues, model]
+        ),
+      ]);
+
+      const options = dedupeCaseInsensitive(
+        tecdocResult.rows.map((row) => row.value as string),
+        productsResult.rows.map((row) => row.value as string)
+      );
+      // Роки — сортуємо як числа (рядковий localeCompare теж дав би
+      // правильний порядок для 4-значних років, але явний numeric
+      // порядок надійніший, якщо колись трапиться щось на кшталт "2005-2010")
+      options.sort((a, b) => parseInt(a, 10) - parseInt(b, 10) || a.localeCompare(b));
+      return NextResponse.json({ success: true, options });
+    }
+
+    // ---- ОБ'ЄМ ДВИГУНА (як і раніше — лише products, tecdoc поки без двигуна) ----
+    const conditions: string[] = [`engine_volume IS NOT NULL`, `engine_volume <> ''`];
+    const values: unknown[] = [];
+
+    if (make) {
+      values.push(makeDbValues);
+      conditions.push(`UPPER(car_make) = ANY($${values.length}::text[])`);
+    }
+    if (year) {
       values.push(year);
       conditions.push(`car_year ILIKE $${values.length}`);
     }
 
     const result = await pool.query(
       `
-      SELECT DISTINCT ${column} AS value
+      SELECT DISTINCT engine_volume AS value
       FROM products
       WHERE ${conditions.join(' AND ')}
       ORDER BY value ASC
@@ -109,9 +228,7 @@ export async function GET(request: NextRequest) {
       values
     );
 
-    const options: string[] = result.rows.map((row) => row.value);
-
-    return NextResponse.json({ success: true, options });
+    return NextResponse.json({ success: true, options: result.rows.map((row) => row.value) });
   } catch (error) {
     console.error('Ошибка при получении списка значений для подбора по автомобилю:', error);
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка';

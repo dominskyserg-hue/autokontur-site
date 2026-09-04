@@ -354,16 +354,18 @@ export default function StorefrontHome() {
     }
   };
 
-  // ---- підбір за автомобілем (марка/рік/об'єм двигуна) ----
+  // ---- підбір за автомобілем (марка/модель/рік/об'єм двигуна) ----
   // Значення у випадаючих списках — не довільний текст, а реальні
   // значення з бази (див. app/api/products/car-options/route.ts):
   // так неможливо шукати неіснуючу марку чи помилитись у написанні.
-  // Списки каскадні: рік звужується вибраною маркою, об'єм двигуна —
-  // маркою і роком разом
+  // Списки каскадні: модель звужується вибраною маркою, рік — маркою
+  // (і моделлю, якщо вона вибрана), об'єм двигуна — маркою і роком
   const [carMake, setCarMake] = useState('');
+  const [carModel, setCarModel] = useState('');
   const [carYear, setCarYear] = useState('');
   const [carEngineVolume, setCarEngineVolume] = useState('');
   const [carMakeOptions, setCarMakeOptions] = useState<string[]>([]);
+  const [carModelOptions, setCarModelOptions] = useState<string[]>([]);
   const [carYearOptions, setCarYearOptions] = useState<string[]>([]);
   const [carEngineOptions, setCarEngineOptions] = useState<string[]>([]);
 
@@ -382,8 +384,31 @@ export default function StorefrontHome() {
       });
   }, []);
 
-  // Смена марки — сбрасываем уже выбранные год/объём (они могли не
-  // существовать у новой марки) и подгружаем года именно этой марки
+  // Смена марки — сбрасываем уже выбранные модель/год/объём (они могли
+  // не существовать у новой марки) и подгружаем модели именно этой марки
+  useEffect(() => {
+    setCarModel('');
+    setCarYear('');
+    setCarEngineVolume('');
+    setCarYearOptions([]);
+    setCarEngineOptions([]);
+
+    if (!carMake) {
+      setCarModelOptions([]);
+      return;
+    }
+
+    const params = new URLSearchParams({ field: 'model', make: carMake });
+    fetch(`/api/products/car-options?${params.toString()}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.options) setCarModelOptions(data.options as string[]);
+      })
+      .catch(() => {});
+  }, [carMake]);
+
+  // Смена марки ИЛИ модели — сбрасываем уже выбранные год/объём и
+  // подгружаем года именно этой связки марка(+модель)
   useEffect(() => {
     setCarYear('');
     setCarEngineVolume('');
@@ -395,13 +420,14 @@ export default function StorefrontHome() {
     }
 
     const params = new URLSearchParams({ field: 'year', make: carMake });
+    if (carModel) params.set('model', carModel);
     fetch(`/api/products/car-options?${params.toString()}`)
       .then((response) => response.json())
       .then((data) => {
         if (data.options) setCarYearOptions(data.options as string[]);
       })
       .catch(() => {});
-  }, [carMake]);
+  }, [carMake, carModel]);
 
   // Смена года — сбрасываем объём двигателя и подгружаем варианты
   // объёма именно для этой связки марка+год
@@ -803,17 +829,18 @@ export default function StorefrontHome() {
   }, []);
 
   // Підбір за автомобілем — марка обов'язкова (без неї запит повернув
-  // би взагалі весь каталог), рік і об'єм двигуна — необов'язкові
-  // уточнення поверх марки
+  // би взагалі весь каталог), модель, рік і об'єм двигуна —
+  // необов'язкові уточнення поверх марки
   const handleCarSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!carMake) return;
 
     const params = new URLSearchParams({ carMake, pageSize: '24' });
+    if (carModel) params.set('carModel', carModel);
     if (carYear) params.set('carYear', carYear);
     if (carEngineVolume) params.set('engineVolume', carEngineVolume);
 
-    const label = [carMake, carYear, carEngineVolume].filter(Boolean).join(', ');
+    const label = [carMake, carModel, carYear, carEngineVolume].filter(Boolean).join(', ');
     runSearch(params, label);
   };
 
@@ -1252,6 +1279,21 @@ export default function StorefrontHome() {
                 >
                   <option value="">Марка авто</option>
                   {carMakeOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={carModel}
+                  onChange={(e) => setCarModel(e.target.value)}
+                  disabled={!carMake}
+                  className="flex-1 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
+                  style={{ color: carModel ? DARK_TEXT : '#8A7F70' }}
+                >
+                  <option value="">Модель</option>
+                  {carModelOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>

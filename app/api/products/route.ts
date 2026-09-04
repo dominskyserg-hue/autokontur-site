@@ -28,15 +28,23 @@
 //                 колодки rav-4"
 //   supplierId  — если передан, показывает товары только этого
 //                 поставщика (UUID)
-//   carMake, carYear, engineVolume — "Підбір за автомобілем" на
-//                 витрине (components/StorefrontHome.tsx): точное
+//   carMake, carModel, carYear, engineVolume — "Підбір за автомобілем"
+//                 на витрине (components/StorefrontHome.tsx): точное
 //                 совпадение (регистронезависимо), а не по подстроке —
 //                 значения приходят из выпадающих списков, которые сами
 //                 заполнены реальными значениями из базы (см.
 //                 app/api/products/car-options/route.ts), поэтому
 //                 опечаток тут не бывает. Можно передать любую
-//                 комбинацию из трёх — например, только carMake, чтобы
-//                 показать вообще все детали для этой марки
+//                 комбинацию — например, только carMake, чтобы показать
+//                 вообще все детали для этой марки. carMake/carModel/
+//                 carYear ищут не только среди собственных полей товара
+//                 (car_make/car_model/car_year — их вручную заполняет
+//                 поставщик и часто оставляет пустыми), но и среди
+//                 массового SEO-индекса tecdoc_compatibility
+//                 (scripts/tecdoc/) — точных диапазонов годов из дампа
+//                 TecDoc для этого же артикула. Так товар без заполненных
+//                 car_make/car_year всё равно найдётся при подборе по
+//                 автомобилю, если для него есть данные в TecDoc
 //
 // Название компании-поставщика — через JOIN с suppliers, а не
 // отдельным запросом на каждый товар.
@@ -46,6 +54,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { loadSynonymDictionary, expandSearchQuery, buildSynonymWhereClause } from '@/lib/searchSynonyms';
 import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline';
+import { resolveMakeDbValues } from '@/lib/carMakes';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -163,6 +172,7 @@ export async function GET(request: NextRequest) {
     const search = (searchParams.get('search') || '').trim();
     const supplierId = (searchParams.get('supplierId') || '').trim();
     const carMake = (searchParams.get('carMake') || '').trim();
+    const carModel = (searchParams.get('carModel') || '').trim();
     const carYear = (searchParams.get('carYear') || '').trim();
     const engineVolume = (searchParams.get('engineVolume') || '').trim();
 
@@ -257,14 +267,68 @@ export async function GET(request: NextRequest) {
     }
 
     // "Підбір за автомобілем" — точное совпадение (без учёта регистра),
-    // каждый параметр применяется независимо от остальных, если передан
-    if (carMake) {
-      values.push(carMake);
-      conditions.push(`p.car_make ILIKE $${values.length}`);
-    }
-    if (carYear) {
-      values.push(carYear);
-      conditions.push(`p.car_year ILIKE $${values.length}`);
+    // каждый параметр применяется независимо от остальных, если передан.
+    // carMake/carModel/carYear проверяются ДВУМЯ способами разом (через
+    // OR): (1) собственные поля товара p.car_make/car_model/car_year —
+    // как и раньше, и (2) EXISTS по tecdoc_compatibility для ТОГО ЖЕ
+    // товара (join по brand+article — на это есть индекс
+    // idx_tecdoc_compat_part, см. schema.sql) — так товар находится по
+    // подбору авто, даже если поставщик не заполнил car_make/car_year
+    // вручную, но для его артикула есть данные из дампа TecDoc.
+    // engineVolume — не трогаем: в tecdoc_compatibility двигатель пока
+    // не заполняется (см. schema.sql), поэтому фильтр остаётся только
+    // по собственному полю товара, как и был
+    if (carMake || carModel || carYear) {
+      // carMake, обраний покупцем у випадаючому списку (див.
+      // app/api/products/car-options/route.ts), — це або курована назва
+      // марки ("Volkswagen"), або сире значення з products.car_make.
+      // Одна й та сама марка може бути записана по-різному в
+      // products.car_make ("VW") і tecdoc_compatibility.make
+      // ("VOLKSWAGEN") — resolveMakeDbValues() повертає ВСІ варіанти
+      // написання одразу, щоб порівняння через ANY(...) знаходило
+      // товар незалежно від того, яким текстом записана марка
+      const makeDbValues = carMake ? resolveMakeDbValues(carMake) : [];
+
+      const ownParts: string[] = [];
+      if (carMake) {
+        values.push(makeDbValues);
+        ownParts.push(`UPPER(p.car_make) = ANY($${values.length}::text[])`);
+      }
+      if (carModel) {
+        values.push(carModel);
+        ownParts.push(`p.car_model ILIKE $${values.length}`);
+      }
+      if (carYear) {
+        values.push(carYear);
+        ownParts.push(`p.car_year ILIKE $${values.length}`);
+      }
+      const ownMatchSql = ownParts.length > 0 ? ownParts.join(' AND ') : 'FALSE';
+
+      const tecdocParts: string[] = [];
+      if (carMake) {
+        values.push(makeDbValues);
+        tecdocParts.push(`UPPER(tc.make) = ANY($${values.length}::text[])`);
+      }
+      if (carModel) {
+        values.push(carModel);
+        tecdocParts.push(`tc.model = $${values.length}`);
+      }
+      if (carYear) {
+        values.push(carYear);
+        tecdocParts.push(
+          `$${values.length}::int BETWEEN COALESCE(tc.year_from, 1900) AND COALESCE(tc.year_to, 2100)`
+        );
+      }
+      const tecdocWhereSql = tecdocParts.length > 0 ? `AND ${tecdocParts.join(' AND ')}` : '';
+
+      conditions.push(`(
+        (${ownMatchSql})
+        OR EXISTS (
+          SELECT 1 FROM tecdoc_compatibility tc
+          WHERE tc.brand = p.brand AND tc.article = p.article
+          ${tecdocWhereSql}
+        )
+      )`);
     }
     if (engineVolume) {
       values.push(engineVolume);
