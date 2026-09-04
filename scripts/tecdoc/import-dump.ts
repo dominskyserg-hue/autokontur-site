@@ -1,27 +1,52 @@
 // ============================================================
-// Основний скрипт імпорту: 11-гігабайтний дамп TecDoc → 3 компактні
-// таблиці в нашій Supabase-базі (tecdoc_crosses, tecdoc_compatibility,
-// tecdoc_related_categories, див. schema.sql) — для SEO-перелінковки
-// на сторінці товару, БЕЗ важких текстових описів/медіа з оригіналу.
+// Імпорт TecDoc → tecdoc_crosses / tecdoc_compatibility, ЛИШЕ для
+// артикулів, які реально є у вашому каталозі (products.article) —
+// не весь каталог TecDoc (десятки мільйонів деталей), а тільки те,
+// що стосується того, що ви продаєте.
 //
-// ПЕРЕД ЗАПУСКОМ ЦЬОГО СКРИПТА:
-//   1. Застосуйте нову секцію в schema.sql в Supabase (SQL Editor →
-//      New query → вставити секцію "TECDOC — SEO-ІНДЕКС" → Run).
-//   2. Запустіть scripts/tecdoc/inspect-dump.ts на вашому файлі й
-//      подивіться РЕАЛЬНІ назви таблиць/колонок вашого конкретного
-//      дампа (вони відрізняються залежно від постачальника дампа).
-//   3. Заповніть CONFIG нижче реальними значеннями з кроку 2.
+// Схема РЕАЛЬНОГО дампу (tecdoc2016q1.sql, HeidiSQL/MySQL-експорт
+// без жодного CREATE TABLE — з'ясована ЕМПІРИЧНО, по зразках рядків,
+// офіційної документації немає):
 //
-// Запуск (з кореня проєкту):
-//   npx tsx scripts/tecdoc/import-dump.ts шлях/до/дампа.sql
+//   articles(id, article_number, brand_id, ...)
+//   brands(id, code, full_name, ...)
+//   manufacturers(id, ..., code, full_name, ...)   — марки авто
+//   models(id, manufacturer_id, tecdoc_code, year_from_yyyymm,
+//          year_to_yyyymm, ...)
+//   art_lookup(article_id, clean_number, type_byte, other_brand_id,
+//              raw_number, ...)                     — кроси/OEM
+//   link_art(id, article_id, ?, model_id)            — застосовність
+//            до моделі авто (без деталізації двигун/рік — модель ще
+//            є 147-мільйонна таблиця link_la_typ з точнішою
+//            прив'язкою до модифікації, її семантику по 4 рядках
+//            надійно не розібрати — свідомо не використовується)
 //
-// Скрипт ІДЕМПОТЕНТНИЙ: усі три таблиці мають UNIQUE-обмеження, вставка
-// йде через ON CONFLICT DO NOTHING (див. batchInserter.ts) — можна
-// зупинити (Ctrl+C) і запустити знову з початку файлу, дублікатів не
-// буде. Часткового резюме "з місця зупинки" немає (для 11 ГБ це б
-// ускладнило скрипт без насправді великої користі: повторний повний
-// прохід по вже впорядкованому SQL-файлу — це операція вводу/виводу,
-// вона й так набагато швидша за саму вставку в базу)
+// Двофазний алгоритм (обидві фази — весь час стрімінг, RAM обмежена):
+//
+//   ФАЗА 1 (scripts/tecdoc/referenceData.ts) — ОДИН прохід по дампу.
+//     Тримає в пам'яті ЛИШЕ: brands (3068 рядків), manufacturers
+//     (657), models (12 500) — усі крихітні — і "matchedArticles":
+//     tecdoc article_id -> {brand, article} ЛИШЕ для рядків articles,
+//     чий очищений артикул є у вашому products.article. Це і є те
+//     звуження, що не дає пам'яті рости з розміром TecDoc (5 млн
+//     articles), а лише з розміром ВАШОГО каталогу
+//
+//   ФАЗА 2 (нижче) — ДРУГИЙ прохід по дампу. Стрімить дві найбільші
+//     таблиці (art_lookup 64,8 млн рядків, link_art 21,2 млн рядків),
+//     для кожного рядка перевіряє належність article_id до
+//     matchedArticles (просте O(1) звернення до Map) і ОДРАЗУ пише
+//     збіги пакетами в Supabase — рядки, що не стосуються вашого
+//     каталогу, просто пропускаються, у пам'яті не накопичуються
+//
+// Через те, що дамп доводиться читати ДВІЧІ (фаза 1 + фаза 2),
+// повний прогін на 11+ ГБ файлі займає порядку 20-35 хвилин — це
+// нормально для одноразового скрипта наповнення бази
+//
+// ПЕРЕД ЗАПУСКОМ: застосуйте scripts/tecdoc/schema.sql у Supabase
+// (якщо ще не застосовували)
+//
+// Запуск: npx tsx scripts/tecdoc/import-dump.ts шлях/до/дампа.sql
+// (або npm run tecdoc:import -- шлях/до/дампа.sql)
 // ============================================================
 
 import { Pool } from 'pg';
@@ -29,88 +54,18 @@ import { loadEnvLocal } from './loadEnv';
 import { readDump } from './dumpReader';
 import { BatchInserter } from './batchInserter';
 import { cleanArticle } from './cleanArticle';
+import { loadOurArticles } from './loadOurArticles';
+import { loadReferenceData } from './referenceData';
 
 loadEnvLocal();
 
-// ============================================================
-// CONFIG — ОБОВ'ЯЗКОВО ВІДРЕДАГУЙТЕ ПІД ВАШ КОНКРЕТНИЙ ДАМП
-// ============================================================
-// Значення sourceTable і columns нижче — ПРИКЛАДИ типових назв у
-// "класичній" структурі TecDoc. Вони НЕ гарантовано збігаються з
-// вашим файлом — обов'язково звірте їх зі списком від
-// scripts/tecdoc/inspect-dump.ts перед запуском. columns — це
-// 0-based індекс колонки В МЕЖАХ ОДНОГО РЯДКА ЦІЄЇ ТАБЛИЦІ (порядок,
-// у якому колонки йдуть у CREATE TABLE / COPY-заголовку дампа)
-const CONFIG = {
-  batchSize: 3000,
-  progressEveryLines: 500_000,
+const BATCH_SIZE = 3000;
 
-  // ---- 1. КРОСИ Й OEM-НОМЕРА ----
-  // Очікується таблиця, де кожен рядок — це пара "деталь A" <-> "деталь B"
-  // (або "деталь" <-> "OEM-номер автовиробника")
-  crosses: {
-    enabled: true,
-    sourceTable: 'gm_ref_oe_nrs', // TODO: перевірити реальну назву
-    columns: {
-      brandA: 0, // TODO: індекс колонки бренду першої деталі
-      articleA: 1, // TODO: індекс колонки артикула першої деталі
-      brandB: 2, // TODO: індекс колонки бренду другої деталі / марки авто (для OEM)
-      articleB: 3, // TODO: індекс колонки артикула другої деталі / OEM-номера
-      // Якщо в таблиці є ОКРЕМА колонка з типом зв'язку (oem/cross) —
-      // вкажіть її індекс тут, інакше лишіть null і всі рядки з цієї
-      // таблиці підуть з типом defaultRelationType нижче
-      relationTypeColumn: null as number | null,
-    },
-    defaultRelationType: 'oem' as 'oem' | 'cross',
-  },
-
-  // ---- 2. ЗАСТОСОВНІСТЬ ДО АВТО ----
-  // Очікується таблиця "лінкувань" деталь <-> модифікація автомобіля
-  compatibility: {
-    enabled: true,
-    sourceTable: 'gm_linkage', // TODO: перевірити реальну назву
-    columns: {
-      brand: 0, // TODO
-      article: 1, // TODO
-      make: 2, // TODO: марка авто (TOYOTA, BMW...)
-      model: 3, // TODO: модель (може бути null у дампі — тоді підставиться '')
-      generation: 4, // TODO: покоління/кузов, або null
-      engine: 5, // TODO: двигун/модифікація, або null
-      yearFrom: 6, // TODO: рік початку випуску, або null
-      yearTo: 7, // TODO: рік кінця випуску, або null
-    },
-  },
-
-  // ---- 3. СУПУТНІ КАТЕГОРІЇ ----
-  // Таблиця значно менша за перші дві (довідник груп деталей, а не
-  // мільйони лінкувань) — типово щось на кшталт зв'язків між "родовими
-  // артикулами" (generic article) чи товарними групами каталогу
-  relatedCategories: {
-    enabled: true,
-    sourceTable: 'gm_pgrp_relations', // TODO: перевірити реальну назву
-    columns: {
-      fromName: 1, // TODO: назва категорії-джерела
-      toName: 3, // TODO: назва супутньої категорії
-    },
-  },
-};
-
-// ============================================================
-// ДОПОМІЖНЕ: приведення "можливо, немає значення" до порожнього рядка
-// (а не null) — потрібно, бо UNIQUE-обмеження в Postgres ігнорує рядки
-// з NULL (NULL ніколи "не дорівнює" іншому NULL), і без цього
-// ON CONFLICT DO NOTHING не захистить від дублікатів там, де в дампі
-// частина колонок порожня
-// ============================================================
-function orEmpty(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  return String(value).trim();
-}
-
-function toYear(value: unknown): number | null {
-  const num = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
-  return Number.isFinite(num) && num > 1900 && num < 2100 ? num : null;
-}
+// Коли жодного бренду/виробника не вдалося зматчити по id (див.
+// коментар у referenceData.ts — колонка "інший бренд" в art_lookup
+// не завжди влучає в діапазон відомих brands/manufacturers) —
+// ЧЕСНИЙ нейтральний плейсхолдер замість вигаданої назви
+const UNKNOWN_BRAND = 'TECDOC';
 
 async function main() {
   const filePath = process.argv[2];
@@ -118,140 +73,131 @@ async function main() {
     console.error('Використання: npx tsx scripts/tecdoc/import-dump.ts шлях/до/дампа.sql');
     process.exit(1);
   }
-
   if (!process.env.DATABASE_URL) {
     console.error('Не задано DATABASE_URL (перевірте .env.local в корені проєкту).');
     process.exit(1);
   }
 
-  // max: 1 — навмисно ОДНЕ з'єднання на весь імпорт. Скрипт пише
-  // послідовними батчами, паралельні з'єднання йому не потрібні, а
-  // Supabase на дешевших тарифах має досить низький загальний ліміт
-  // з'єднань — заради одного локального скрипта імпорту немає сенсу
-  // забирати з нього більше одного
   const pool = new Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
+
+  console.log('Крок 1/3: читаємо власний каталог (SELECT DISTINCT article FROM products)...');
+  const ourArticles = await loadOurArticles(pool);
+  console.log(`  Знайдено ${ourArticles.size.toLocaleString('uk-UA')} унікальних артикулів у вашому каталозі.\n`);
+
+  console.log('Крок 2/3: ФАЗА 1 — довідники (brands/manufacturers/models) + пошук збігів у articles...');
+  const startPhase1 = Date.now();
+  const reference = await loadReferenceData(filePath, ourArticles, (linesRead, elapsedMs) => {
+    console.log(`  ... ${(linesRead / 1e6).toFixed(0)}М рядків файлу, ${(elapsedMs / 1000).toFixed(0)}с`);
+  });
+  console.log(
+    `  Готово за ${((Date.now() - startPhase1) / 1000 / 60).toFixed(1)} хв: ` +
+      `${reference.matchedArticles.size.toLocaleString('uk-UA')} tecdoc-артикулів збігається з вашим каталогом ` +
+      `(з ${ourArticles.size.toLocaleString('uk-UA')} власних), ` +
+      `brands: ${reference.brandsById.size}, manufacturers: ${reference.manufacturersById.size}, ` +
+      `models: ${reference.modelsById.size}.\n`
+  );
+
+  if (reference.matchedArticles.size === 0) {
+    console.log('Жодного збігу з вашим каталогом не знайдено — імпортувати нічого. Перевірте DATABASE_URL і products.article.');
+    await pool.end();
+    return;
+  }
+
+  console.log('Крок 3/3: ФАЗА 2 — art_lookup (кроси) + link_art (застосовність), пишемо в Supabase...');
 
   const crossesInserter = new BatchInserter(
     pool,
     'tecdoc_crosses',
     ['brand_a', 'article_a', 'brand_b', 'article_b', 'relation_type'],
-    CONFIG.batchSize
+    BATCH_SIZE
   );
   const compatibilityInserter = new BatchInserter(
     pool,
     'tecdoc_compatibility',
     ['brand', 'article', 'make', 'model', 'generation', 'engine', 'year_from', 'year_to'],
-    CONFIG.batchSize
-  );
-  const relatedCategoriesInserter = new BatchInserter(
-    pool,
-    'tecdoc_related_categories',
-    ['from_category_name', 'to_category_name'],
-    CONFIG.batchSize
+    BATCH_SIZE
   );
 
-  console.log(`Імпорт з ${filePath} починається...\n`);
+  const startPhase2 = Date.now();
 
   const stats = await readDump(filePath, {
-    progressEveryLines: CONFIG.progressEveryLines,
-
-    onProgress(progress) {
-      const mb = (process.memoryUsage().rss / 1024 / 1024).toFixed(0);
+    progressEveryLines: 5_000_000,
+    onProgress(p) {
       console.log(
-        `... ${progress.linesRead.toLocaleString('uk-UA')} рядків файлу за ${(progress.elapsedMs / 1000).toFixed(0)}с, ` +
-          `пам'ять процесу ${mb} МБ — ` +
+        `  ... ${(p.linesRead / 1e6).toFixed(0)}М рядків, ${(p.elapsedMs / 1000).toFixed(0)}с, ` +
+          `пам'ять ${(process.memoryUsage().rss / 1024 / 1024).toFixed(0)} МБ — ` +
           `кросів: ${crossesInserter.getTotalInserted().toLocaleString('uk-UA')}, ` +
-          `застосовності: ${compatibilityInserter.getTotalInserted().toLocaleString('uk-UA')}, ` +
-          `категорій: ${relatedCategoriesInserter.getTotalInserted().toLocaleString('uk-UA')}`
+          `застосовності: ${compatibilityInserter.getTotalInserted().toLocaleString('uk-UA')}`
       );
     },
 
-    // ВАЖЛИВО: хук — async, і readDump() його ЧЕКАЄ (await) перед
-    // читанням наступного рядка файлу (див. коментар до onInsertRows
-    // у dumpReader.ts). Без цього парсинг файлу (дешева локальна
-    // операція) обганяв би вставку в Supabase (мережевий I/O) у
-    // рази — і рядки, що чекають на чергову вставку, накопичувались
-    // би в необмеженій черзі промісів у пам'яті. await тут — і є
-    // той самий backpressure, що тримає пам'ять процесу в межах
-    // кількох мегабайт незалежно від розміру вхідного файлу
     async onInsertRows(table, rows) {
-      if (CONFIG.crosses.enabled && table === CONFIG.crosses.sourceTable) {
+      if (table === 'art_lookup') {
         for (const row of rows) {
-          const c = CONFIG.crosses.columns;
-          const brandA = orEmpty(row[c.brandA]);
-          const articleA = cleanArticle(row[c.articleA]);
-          const brandB = orEmpty(row[c.brandB]);
-          const articleB = cleanArticle(row[c.articleB]);
-          if (!brandA || !articleA || !brandB || !articleB) continue;
+          const ourMatch = reference.matchedArticles.get(Number(row[0]));
+          if (!ourMatch) continue;
 
-          const relationType =
-            c.relationTypeColumn !== null
-              ? String(row[c.relationTypeColumn]).toLowerCase() === 'oem'
-                ? 'oem'
-                : 'cross'
-              : CONFIG.crosses.defaultRelationType;
+          const crossArticle = cleanArticle(row[4] ?? row[1]);
+          if (!crossArticle || crossArticle === ourMatch.article) continue;
 
-          // Пишемо ОБИДВА напрямки зв'язку одразу (A->B і B->A) — щоб
-          // на сторінці товару можна було одним індексованим запитом
-          // "WHERE brand_a = ? AND article_a = ?" знайти всі кроси
-          // незалежно від того, з якого боку пари деталь опинилась у
-          // вихідному дампі (докладніше — коментар у schema.sql)
-          await crossesInserter.add([brandA, articleA, brandB, articleB, relationType]);
-          await crossesInserter.add([brandB, articleB, brandA, articleA, relationType]);
+          const otherBrandId = Number(row[3]);
+          const crossBrand =
+            reference.brandsById.get(otherBrandId) || reference.manufacturersById.get(otherBrandId) || UNKNOWN_BRAND;
+
+          await crossesInserter.add([ourMatch.brand, ourMatch.article, crossBrand, crossArticle, 'cross']);
+          await crossesInserter.add([crossBrand, crossArticle, ourMatch.brand, ourMatch.article, 'cross']);
         }
-      }
-
-      if (CONFIG.compatibility.enabled && table === CONFIG.compatibility.sourceTable) {
+      } else if (table === 'link_art') {
         for (const row of rows) {
-          const c = CONFIG.compatibility.columns;
-          const brand = orEmpty(row[c.brand]);
-          const article = cleanArticle(row[c.article]);
-          const make = orEmpty(row[c.make]);
-          if (!brand || !article || !make) continue;
+          const ourMatch = reference.matchedArticles.get(Number(row[1]));
+          if (!ourMatch) continue;
+
+          const model = reference.modelsById.get(Number(row[3]));
+          if (!model) continue;
+
+          const make = reference.manufacturersById.get(model.manufacturerId);
+          if (!make) continue; // без марки авто запис не несе SEO-цінності
 
           await compatibilityInserter.add([
-            brand,
-            article,
+            ourMatch.brand,
+            ourMatch.article,
             make,
-            orEmpty(row[c.model]),
-            orEmpty(row[c.generation]),
-            orEmpty(row[c.engine]),
-            toYear(row[c.yearFrom]),
-            toYear(row[c.yearTo]),
+            // model/generation/engine — порожні: TecDoc зберігає лише
+            // внутрішній числовий код моделі (models.tecdoc_code), а
+            // не людську назву ("Camry", "Golf") — показувати вигаданий
+            // чи сирий код замість реальної назви моделі гірше, ніж
+            // чесно лишити поле порожнім (див. пояснення в чаті)
+            '',
+            '',
+            '',
+            model.yearFrom,
+            model.yearTo,
           ]);
-        }
-      }
-
-      if (CONFIG.relatedCategories.enabled && table === CONFIG.relatedCategories.sourceTable) {
-        for (const row of rows) {
-          const c = CONFIG.relatedCategories.columns;
-          const fromName = orEmpty(row[c.fromName]);
-          const toName = orEmpty(row[c.toName]);
-          if (!fromName || !toName || fromName === toName) continue;
-
-          await relatedCategoriesInserter.add([fromName, toName]);
         }
       }
     },
   });
 
-  // Дописуємо залишок кожного буфера, що не дотягнув до batchSize
   await crossesInserter.flush();
   await compatibilityInserter.flush();
-  await relatedCategoriesInserter.flush();
-
   await pool.end();
 
   console.log('\n============================================================');
   console.log('ІМПОРТ ЗАВЕРШЕНО');
   console.log('============================================================');
-  console.log(`Рядків файлу прочитано:      ${stats.linesRead.toLocaleString('uk-UA')}`);
-  console.log(`SQL-операторів розібрано:    ${stats.statementsRead.toLocaleString('uk-UA')}`);
-  console.log(`Кросів/OEM вставлено:        ${crossesInserter.getTotalInserted().toLocaleString('uk-UA')}`);
-  console.log(`Застосовності вставлено:     ${compatibilityInserter.getTotalInserted().toLocaleString('uk-UA')}`);
-  console.log(`Супутніх категорій вставлено: ${relatedCategoriesInserter.getTotalInserted().toLocaleString('uk-UA')}`);
-  console.log(`Час роботи:                  ${(stats.elapsedMs / 1000 / 60).toFixed(1)} хв`);
+  console.log(`Фаза 1 (довідники):          ${((Date.now() - startPhase1) / 1000 / 60).toFixed(1)} хв`);
+  console.log(`Фаза 2 (кроси/застосовність): ${((Date.now() - startPhase2) / 1000 / 60).toFixed(1)} хв`);
+  console.log(`Рядків файлу прочитано (фаза 2): ${stats.linesRead.toLocaleString('uk-UA')}`);
+  console.log(`Кросів вставлено:             ${crossesInserter.getTotalInserted().toLocaleString('uk-UA')}`);
+  console.log(`Записів застосовності:        ${compatibilityInserter.getTotalInserted().toLocaleString('uk-UA')}`);
   console.log('============================================================\n');
+  console.log(
+    'Порада: значення make (марка авто) походить з таблиці manufacturers TecDoc —\n' +
+      'звірте кілька рядків tecdoc_compatibility вручну перед тим, як показувати їх\n' +
+      'покупцям (семантику цієї таблиці розпізнано по зразках даних, а не по\n' +
+      'офіційній документації — модель авто (model) свідомо не заповнена, див.\n' +
+      'коментар у коді вище).'
+  );
 }
 
 main().catch((error) => {
