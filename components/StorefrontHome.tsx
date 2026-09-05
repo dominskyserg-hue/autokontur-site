@@ -48,6 +48,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { FileSearch, ArrowRight, ShieldCheck } from 'lucide-react';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { DEPARTMENTS } from '@/lib/departments';
@@ -167,6 +169,25 @@ const HEADER_BG = '#0F1826';
 const HEADER_TEXT = 'rgba(255,255,255,0.92)';
 const HEADER_MUTED = 'rgba(255,255,255,0.55)';
 const HEADER_BORDER = 'rgba(255,255,255,0.18)';
+
+// ---- "Tech Premium" — ЛИШЕ шапка + hero (затверджений концепт,
+// див. Artifact "Tech Premium Redesign"). Решта сторінки (переваги,
+// результати пошуку, футер) свідомо лишається на старій світлій
+// палітрі вище — редизайн цих екранів окремим кроком, не зараз ----
+const TECH_BG = '#0B0F17';
+const TECH_SURFACE = 'rgba(20,27,41,0.6)';
+const TECH_BORDER = 'rgba(255,255,255,0.08)';
+const TECH_BORDER_2 = 'rgba(255,255,255,0.14)';
+const TECH_ACCENT = '#3B82F6';
+const TECH_ACCENT_BRIGHT = '#60A5FA';
+const TECH_ACCENT_DIM = '#1D4ED8';
+const TECH_INK = '#F1F5F9';
+const TECH_MUTED = '#94A3B8';
+const TECH_FAINT = '#54607A';
+const TECH_GLOW = '0 0 0 1px rgba(59,130,246,0.4), 0 0 24px 2px rgba(59,130,246,0.35)';
+const TECH_GLOW_LG = '0 0 0 1px rgba(59,130,246,0.5), 0 0 60px 8px rgba(59,130,246,0.28)';
+const DISPLAY_FONT_TECH = 'var(--font-space-grotesk), "Space Grotesk", sans-serif';
+const SANS_TECH = 'var(--font-inter-tech), Inter, sans-serif';
 
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const LABEL_FONT = "'Rajdhani', sans-serif";
@@ -916,31 +937,33 @@ export default function StorefrontHome() {
           </div>
         ))}
 
-        {/* ==================== ШАПКА ==================== */}
-        {/* Темна шапка — сигнатурний елемент нового стилю "Надійна
-            сталь" (за мотивами lr-parts.com.ua): усередині явно
-            задаємо світлі кольори тексту, бо за замовчуванням уся
-            сторінка успадковує темний TEXT з кореневого div вище */}
-        <header style={{ background: HEADER_BG }}>
-          <div className="max-w-6xl mx-auto px-5 md:px-8 py-4 flex items-center justify-between gap-4">
+        {/* ==================== ШАПКА (Tech Premium) ==================== */}
+        {/* Скляна, "найтихіша" поверхня — задача шапки не змагатись з
+            hero під нею, а завжди лишатись читабельною поверх скролу.
+            sticky+backdrop-blur — та сама пара, що й у затвердженому
+            концепті (Artifact "Tech Premium Redesign") */}
+        <header
+          className="sticky top-0 z-40 backdrop-blur-xl"
+          style={{ background: 'rgba(11,15,23,0.82)', borderBottom: `1px solid ${TECH_BORDER}` }}
+        >
+          <div className="max-w-6xl mx-auto px-5 md:px-8 py-3.5 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <DominatorMark />
               <div>
                 <div
                   style={{
-                    fontFamily: DISPLAY_FONT,
-                    fontSize: 24,
-                    lineHeight: 0.9,
-                    letterSpacing: '0.01em',
-                    transform: 'skewX(-6deg)',
-                    color: HEADER_TEXT,
+                    fontFamily: DISPLAY_FONT_TECH,
+                    fontSize: 17,
+                    fontWeight: 600,
+                    letterSpacing: '-0.01em',
+                    color: TECH_INK,
                   }}
                 >
                   {shopName.toUpperCase()}
                 </div>
                 <div
                   className="text-[11px] uppercase tracking-widest font-semibold"
-                  style={{ fontFamily: LABEL_FONT, color: RED }}
+                  style={{ fontFamily: SANS_TECH, color: TECH_ACCENT_BRIGHT }}
                 >
                   Команда професіоналів
                 </div>
@@ -948,14 +971,14 @@ export default function StorefrontHome() {
             </div>
 
             <div
-              className="hidden md:flex items-center gap-2 text-sm uppercase tracking-wide"
-              style={{ fontFamily: LABEL_FONT, color: HEADER_MUTED }}
+              className="hidden md:flex items-center gap-2 text-sm"
+              style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
             >
               <PhoneIcon />
-              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} style={{ color: HEADER_MUTED }}>
+              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} style={{ color: TECH_MUTED }}>
                 {phone}
               </a>
-              <span style={{ color: HEADER_BORDER }}>◆</span>
+              <span style={{ color: TECH_BORDER_2 }}>◆</span>
               <span>{workingHours}</span>
             </div>
 
@@ -967,8 +990,8 @@ export default function StorefrontHome() {
                   (див. app/category/[slug]/page.tsx) */}
               <Link
                 href="/category"
-                className="hidden sm:flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
-                style={{ fontFamily: LABEL_FONT, border: `1px solid ${HEADER_BORDER}`, color: HEADER_TEXT }}
+                className="hidden sm:flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
+                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
               >
                 <span>Категорії</span>
               </Link>
@@ -980,8 +1003,8 @@ export default function StorefrontHome() {
                   переповнювалась */}
               <Link
                 href="/marky"
-                className="hidden lg:flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
-                style={{ fontFamily: LABEL_FONT, border: `1px solid ${HEADER_BORDER}`, color: HEADER_TEXT }}
+                className="hidden lg:flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
+                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
               >
                 <span>Марки авто</span>
               </Link>
@@ -989,8 +1012,8 @@ export default function StorefrontHome() {
               {/* ---- Особистий кабінет ---- */}
               <Link
                 href="/account"
-                className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
-                style={{ fontFamily: LABEL_FONT, border: `1px solid ${HEADER_BORDER}`, color: HEADER_TEXT }}
+                className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
+                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
               >
                 <UserIcon />
                 <span className="hidden sm:inline">Кабінет</span>
@@ -1003,15 +1026,15 @@ export default function StorefrontHome() {
               <button
                 type="button"
                 onClick={() => setCartOpen(true)}
-                className="relative flex items-center gap-2 px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
-                style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                className="relative flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-semibold transition-shadow hover:shadow-glow"
+                style={{ fontFamily: SANS_TECH, background: TECH_ACCENT, color: '#fff' }}
               >
                 <CartIcon />
                 <span className="hidden sm:inline">Кошик</span>
                 {cartCount > 0 && (
                   <span
                     className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1 rounded-full text-[11px] font-bold flex items-center justify-center"
-                    style={{ background: '#FFFFFF', color: RED }}
+                    style={{ background: '#FFFFFF', color: TECH_ACCENT }}
                   >
                     {cartCount}
                   </span>
@@ -1020,12 +1043,6 @@ export default function StorefrontHome() {
             </div>
           </div>
         </header>
-
-        {/* тонка акцентна смужка під шапкою — заміна смузі небезпеки
-            зі старого стилю "Wasteland": діагональні жовто-червоні
-            смуги читаються як "увага/небезпека", що суперечить новому
-            позиціонуванню "Надійна сталь" (спокій, довіра) */}
-        <div style={{ height: 3, background: RED }} />
 
         {/* ==================== ПАНЕЛЬ КОРЗИНИ (Sidebar) ==================== */}
         {/* Выезжает справа поверх всей страницы. Что показывать внутри —
@@ -1228,157 +1245,292 @@ export default function StorefrontHome() {
           </div>
         )}
 
-        {/* ==================== HERO + ПОИСК ==================== */}
-        <section className="relative overflow-hidden">
-          <div className="max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-24 relative text-center">
-            <div
-              className="text-xs md:text-sm font-semibold uppercase tracking-[0.2em] mb-4"
-              style={{ fontFamily: LABEL_FONT, color: YELLOW }}
-            >
-              ⚠ Понад 20 000 запчастин у наявності ⚠
-            </div>
-            <h1
-              className="text-4xl md:text-6xl lg:text-7xl mb-5 leading-[0.92]"
-              style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em', transform: 'skewX(-2deg)', textWrap: 'balance' }}
-            >
-              НАДІЙНІ ДЕТАЛІ.
-              <br />
-              ПЕРЕВІРЕНИЙ СЕРВІС.
-            </h1>
-            <p className="text-sm md:text-base mb-9 max-w-xl mx-auto" style={{ color: MUTED }}>
-              {shopName} — команда професіоналів з підбору автозапчастин. Знайдіть потрібну
-              запчастину за артикулом, або доручіть це нам.
-            </p>
+        {/* ==================== HERO + ПОШУК (Tech Premium) ==================== */}
+        {/* Затверджений концепт — Artifact "Tech Premium Redesign":
+            темне скляне полотно, електрик-блю акцент, VIN винесено
+            окремою акцентною карткою праворуч (раніше ця функція була
+            лише плашкою нижче на сторінці й губилась). Уся логіка
+            (пошук, каскад підбору за авто, VIN-модалка) — та сама, що
+            й була, змінена лише розмітка/стилі */}
+        <section className="relative overflow-hidden" style={{ background: TECH_BG }}>
+          {/* технічна сітка на фоні — тонкі лінії, як на кресленні */}
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              backgroundImage:
+                'linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)',
+              backgroundSize: '34px 34px',
+            }}
+          />
+          <div
+            className="pointer-events-none absolute -top-32 left-1/4 h-[480px] w-[480px] rounded-full blur-[120px]"
+            style={{ background: 'rgba(59,130,246,0.18)' }}
+          />
+          <div
+            className="pointer-events-none absolute -top-20 right-0 h-[380px] w-[380px] rounded-full blur-[110px]"
+            style={{ background: 'rgba(255,107,0,0.08)' }}
+          />
 
-            {/* ---- перемикач режиму пошуку ---- */}
-            <div className="max-w-3xl mx-auto flex gap-1 p-1 mb-3" style={{ background: PANEL_SOFT }}>
-              <button
-                type="button"
-                onClick={() => setSearchMode('article')}
-                className="flex-1 py-2 text-sm font-semibold uppercase tracking-wide transition-colors"
-                style={
-                  searchMode === 'article'
-                    ? { fontFamily: LABEL_FONT, background: PANEL, color: DARK_TEXT }
-                    : { fontFamily: LABEL_FONT, background: 'transparent', color: MUTED }
-                }
+          <div className="relative max-w-6xl mx-auto px-5 md:px-8 py-16 md:py-24 grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-center">
+            {/* ---- ліва колонка: заголовок + пошук ---- */}
+            <div className="text-center lg:text-left">
+              <div
+                className="inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-xs font-medium mb-5"
+                style={{
+                  fontFamily: SANS_TECH,
+                  border: '1px solid rgba(59,130,246,0.35)',
+                  background: 'rgba(59,130,246,0.1)',
+                  color: TECH_ACCENT_BRIGHT,
+                }}
               >
-                За артикулом
-              </button>
-              <button
-                type="button"
-                onClick={() => setSearchMode('car')}
-                className="flex-1 py-2 text-sm font-semibold uppercase tracking-wide transition-colors"
-                style={
-                  searchMode === 'car'
-                    ? { fontFamily: LABEL_FONT, background: PANEL, color: DARK_TEXT }
-                    : { fontFamily: LABEL_FONT, background: 'transparent', color: MUTED }
-                }
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: TECH_ACCENT_BRIGHT }} />
+                Понад 20 000 запчастин у наявності
+              </div>
+
+              <h1
+                className="text-4xl md:text-5xl lg:text-[3.2rem] leading-[1.05] mb-5"
+                style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, letterSpacing: '-0.01em', color: '#fff', textWrap: 'balance' }}
               >
-                За автомобілем
-              </button>
+                НАДІЙНІ ДЕТАЛІ.
+                <br />
+                <span
+                  style={{
+                    background: `linear-gradient(90deg, ${TECH_ACCENT_BRIGHT}, ${TECH_ACCENT})`,
+                    WebkitBackgroundClip: 'text',
+                    backgroundClip: 'text',
+                    color: 'transparent',
+                  }}
+                >
+                  ПЕРЕВІРЕНИЙ СЕРВІС.
+                </span>
+              </h1>
+              <p className="text-sm md:text-base mb-9 max-w-md mx-auto lg:mx-0" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                {shopName} — команда професіоналів з підбору автозапчастин. Знайдіть потрібну
+                запчастину за артикулом, або доручіть це нам.
+              </p>
+
+              {/* ---- перемикач режиму пошуку — повзунок їде через
+                  Framer Motion layoutId: коли він зникає з одної кнопки
+                  і з'являється в іншій з тим самим layoutId, бібліотека
+                  сама анімує "переліт" між їхніми позиціями ---- */}
+              <div
+                className="relative inline-grid grid-cols-2 rounded-xl p-1 mb-4 mx-auto lg:mx-0"
+                style={{ border: `1px solid ${TECH_BORDER}`, background: 'rgba(255,255,255,0.03)' }}
+              >
+                <button
+                  type="button"
+                  onClick={() => setSearchMode('article')}
+                  className="relative z-10 rounded-lg px-6 py-2.5 text-sm font-semibold transition-colors"
+                  style={{ fontFamily: SANS_TECH, color: searchMode === 'article' ? '#fff' : TECH_MUTED }}
+                >
+                  {searchMode === 'article' && (
+                    <motion.span
+                      layoutId="hero-seg-thumb"
+                      className="absolute inset-0 -z-10 rounded-lg"
+                      style={{ background: 'rgba(255,255,255,0.08)' }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                    />
+                  )}
+                  За артикулом
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchMode('car')}
+                  className="relative z-10 rounded-lg px-6 py-2.5 text-sm font-semibold transition-colors"
+                  style={{ fontFamily: SANS_TECH, color: searchMode === 'car' ? '#fff' : TECH_MUTED }}
+                >
+                  {searchMode === 'car' && (
+                    <motion.span
+                      layoutId="hero-seg-thumb"
+                      className="absolute inset-0 -z-10 rounded-lg"
+                      style={{ background: 'rgba(255,255,255,0.08)' }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                    />
+                  )}
+                  За автомобілем
+                </button>
+              </div>
+
+              {/* ---- панелі пошуку — AnimatePresence замість миттєвого
+                  перемикання: крос-фейд + невеликий зсув по Y ---- */}
+              <AnimatePresence mode="wait">
+                {searchMode === 'article' ? (
+                  <motion.form
+                    key="article"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18 }}
+                    onSubmit={handleSearchSubmit}
+                    className="max-w-md mx-auto lg:mx-0 flex items-center gap-3 rounded-xl px-4 py-1 transition-shadow focus-within:shadow-glow"
+                    style={{ border: `1px solid ${TECH_BORDER_2}`, background: 'rgba(255,255,255,0.04)' }}
+                  >
+                    <SearchIcon />
+                    <input
+                      type="text"
+                      value={searchInput}
+                      onChange={(e) => setSearchInput(e.target.value)}
+                      placeholder="Введіть артикул або назву запчастини"
+                      className="w-full min-w-0 py-3.5 text-sm bg-transparent outline-none placeholder:text-[#54607A]"
+                      style={{ fontFamily: SANS_TECH, color: TECH_INK }}
+                    />
+                    <button
+                      type="submit"
+                      disabled={searching || !searchInput.trim()}
+                      className="shrink-0 rounded-lg px-5 py-2.5 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50"
+                      style={{ fontFamily: SANS_TECH, background: TECH_ACCENT, color: '#fff' }}
+                    >
+                      {searching ? 'Шукаємо...' : 'Знайти'}
+                    </button>
+                  </motion.form>
+                ) : (
+                  <motion.form
+                    key="car"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18 }}
+                    onSubmit={handleCarSearchSubmit}
+                    className="max-w-xl mx-auto lg:mx-0 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]"
+                  >
+                    <select
+                      value={carMake}
+                      onChange={(e) => setCarMake(e.target.value)}
+                      className="min-w-0 rounded-xl px-3 py-3 text-sm outline-none"
+                      style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_BORDER_2}`, background: 'rgba(255,255,255,0.04)', color: carMake ? TECH_INK : TECH_FAINT }}
+                    >
+                      <option value="">Марка авто</option>
+                      {carMakeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={carModel}
+                      onChange={(e) => setCarModel(e.target.value)}
+                      disabled={!carMake}
+                      className="min-w-0 rounded-xl px-3 py-3 text-sm outline-none disabled:opacity-50"
+                      style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_BORDER_2}`, background: 'rgba(255,255,255,0.04)', color: carModel ? TECH_INK : TECH_FAINT }}
+                    >
+                      <option value="">Модель</option>
+                      {carModelOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={carYear}
+                      onChange={(e) => setCarYear(e.target.value)}
+                      disabled={!carMake}
+                      className="min-w-0 rounded-xl px-3 py-3 text-sm outline-none disabled:opacity-50"
+                      style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_BORDER_2}`, background: 'rgba(255,255,255,0.04)', color: carYear ? TECH_INK : TECH_FAINT }}
+                    >
+                      <option value="">Рік</option>
+                      {carYearOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={carEngineVolume}
+                      onChange={(e) => setCarEngineVolume(e.target.value)}
+                      disabled={!carYear}
+                      className="min-w-0 rounded-xl px-3 py-3 text-sm outline-none disabled:opacity-50"
+                      style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_BORDER_2}`, background: 'rgba(255,255,255,0.04)', color: carEngineVolume ? TECH_INK : TECH_FAINT }}
+                    >
+                      <option value="">Об&apos;єм двигуна</option>
+                      {carEngineOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="submit"
+                      disabled={searching || !carMake}
+                      className="rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50"
+                      style={{ fontFamily: SANS_TECH, background: TECH_ACCENT, color: '#fff' }}
+                    >
+                      {searching ? 'Шукаємо...' : 'Знайти'}
+                    </button>
+                  </motion.form>
+                )}
+              </AnimatePresence>
+
+              <div
+                className="flex flex-wrap items-center justify-center lg:justify-start gap-x-6 gap-y-2 mt-7 text-xs"
+                style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}
+              >
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" style={{ color: TECH_ACCENT_BRIGHT }} />
+                  Оригінал і перевірені аналоги
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <ShieldCheck className="h-3.5 w-3.5" style={{ color: TECH_ACCENT_BRIGHT }} />
+                  Доставка по всій Україні
+                </span>
+              </div>
             </div>
 
-            {searchMode === 'article' ? (
-              <form
-                onSubmit={handleSearchSubmit}
-                className="max-w-3xl mx-auto flex flex-col sm:flex-row"
-                style={{ background: PANEL }}
-              >
-                <div className="flex-1 flex items-center gap-2.5 px-4">
-                  <SearchIcon />
-                  <input
-                    type="text"
-                    value={searchInput}
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    placeholder="Введіть артикул або назву запчастини"
-                    className="w-full py-4 text-base outline-none bg-transparent placeholder:text-[#8A7F70]"
-                    style={{ color: DARK_TEXT }}
-                  />
+            {/* ---- права колонка: акцентна картка VIN — відкриває ТУ
+                САМУ модалку "Підбір за VIN", що вже працює нижче на
+                сторінці (vinModalOpen), просто новий, помітніший вхід
+                у неї прямо з hero ---- */}
+            <motion.div
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
+              className="relative rounded-3xl p-px"
+              style={{
+                background: 'linear-gradient(140deg, rgba(59,130,246,0.7), rgba(255,107,0,0.35), rgba(59,130,246,0.15))',
+                boxShadow: TECH_GLOW_LG,
+              }}
+            >
+              <div className="relative overflow-hidden rounded-3xl p-7 backdrop-blur-xl" style={{ background: TECH_SURFACE }}>
+                <div
+                  className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full blur-3xl"
+                  style={{ background: 'rgba(59,130,246,0.25)' }}
+                />
+
+                <div className="relative flex items-center gap-3">
+                  <div
+                    className="grid h-11 w-11 flex-none place-items-center rounded-xl"
+                    style={{ background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, boxShadow: TECH_GLOW }}
+                  >
+                    <FileSearch className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: '1rem', color: '#fff' }}>
+                      Підбір за VIN
+                    </div>
+                    <div className="text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                      Не знайшли за артикулом? Ми впораємось.
+                    </div>
+                  </div>
                 </div>
-                <button
-                  type="submit"
-                  disabled={searching || !searchInput.trim()}
-                  className="px-8 py-4 text-sm font-bold uppercase tracking-wide disabled:opacity-50 shrink-0"
-                  style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
-                >
-                  {searching ? 'Шукаємо...' : 'Знайти'}
-                </button>
-              </form>
-            ) : (
-              <form
-                onSubmit={handleCarSearchSubmit}
-                className="max-w-3xl mx-auto flex flex-col sm:flex-row gap-2 p-2"
-                style={{ background: PANEL }}
-              >
-                <select
-                  value={carMake}
-                  onChange={(e) => setCarMake(e.target.value)}
-                  className="flex-1 min-w-0 px-3 py-3.5 text-base bg-transparent outline-none"
-                  style={{ color: carMake ? DARK_TEXT : '#8A7F70' }}
-                >
-                  <option value="">Марка авто</option>
-                  {carMakeOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
 
-                <select
-                  value={carModel}
-                  onChange={(e) => setCarModel(e.target.value)}
-                  disabled={!carMake}
-                  className="flex-1 min-w-0 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
-                  style={{ color: carModel ? DARK_TEXT : '#8A7F70' }}
-                >
-                  <option value="">Модель</option>
-                  {carModelOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={carYear}
-                  onChange={(e) => setCarYear(e.target.value)}
-                  disabled={!carMake}
-                  className="flex-1 min-w-0 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
-                  style={{ color: carYear ? DARK_TEXT : '#8A7F70' }}
-                >
-                  <option value="">Рік</option>
-                  {carYearOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
-
-                <select
-                  value={carEngineVolume}
-                  onChange={(e) => setCarEngineVolume(e.target.value)}
-                  disabled={!carYear}
-                  className="flex-1 min-w-0 px-3 py-3.5 text-base bg-transparent outline-none disabled:opacity-50"
-                  style={{ color: carEngineVolume ? DARK_TEXT : '#8A7F70' }}
-                >
-                  <option value="">Об&apos;єм двигуна</option>
-                  {carEngineOptions.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
-                    </option>
-                  ))}
-                </select>
+                <p className="relative mt-5 text-sm leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                  Надішліть номер кузова — інженер підбере точну деталь під саме вашу
+                  комплектацію, без ризику помилки сумісності.
+                </p>
 
                 <button
-                  type="submit"
-                  disabled={searching || !carMake}
-                  className="px-8 py-3.5 text-sm font-bold uppercase tracking-wide disabled:opacity-50 shrink-0"
-                  style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                  type="button"
+                  onClick={() => setVinModalOpen(true)}
+                  className="relative mt-5 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
+                  style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
                 >
-                  {searching ? 'Шукаємо...' : 'Знайти'}
+                  Підібрати за VIN
+                  <ArrowRight className="h-4 w-4" />
                 </button>
-              </form>
-            )}
+              </div>
+            </motion.div>
           </div>
         </section>
 

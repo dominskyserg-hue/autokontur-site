@@ -1,6 +1,28 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
+import { Space_Grotesk, Inter } from 'next/font/google';
 import './globals.css';
+
+// Друга пара шрифтів — ТІЛЬКИ для нового розділу "Tech Premium"
+// (наразі шапка + hero на Головній, components/StorefrontHome.tsx).
+// Не чіпає й не замінює основні шрифти вітрини (Bebas Neue/Rajdhani/
+// Barlow, підключені нижче через <link> — ними й далі користуються
+// решта сторінок і компонентів). next/font сам вшиває файл шрифту в
+// білд і віддає його з того ж домену — без запиту до fonts.gstatic.com
+// у покупця, і без "блимання" шрифту при завантаженні (FOUT)
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['500', '600', '700'],
+  variable: '--font-space-grotesk',
+  display: 'swap',
+});
+
+const interTech = Inter({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-inter-tech',
+  display: 'swap',
+});
 
 // ID лічильника GA4 (напр. "G-XXXXXXXXXX") — Google Analytics →
 // Адмін → Потоки даних → ваш потік → Ідентифікатор потоку. Токен
@@ -58,7 +80,7 @@ export default function RootLayout({
   modal: React.ReactNode;
 }>) {
   return (
-    <html lang="uk">
+    <html lang="uk" className={`${spaceGrotesk.variable} ${interTech.variable}`}>
       {/* Шрифти фірмового стилю "Wasteland" вітрини (Bebas Neue/Rajdhani/Barlow) —
           підключені глобально, але реально використовуються лише в
           components/StorefrontHome.tsx; на адмін-панель (/admin) не впливають,
