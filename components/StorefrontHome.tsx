@@ -1124,55 +1124,60 @@ export default function StorefrontHome() {
           />
         )}
 
-        {/* ==================== МОДАЛЬНЕ ВІКНО "ПІДБІР ЗА VIN" ==================== */}
+        {/* ==================== МОДАЛЬНЕ ВІКНО "ПІДБІР ЗА VIN" (Tech Premium) ==================== */}
+        {/* Той самий концепт, що і решта Головної — скляна темна картка
+            з синім акцентом, підв'язана до вже існуючої логіки заявки
+            (handleSubmitVinRequest, розшифровка VIN "на льоту" тощо) */}
         {vinModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <div className="absolute inset-0" style={{ background: 'rgba(21, 16, 14, 0.72)' }} onClick={closeVinModal} />
+            <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(11,15,23,0.78)' }} onClick={closeVinModal} />
 
-            <div className="relative w-full max-w-md overflow-hidden" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
-              <div
-                className="flex items-center justify-between px-5 py-4"
-                style={{ borderBottom: `1px solid ${BORDER}` }}
-              >
-                <h2 className="text-lg" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
-                  Підбір за VIN
+            <div
+              className="relative w-full max-w-md overflow-hidden rounded-2xl"
+              style={{ background: TECH_SURFACE_2, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER_2}`, boxShadow: TECH_GLOW_LG }}
+            >
+              <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${TECH_BORDER}` }}>
+                <h2 style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 17, color: '#fff' }}>
+                  Підбір за <span style={{ color: TECH_ACCENT_BRIGHT }}>VIN</span>
                 </h2>
                 <button
                   type="button"
                   onClick={closeVinModal}
                   aria-label="Закрити"
-                  className="p-1.5"
-                  style={{ color: MUTED }}
+                  className="rounded-lg p-1.5 transition-colors hover:bg-white/5"
+                  style={{ color: TECH_FAINT }}
                 >
                   <CloseIcon />
                 </button>
               </div>
 
               {vinSubmitted ? (
-                <div className="flex flex-col items-center text-center px-8 py-10">
+                <div className="flex flex-col items-center px-8 py-10 text-center">
                   <div
-                    className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
-                    style={{ background: SUCCESS_BG, color: SUCCESS_TEXT }}
+                    className="mb-5 flex h-16 w-16 items-center justify-center rounded-full"
+                    style={{ background: TECH_GOOD_SOFT, color: TECH_GOOD, boxShadow: '0 0 0 1px rgba(52,211,153,0.25), 0 0 24px -4px rgba(52,211,153,0.6)' }}
                   >
                     <CheckIcon />
                   </div>
-                  <h3 className="text-lg font-semibold mb-2">Дякуємо за заявку!</h3>
-                  <p className="text-sm mb-6" style={{ color: MUTED }}>
+                  <h3 className="mb-2 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT_TECH, color: '#fff' }}>
+                    Дякуємо за заявку!
+                  </h3>
+                  <p className="mb-6 text-sm leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
                     Ми зв&apos;яжемося з вами найближчим часом і підберемо потрібну деталь за
                     VIN-кодом.
                   </p>
                   <button
                     type="button"
                     onClick={closeVinModal}
-                    className="px-6 py-3 text-sm font-bold uppercase tracking-wide"
-                    style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                    className="rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
+                    style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
                   >
                     Закрити
                   </button>
                 </div>
               ) : (
-                <form onSubmit={handleSubmitVinRequest} className="px-5 py-5 flex flex-col gap-3">
-                  <p className="text-xs" style={{ color: MUTED }}>
+                <form onSubmit={handleSubmitVinRequest} className="flex flex-col gap-3 px-5 py-5">
+                  <p className="text-xs leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
                     Не знайшли деталь за артикулом? Залиште VIN-код автомобіля й опишіть, що
                     шукаєте — наш менеджер підбере деталь вручну і зв&apos;яжеться з вами.
                   </p>
@@ -1182,8 +1187,8 @@ export default function StorefrontHome() {
                     value={vinCode}
                     onChange={(e) => setVinCode(e.target.value.toUpperCase())}
                     placeholder="VIN-код, напр. WVWZZZ1JZXW000001"
-                    className="w-full px-3.5 py-2.5 text-sm font-mono outline-none placeholder:text-[#8A7F70]"
-                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: TEXT }}
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
+                    style={{ fontFamily: MONO_TECH, background: 'rgba(255,255,255,0.04)', border: `1px solid ${TECH_BORDER_2}`, color: TECH_INK }}
                   />
 
                   {/* Розшифровка VIN "на льоту" — без запиту на сервер
@@ -1193,8 +1198,8 @@ export default function StorefrontHome() {
                       менеджера */}
                   {vinDecoded.make && (
                     <div
-                      className="flex items-center justify-between gap-3 p-3 text-sm"
-                      style={{ background: SUCCESS_BG, color: SUCCESS_TEXT }}
+                      className="flex items-center justify-between gap-3 rounded-xl p-3 text-sm"
+                      style={{ fontFamily: SANS_TECH, background: TECH_GOOD_SOFT, color: TECH_GOOD, border: '1px solid rgba(52,211,153,0.25)' }}
                     >
                       <span>
                         Схоже, це <strong>{vinDecoded.make}</strong>
@@ -1209,8 +1214,8 @@ export default function StorefrontHome() {
                           runSearch(params, vinDecoded.make as string);
                           closeVinModal();
                         }}
-                        className="shrink-0 px-3 py-1.5 text-xs font-bold uppercase tracking-wide whitespace-nowrap"
-                        style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                        className="shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-shadow hover:shadow-glow-lg"
+                        style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }}
                       >
                         Показати запчастини
                       </button>
@@ -1222,8 +1227,8 @@ export default function StorefrontHome() {
                     value={vinPhone}
                     onChange={(e) => setVinPhone(e.target.value)}
                     placeholder="Номер телефону"
-                    className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
-                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: TEXT }}
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
+                    style={{ fontFamily: SANS_TECH, background: 'rgba(255,255,255,0.04)', border: `1px solid ${TECH_BORDER_2}`, color: TECH_INK }}
                   />
 
                   <textarea
@@ -1231,12 +1236,15 @@ export default function StorefrontHome() {
                     onChange={(e) => setVinDescription(e.target.value)}
                     placeholder="Що шукаєте? Наприклад: гальмівні колодки передні"
                     rows={3}
-                    className="w-full px-3.5 py-2.5 text-sm outline-none resize-none placeholder:text-[#8A7F70]"
-                    style={{ background: PANEL_SOFT, border: `1px solid ${BORDER}`, color: TEXT }}
+                    className="w-full resize-none rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
+                    style={{ fontFamily: SANS_TECH, background: 'rgba(255,255,255,0.04)', border: `1px solid ${TECH_BORDER_2}`, color: TECH_INK }}
                   />
 
                   {vinError && (
-                    <p className="text-xs p-2.5" style={{ background: DANGER_BG, color: DANGER_TEXT }}>
+                    <p
+                      className="rounded-lg p-2.5 text-xs"
+                      style={{ fontFamily: SANS_TECH, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}
+                    >
                       {vinError}
                     </p>
                   )}
@@ -1244,8 +1252,8 @@ export default function StorefrontHome() {
                   <button
                     type="submit"
                     disabled={vinSubmitting}
-                    className="w-full py-3 text-sm font-bold uppercase tracking-wide disabled:opacity-60"
-                    style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                    className="w-full rounded-xl py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50 disabled:shadow-none"
+                    style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
                   >
                     {vinSubmitting ? 'Надсилаємо...' : 'Надіслати заявку'}
                   </button>
