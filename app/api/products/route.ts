@@ -274,46 +274,70 @@ export async function GET(request: NextRequest) {
       // в тексті не розпізнано, поведінка запиту не змінюється взагалі
       const carRef = extractCarReference(expanded.leftoverRaw || search);
       if (carRef) {
-        const carRefAndParts: string[] = [];
-
         const detectedCategory = detectCategoryInText(search);
+        let categoryClauseSql: string | null = null;
         if (detectedCategory) {
           const categoryClause = buildCategoryWhereClause(detectedCategory, values.length + 1);
           values.push(...categoryClause.params);
-          carRefAndParts.push(`(${categoryClause.clause})`);
+          categoryClauseSql = `(${categoryClause.clause})`;
         }
 
-        values.push(carRef.makeDbValues);
-        const carRefOwnParts = [`UPPER(p.car_make) = ANY($${values.length}::text[])`];
-        values.push(carRef.makeDbValues);
-        const carRefTecdocParts = [`UPPER(tc2.make) = ANY($${values.length}::text[])`];
+        // Умова сумісності з авто — марка ЗАВЖДИ обов'язкова, модель і
+        // рік додаються, лише якщо includeModel/carRef.year передбачають
+        // це. Викликається ДВІЧІ нижче: спершу "точна" версія (з
+        // моделлю), потім, якщо підказка моделі є, ще й "м'яка" —
+        // без моделі, про причину див. коментар нижче
+        const buildCarCompatSql = (includeModel: boolean): string => {
+          values.push(carRef!.makeDbValues);
+          const ownParts = [`UPPER(p.car_make) = ANY($${values.length}::text[])`];
+          values.push(carRef!.makeDbValues);
+          const tecdocParts = [`UPPER(tc2.make) = ANY($${values.length}::text[])`];
 
+          if (includeModel && carRef!.modelHint) {
+            values.push(`%${carRef!.modelHint}%`);
+            ownParts.push(`p.car_model ILIKE $${values.length}`);
+            values.push(`%${carRef!.modelHint}%`);
+            tecdocParts.push(`tc2.model ILIKE $${values.length}`);
+          }
+
+          if (carRef!.year) {
+            values.push(`%${carRef!.year}%`);
+            ownParts.push(`p.car_year ILIKE $${values.length}`);
+            values.push(carRef!.year);
+            tecdocParts.push(
+              `$${values.length}::int BETWEEN COALESCE(tc2.year_from, 1900) AND COALESCE(tc2.year_to, 2100)`
+            );
+          }
+
+          return `(
+            (${ownParts.join(' AND ')})
+            OR EXISTS (
+              SELECT 1 FROM tecdoc_compatibility tc2
+              WHERE tc2.brand = p.brand AND tc2.article = p.article
+              AND ${tecdocParts.join(' AND ')}
+            )
+          )`;
+        };
+
+        const preciseParts: string[] = [];
+        if (categoryClauseSql) preciseParts.push(categoryClauseSql);
+        preciseParts.push(buildCarCompatSql(true));
+        orParts.push(`(${preciseParts.join('\n            AND ')})`);
+
+        // М'який запасний варіант: підказка моделі — це слово так, як
+        // його написав покупець кирилицею ("камрі", "пассат", "х5"), а
+        // в базі модель зазвичай записана латиницею ("Camry", "Passat",
+        // "X5") — підрядок просто не збіжиться. Замість "нічого не
+        // знайдено" в такому випадку показуємо деталі під розпізнану
+        // марку (і категорію, якщо вона теж впізнана) БЕЗ фільтра по
+        // моделі — це те саме, що обрати в "Підбір за автомобілем"
+        // тільки марку, без моделі
         if (carRef.modelHint) {
-          values.push(`%${carRef.modelHint}%`);
-          carRefOwnParts.push(`p.car_model ILIKE $${values.length}`);
-          values.push(`%${carRef.modelHint}%`);
-          carRefTecdocParts.push(`tc2.model ILIKE $${values.length}`);
+          const fallbackParts: string[] = [];
+          if (categoryClauseSql) fallbackParts.push(categoryClauseSql);
+          fallbackParts.push(buildCarCompatSql(false));
+          orParts.push(`(${fallbackParts.join('\n            AND ')})`);
         }
-
-        if (carRef.year) {
-          values.push(`%${carRef.year}%`);
-          carRefOwnParts.push(`p.car_year ILIKE $${values.length}`);
-          values.push(carRef.year);
-          carRefTecdocParts.push(
-            `$${values.length}::int BETWEEN COALESCE(tc2.year_from, 1900) AND COALESCE(tc2.year_to, 2100)`
-          );
-        }
-
-        carRefAndParts.push(`(
-          (${carRefOwnParts.join(' AND ')})
-          OR EXISTS (
-            SELECT 1 FROM tecdoc_compatibility tc2
-            WHERE tc2.brand = p.brand AND tc2.article = p.article
-            AND ${carRefTecdocParts.join(' AND ')}
-          )
-        )`);
-
-        orParts.push(`(${carRefAndParts.join('\n            AND ')})`);
       }
 
       conditions.push(`(${orParts.join('\n          OR ')})`);
