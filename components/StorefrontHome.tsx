@@ -49,7 +49,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock } from 'lucide-react';
+import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock, Warehouse, Lock } from 'lucide-react';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { DEPARTMENTS } from '@/lib/departments';
@@ -606,6 +606,19 @@ export default function StorefrontHome() {
   const [city, setCity] = useState('');
   const [novaPoshtaAddress, setNovaPoshtaAddress] = useState('');
   const [comment, setComment] = useState('');
+
+  // Спосіб доставки — ЛИШЕ перемикає підписи/плейсхолдери полів
+  // city/novaPoshtaAddress нижче (обидва варіанти технічно пишуть в ті
+  // самі поля — окремого стовпця "спосіб доставки" в базі поки немає).
+  // Чесний UI-нюанс, а не нова бізнес-логіка
+  const [deliveryMethod, setDeliveryMethod] = useState<'branch' | 'courier'>('branch');
+
+  // VIN-захист замовлення — Smart UX з ТЗ: чекбокс + поле VIN. Окремого
+  // стовпця в базі теж немає, тому VIN просто дописується в comment
+  // перед відправкою (див. handleSubmitOrder) — менеджер побачить його
+  // разом з рештою коментаря до замовлення
+  const [vinProtect, setVinProtect] = useState(false);
+  const [vinProtectCode, setVinProtectCode] = useState('');
   // touched-флаги — чтобы не показывать "Введіть ім'я" сразу при
   // открытии корзины, а только после первой попытки отправить форму
   // или после того, как покупатель уже начал и затем стёр поле
@@ -755,6 +768,14 @@ export default function StorefrontHome() {
       }))
     );
 
+    // VIN-захист — окремого поля в базі немає, тому дописуємо VIN
+    // прямо в comment перед відправкою: менеджер побачить прохання
+    // звірити сумісність разом з рештою коментаря до замовлення
+    const fullComment =
+      vinProtect && vinProtectCode.trim()
+        ? `VIN для перевірки сумісності: ${vinProtectCode.trim()}. ${comment.trim()}`.trim()
+        : comment.trim();
+
     try {
       const response = await fetch('/api/orders/create', {
         method: 'POST',
@@ -765,7 +786,7 @@ export default function StorefrontHome() {
           customerPhone: customerPhone.trim(),
           city: city.trim(),
           novaPoshtaAddress: novaPoshtaAddress.trim(),
-          comment: comment.trim(),
+          comment: fullComment,
           // Артикул/бренд/название/цену бэкенд перечитывает из базы
           // сам по id товара (см. комментарий в app/api/orders/create/
           // route.ts) — но всё равно передаём их и здесь, на случай
@@ -820,6 +841,8 @@ export default function StorefrontHome() {
       setPhoneTouched(false);
       setCityTouched(false);
       setAddressTouched(false);
+      setVinProtect(false);
+      setVinProtectCode('');
     } catch (error) {
       setOrderError(error instanceof Error ? error.message : 'Помилка мережі під час оформлення замовлення');
       setOrderStatus('idle');
@@ -1112,6 +1135,9 @@ export default function StorefrontHome() {
             city={city}
             novaPoshtaAddress={novaPoshtaAddress}
             comment={comment}
+            deliveryMethod={deliveryMethod}
+            vinProtect={vinProtect}
+            vinProtectCode={vinProtectCode}
             nameError={nameTouched ? nameError : null}
             surnameError={surnameTouched ? surnameError : null}
             phoneError={phoneTouched ? phoneError : null}
@@ -1123,6 +1149,9 @@ export default function StorefrontHome() {
             onCityChange={setCity}
             onAddressChange={setNovaPoshtaAddress}
             onCommentChange={setComment}
+            onDeliveryMethodChange={setDeliveryMethod}
+            onVinProtectChange={setVinProtect}
+            onVinProtectCodeChange={setVinProtectCode}
             onNameBlur={() => setNameTouched(true)}
             onSurnameBlur={() => setSurnameTouched(true)}
             onPhoneBlur={() => setPhoneTouched(true)}
@@ -2527,6 +2556,9 @@ interface CartDrawerProps {
   city: string;
   novaPoshtaAddress: string;
   comment: string;
+  deliveryMethod: 'branch' | 'courier';
+  vinProtect: boolean;
+  vinProtectCode: string;
   nameError: string | null;
   surnameError: string | null;
   phoneError: string | null;
@@ -2538,6 +2570,9 @@ interface CartDrawerProps {
   onCityChange: (value: string) => void;
   onAddressChange: (value: string) => void;
   onCommentChange: (value: string) => void;
+  onDeliveryMethodChange: (value: 'branch' | 'courier') => void;
+  onVinProtectChange: (value: boolean) => void;
+  onVinProtectCodeChange: (value: string) => void;
   onNameBlur: () => void;
   onSurnameBlur: () => void;
   onPhoneBlur: () => void;
@@ -2554,11 +2589,20 @@ interface CartDrawerProps {
 // чтобы не повторять один и тот же объект стилей пять раз подряд
 function fieldStyle(hasError: boolean): React.CSSProperties {
   return {
-    background: PANEL_SOFT,
-    border: `1px solid ${hasError ? DANGER_TEXT : BORDER}`,
-    color: TEXT,
+    fontFamily: SANS_TECH,
+    background: 'rgba(255,255,255,0.04)',
+    border: `1px solid ${hasError ? 'rgba(239,68,68,0.55)' : TECH_BORDER_2}`,
+    color: TECH_INK,
   };
 }
+
+// Підписи полів "Місто"/"Адреса" залежать від обраного способу
+// доставки — сам стовпець у базі один (novaPoshtaAddress), тому це
+// суто текстова зміна, без нової бізнес-логіки
+const DELIVERY_ADDRESS_LABEL: Record<'branch' | 'courier', { label: string; placeholder: string }> = {
+  branch: { label: 'Відділення / поштомат Нової Пошти', placeholder: 'Напр. Відділення №42, вул. Хрещатик 22' },
+  courier: { label: "Адреса доставки кур'єром", placeholder: 'Вулиця, будинок, квартира' },
+};
 
 function CartDrawer({
   cart,
@@ -2573,6 +2617,9 @@ function CartDrawer({
   city,
   novaPoshtaAddress,
   comment,
+  deliveryMethod,
+  vinProtect,
+  vinProtectCode,
   nameError,
   surnameError,
   phoneError,
@@ -2584,6 +2631,9 @@ function CartDrawer({
   onCityChange,
   onAddressChange,
   onCommentChange,
+  onDeliveryMethodChange,
+  onVinProtectChange,
+  onVinProtectCodeChange,
   onNameBlur,
   onSurnameBlur,
   onPhoneBlur,
@@ -2595,26 +2645,27 @@ function CartDrawer({
   onSubmit,
   onClose,
 }: CartDrawerProps) {
+  const addressCopy = DELIVERY_ADDRESS_LABEL[deliveryMethod];
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Затемнение фона — клик по нему закрывает панель, так же как и крестик */}
-      <div className="absolute inset-0" style={{ background: 'rgba(21, 16, 14, 0.72)' }} onClick={onClose} />
+      {/* Затемнення фону — клік по ньому закриває панель, так само як і хрестик */}
+      <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(11,15,23,0.78)' }} onClick={onClose} />
 
-      <div className="relative w-full max-w-md h-full flex flex-col" style={{ background: PANEL, borderLeft: `1px solid ${BORDER}` }}>
-        {/* Шапка панели */}
-        <div
-          className="flex items-center justify-between px-5 py-4 shrink-0"
-          style={{ borderBottom: `1px solid ${BORDER}` }}
-        >
-          <h2 className="text-lg" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
+      <div
+        className="relative flex h-full w-full max-w-md flex-col"
+        style={{ background: TECH_SURFACE_2, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderLeft: `1px solid ${TECH_BORDER_2}` }}
+      >
+        {/* Шапка панелі */}
+        <div className="flex shrink-0 items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${TECH_BORDER}` }}>
+          <h2 style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 17, color: '#fff' }}>
             Кошик{cartCount > 0 ? ` (${cartCount})` : ''}
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Закрити кошик"
-            className="p-1.5"
-            style={{ color: MUTED }}
+            className="rounded-lg p-1.5 transition-colors hover:bg-white/5"
+            style={{ color: TECH_FAINT }}
           >
             <CloseIcon />
           </button>
@@ -2623,12 +2674,14 @@ function CartDrawer({
         {orderStatus === 'success' ? (
           <OrderSuccessScreen orderId={createdOrderId} onClose={onClose} />
         ) : cart.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
-            <div style={{ color: BORDER }}>
+          <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
+            <div style={{ color: TECH_BORDER_2 }}>
               <CartIcon />
             </div>
-            <h3 className="text-base font-semibold mt-4 mb-1.5">Кошик порожній</h3>
-            <p className="text-sm" style={{ color: FAINT }}>
+            <h3 className="mb-1.5 mt-4 text-base font-semibold" style={{ fontFamily: DISPLAY_FONT_TECH, color: '#fff' }}>
+              Кошик порожній
+            </h3>
+            <p className="text-sm" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
               Знайдіть потрібну деталь за артикулом і додайте її сюди.
             </p>
           </div>
@@ -2640,9 +2693,9 @@ function CartDrawer({
           // высоту (flex-1) и делится на два блока: прокручиваемое тело
           // (min-h-0 обязателен — иначе flex-контейнер не даст дочернему
           // overflow-y-auto ужаться и скролл не заработает) и прибитый
-          // снизу футер с итогом и кнопкой
-          <form onSubmit={onSubmit} className="flex-1 flex flex-col min-h-0">
-            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3 min-h-0">
+          // снизу футер з підсумком і кнопкою
+          <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
               {cart.map((item) => (
                 <CartRow
                   key={item.id}
@@ -2653,9 +2706,9 @@ function CartDrawer({
                 />
               ))}
 
-              <div className="pt-3 mt-1 flex flex-col gap-3" style={{ borderTop: `1px solid ${BORDER}` }}>
-                <h3 className="text-sm font-semibold uppercase tracking-wide" style={{ fontFamily: LABEL_FONT }}>
-                  Дані для доставки
+              <div className="mt-1 flex flex-col gap-3 pt-3" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                  Контактна інформація
                 </h3>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -2666,11 +2719,11 @@ function CartDrawer({
                       onChange={(e) => onNameChange(e.target.value)}
                       onBlur={onNameBlur}
                       placeholder="Ім'я"
-                      className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
+                      className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
                       style={fieldStyle(!!nameError)}
                     />
                     {nameError && (
-                      <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
+                      <p className="mt-1 text-xs" style={{ color: '#FCA5A5' }}>
                         {nameError}
                       </p>
                     )}
@@ -2683,11 +2736,11 @@ function CartDrawer({
                       onChange={(e) => onSurnameChange(e.target.value)}
                       onBlur={onSurnameBlur}
                       placeholder="Прізвище"
-                      className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
+                      className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
                       style={fieldStyle(!!surnameError)}
                     />
                     {surnameError && (
-                      <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
+                      <p className="mt-1 text-xs" style={{ color: '#FCA5A5' }}>
                         {surnameError}
                       </p>
                     )}
@@ -2700,49 +2753,97 @@ function CartDrawer({
                     value={customerPhone}
                     onChange={(e) => onPhoneChange(e.target.value)}
                     onBlur={onPhoneBlur}
-                    placeholder="Номер телефону"
-                    className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
-                    style={fieldStyle(!!phoneError)}
+                    placeholder="+380 __ ___ __ __"
+                    className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
+                    style={{ ...fieldStyle(!!phoneError), fontFamily: MONO_TECH }}
                   />
                   {phoneError && (
-                    <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
+                    <p className="mt-1 text-xs" style={{ color: '#FCA5A5' }}>
                       {phoneError}
                     </p>
                   )}
                 </div>
+              </div>
 
-                <div>
-                  <input
-                    type="text"
-                    value={city}
-                    onChange={(e) => onCityChange(e.target.value)}
-                    onBlur={onCityBlur}
-                    placeholder="Місто"
-                    className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
-                    style={fieldStyle(!!cityError)}
-                  />
-                  {cityError && (
-                    <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
-                      {cityError}
-                    </p>
-                  )}
+              {/* ---- Спосіб доставки — сегментований вибір, що лише
+                  підмінює підпис/плейсхолдер поля адреси нижче ---- */}
+              <div className="mt-1 flex flex-col gap-3 pt-3" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                  Спосіб доставки
+                </h3>
+
+                <div className="relative grid grid-cols-2 gap-1.5 rounded-xl p-1" style={{ border: `1px solid ${TECH_BORDER}`, background: 'rgba(255,255,255,0.03)' }}>
+                  <button
+                    type="button"
+                    onClick={() => onDeliveryMethodChange('branch')}
+                    className="relative z-10 flex flex-col items-center gap-1.5 rounded-lg px-2 py-2.5 text-center transition-colors"
+                    style={{ fontFamily: SANS_TECH, color: deliveryMethod === 'branch' ? '#fff' : TECH_MUTED }}
+                  >
+                    {deliveryMethod === 'branch' && (
+                      <motion.span
+                        layoutId="cart-delivery-thumb"
+                        className="absolute inset-0 -z-10 rounded-lg"
+                        style={{ background: TECH_ACCENT, boxShadow: TECH_GLOW }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                      />
+                    )}
+                    <Warehouse className="h-[22px] w-[22px]" />
+                    <span className="text-[11.5px] font-semibold leading-tight">Відділення / поштомат</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDeliveryMethodChange('courier')}
+                    className="relative z-10 flex flex-col items-center gap-1.5 rounded-lg px-2 py-2.5 text-center transition-colors"
+                    style={{ fontFamily: SANS_TECH, color: deliveryMethod === 'courier' ? '#fff' : TECH_MUTED }}
+                  >
+                    {deliveryMethod === 'courier' && (
+                      <motion.span
+                        layoutId="cart-delivery-thumb"
+                        className="absolute inset-0 -z-10 rounded-lg"
+                        style={{ background: TECH_ACCENT, boxShadow: TECH_GLOW }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                      />
+                    )}
+                    <TruckIcon />
+                    <span className="text-[11.5px] font-semibold leading-tight">Кур&apos;єр Нової Пошти</span>
+                  </button>
                 </div>
 
-                <div>
-                  <input
-                    type="text"
-                    value={novaPoshtaAddress}
-                    onChange={(e) => onAddressChange(e.target.value)}
-                    onBlur={onAddressBlur}
-                    placeholder="Адреса відділення Нової Пошти"
-                    className="w-full px-3.5 py-2.5 text-sm outline-none placeholder:text-[#8A7F70]"
-                    style={fieldStyle(!!addressError)}
-                  />
-                  {addressError && (
-                    <p className="text-xs mt-1" style={{ color: DANGER_TEXT }}>
-                      {addressError}
-                    </p>
-                  )}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => onCityChange(e.target.value)}
+                      onBlur={onCityBlur}
+                      placeholder="Місто"
+                      className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
+                      style={fieldStyle(!!cityError)}
+                    />
+                    {cityError && (
+                      <p className="mt-1 text-xs" style={{ color: '#FCA5A5' }}>
+                        {cityError}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <input
+                      type="text"
+                      value={novaPoshtaAddress}
+                      onChange={(e) => onAddressChange(e.target.value)}
+                      onBlur={onAddressBlur}
+                      placeholder={addressCopy.placeholder}
+                      title={addressCopy.label}
+                      className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
+                      style={fieldStyle(!!addressError)}
+                    />
+                    {addressError && (
+                      <p className="mt-1 text-xs" style={{ color: '#FCA5A5' }}>
+                        {addressError}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -2753,23 +2854,128 @@ function CartDrawer({
                     onChange={(e) => onCommentChange(e.target.value)}
                     placeholder="Коментар до замовлення (необов'язково)"
                     rows={2}
-                    className="w-full px-3.5 py-2.5 text-sm outline-none resize-none placeholder:text-[#8A7F70]"
+                    className="w-full resize-none rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
                     style={fieldStyle(false)}
                   />
                 </div>
               </div>
+
+              {/* ---- Спосіб оплати — реально працює лише післяплата,
+                  картку/IBAN чесно позначаємо "Скоро", а не вдаємо, що
+                  вони вже приймають гроші ---- */}
+              <div className="mt-1 flex flex-col gap-3 pt-3" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                  Спосіб оплати
+                </h3>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div
+                    className="flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center"
+                    style={{ border: '1px solid rgba(59,130,246,0.5)', background: 'rgba(59,130,246,0.1)', boxShadow: TECH_GLOW }}
+                  >
+                    <Banknote className="h-[18px] w-[18px]" style={{ color: TECH_ACCENT_BRIGHT }} />
+                    <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: '#fff' }}>
+                      Післяплата
+                    </span>
+                  </div>
+                  <div className="relative flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center opacity-45" style={{ border: `1px solid ${TECH_BORDER}` }}>
+                    <span
+                      className="absolute -top-1.5 right-1 rounded-full px-1.5 py-0.5 text-[8px] font-bold"
+                      style={{ fontFamily: SANS_TECH, color: TECH_HEAT, background: TECH_HEAT_SOFT }}
+                    >
+                      СКОРО
+                    </span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{ color: TECH_FAINT }}>
+                      <rect x="2" y="5" width="20" height="15" rx="2.5" />
+                      <path d="M2 10h20" />
+                    </svg>
+                    <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                      Картка
+                    </span>
+                  </div>
+                  <div className="relative flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center opacity-45" style={{ border: `1px solid ${TECH_BORDER}` }}>
+                    <span
+                      className="absolute -top-1.5 right-1 rounded-full px-1.5 py-0.5 text-[8px] font-bold"
+                      style={{ fontFamily: SANS_TECH, color: TECH_HEAT, background: TECH_HEAT_SOFT }}
+                    >
+                      СКОРО
+                    </span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{ color: TECH_FAINT }}>
+                      <path d="M3 21V9l9-6 9 6v12" />
+                      <path d="M9 21v-8h6v8" />
+                    </svg>
+                    <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                      IBAN
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ---- VIN-захист замовлення ---- */}
+              <div className="mt-1 pt-3" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+                <label
+                  className="flex cursor-pointer items-start gap-3 rounded-xl p-3"
+                  style={{ background: 'rgba(59,130,246,0.06)', border: '1px solid rgba(59,130,246,0.2)' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={vinProtect}
+                    onChange={(e) => onVinProtectChange(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <span
+                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md transition-colors"
+                    style={{ background: vinProtect ? TECH_ACCENT : 'transparent', border: `1.5px solid ${vinProtect ? TECH_ACCENT : TECH_BORDER_2}` }}
+                  >
+                    {vinProtect && <Check className="h-3.5 w-3.5" style={{ color: '#fff' }} />}
+                  </span>
+                  <span>
+                    <strong className="block text-[13px]" style={{ fontFamily: SANS_TECH, fontWeight: 600, color: TECH_INK }}>
+                      Безкоштовно перевірити сумісність за VIN-кодом
+                    </strong>
+                    <span className="text-xs leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                      Наш інженер звірить артикули з вашим автомобілем перед відправкою
+                    </span>
+                  </span>
+                </label>
+
+                <AnimatePresence initial={false}>
+                  {vinProtect && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+                      style={{ overflow: 'hidden' }}
+                    >
+                      <input
+                        type="text"
+                        value={vinProtectCode}
+                        onChange={(e) => onVinProtectCodeChange(e.target.value.toUpperCase())}
+                        placeholder="VIN-код, напр. WVWZZZ1JZXW000001"
+                        className="mt-2.5 w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
+                        style={{ ...fieldStyle(false), fontFamily: MONO_TECH }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
-            <div className="px-5 py-4 flex flex-col gap-3 shrink-0" style={{ borderTop: `1px solid ${BORDER}` }}>
-              <div className="flex items-center justify-between text-sm font-semibold">
-                <span className="uppercase tracking-wide" style={{ fontFamily: LABEL_FONT }}>
+            <div className="flex shrink-0 flex-col gap-3 px-5 py-4" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
                   Разом
                 </span>
-                <span style={{ fontFamily: DISPLAY_FONT, fontSize: 20 }}>{formatMoney(cartTotal)} ГРН</span>
+                <span style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 21, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatMoney(cartTotal)} <span style={{ fontSize: 13, color: TECH_FAINT, fontFamily: SANS_TECH }}>ГРН</span>
+                </span>
               </div>
 
               {orderError && (
-                <p className="text-xs p-2.5" style={{ background: DANGER_BG, color: DANGER_TEXT }}>
+                <p
+                  className="rounded-lg p-2.5 text-xs"
+                  style={{ fontFamily: SANS_TECH, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}
+                >
                   {orderError}
                 </p>
               )}
@@ -2777,11 +2983,22 @@ function CartDrawer({
               <button
                 type="submit"
                 disabled={orderStatus === 'submitting'}
-                className="w-full py-3 text-sm font-bold uppercase tracking-wide disabled:opacity-60"
-                style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+                className="w-full rounded-xl py-3.5 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50 disabled:shadow-none"
+                style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
               >
                 {orderStatus === 'submitting' ? 'Відправка...' : 'Підтвердити замовлення'}
               </button>
+
+              <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10.5px]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                <span className="inline-flex items-center gap-1.5">
+                  <ShieldCheck className="h-3 w-3" style={{ color: TECH_GOOD }} />
+                  Гарантія сумісності
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <Lock className="h-3 w-3" style={{ color: TECH_GOOD }} />
+                  Захист даних
+                </span>
+              </div>
             </div>
           </form>
         )}
@@ -2806,26 +3023,28 @@ function CartRow({
   const atStockLimit = item.quantity >= item.stock;
 
   return (
-    <div className="flex items-start gap-3 pb-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium leading-snug">{item.name}</p>
-        <p className="text-xs mt-0.5 font-mono" style={{ color: YELLOW }}>
+    <div className="flex items-start gap-3 pb-3" style={{ borderBottom: `1px solid ${TECH_BORDER}` }}>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium leading-snug" style={{ fontFamily: SANS_TECH, color: TECH_INK }}>
+          {item.name}
+        </p>
+        <p className="mt-0.5 text-xs" style={{ fontFamily: MONO_TECH, color: TECH_ACCENT_BRIGHT }}>
           {item.article}
           {item.brand ? ` · ${item.brand}` : ''}
         </p>
 
-        <div className="flex items-center gap-2 mt-2.5">
+        <div className="mt-2.5 flex items-center gap-2">
           <button
             type="button"
             onClick={onDecrement}
             disabled={item.quantity <= 1}
             aria-label="Зменшити кількість"
-            className="w-6 h-6 flex items-center justify-center text-sm font-semibold disabled:opacity-30"
-            style={{ background: PANEL_SOFT, color: TEXT }}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-sm font-semibold disabled:opacity-30"
+            style={{ background: 'rgba(255,255,255,0.06)', color: TECH_INK }}
           >
             −
           </button>
-          <span className="text-sm w-5 text-center" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <span className="w-5 text-center text-sm" style={{ fontFamily: MONO_TECH, color: TECH_INK, fontVariantNumeric: 'tabular-nums' }}>
             {item.quantity}
           </span>
           <button
@@ -2833,27 +3052,27 @@ function CartRow({
             onClick={onIncrement}
             disabled={atStockLimit}
             aria-label="Збільшити кількість"
-            className="w-6 h-6 flex items-center justify-center text-sm font-semibold disabled:opacity-30"
-            style={{ background: PANEL_SOFT, color: TEXT }}
+            className="flex h-6 w-6 items-center justify-center rounded-md text-sm font-semibold disabled:opacity-30"
+            style={{ background: 'rgba(255,255,255,0.06)', color: TECH_INK }}
           >
             +
           </button>
-          <span className="text-xs ml-1" style={{ color: FAINT }}>
+          <span className="ml-1 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
             × {formatMoney(item.price)} грн
           </span>
         </div>
       </div>
 
-      <div className="flex flex-col items-end gap-2 shrink-0">
-        <span className="text-sm font-semibold" style={{ fontVariantNumeric: 'tabular-nums' }}>
+      <div className="flex shrink-0 flex-col items-end gap-2">
+        <span style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 14, color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
           {formatMoney(item.price * item.quantity)} грн
         </span>
         <button
           type="button"
           onClick={onRemove}
           aria-label="Видалити товар з кошика"
-          className="p-1"
-          style={{ color: DANGER_TEXT }}
+          className="rounded-md p-1 transition-colors hover:bg-white/5"
+          style={{ color: TECH_FAINT }}
         >
           <TrashIcon />
         </button>
@@ -2871,28 +3090,30 @@ function CartRow({
 // клиент
 function OrderSuccessScreen({ orderId, onClose }: { orderId: string | null; onClose: () => void }) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center px-8">
+    <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
       <div
-        className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
-        style={{ background: SUCCESS_BG, color: SUCCESS_TEXT }}
+        className="mb-5 flex h-16 w-16 items-center justify-center rounded-full"
+        style={{ background: TECH_GOOD_SOFT, color: TECH_GOOD, boxShadow: '0 0 0 1px rgba(52,211,153,0.25), 0 0 24px -4px rgba(52,211,153,0.6)' }}
       >
         <CheckIcon />
       </div>
-      <h3 className="text-lg font-semibold mb-2">Дякуємо за замовлення!</h3>
-      <p className="text-sm mb-1" style={{ color: MUTED }}>
+      <h3 className="mb-2 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT_TECH, color: '#fff' }}>
+        Дякуємо за замовлення!
+      </h3>
+      <p className="mb-1 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
         Номер вашого замовлення:{' '}
-        <span className="font-semibold" style={{ color: TEXT }}>
+        <span className="font-semibold" style={{ fontFamily: MONO_TECH, color: TECH_INK }}>
           №{orderId ? orderId.slice(0, 8) : ''}
         </span>
       </p>
-      <p className="text-sm mb-6" style={{ color: MUTED }}>
+      <p className="mb-6 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
         Ми зв&apos;яжемося з вами найближчим часом.
       </p>
       <button
         type="button"
         onClick={onClose}
-        className="px-6 py-3 text-sm font-bold uppercase tracking-wide"
-        style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
+        className="rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
+        style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
       >
         Продовжити покупки
       </button>
