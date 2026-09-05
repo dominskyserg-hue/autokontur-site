@@ -2648,13 +2648,24 @@ function CartDrawer({
 }: CartDrawerProps) {
   const addressCopy = DELIVERY_ADDRESS_LABEL[deliveryMethod];
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Затемнення фону — клік по ньому закриває панель, так само як і хрестик */}
       <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(11,15,23,0.78)' }} onClick={onClose} />
 
+      {/* Компактна плаваюча картка (як VIN-модалка/QuickOrderModal), а
+          НЕ бічна панель на всю висоту екрана — на мобільних вона
+          раніше торкалась усіх чотирьох країв і виглядала як
+          повноекранна сторінка, а не як кошик поверх сайту */}
       <div
-        className="relative flex h-full w-full max-w-md flex-col"
-        style={{ background: TECH_SURFACE_2, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', borderLeft: `1px solid ${TECH_BORDER_2}` }}
+        className="relative flex w-full max-w-md flex-col rounded-2xl"
+        style={{
+          maxHeight: 'min(640px, 90vh)',
+          background: TECH_SURFACE_2,
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          border: `1px solid ${TECH_BORDER_2}`,
+          boxShadow: TECH_GLOW_LG,
+        }}
       >
         {/* Шапка панелі */}
         <div className="flex shrink-0 items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${TECH_BORDER}` }}>
