@@ -14,6 +14,7 @@ import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@
 import { SITE_URL } from '@/lib/siteConfig';
 import type { CrossRefItem, ProductPageData, TecdocCompatibilityItem, TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
+import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
 
 export const BG = '#F5F6F9';
@@ -123,16 +124,27 @@ export default function ProductDetailContent({
             </p>
           )}
 
-          <AddToCartButton
-            product={{
-              id: product.id,
-              article: product.article,
-              brand: product.brand,
-              name: product.name,
-              retailPrice: product.retailPrice,
-              stock: product.stock,
-            }}
-          />
+          <div className="flex flex-wrap items-center gap-3">
+            <AddToCartButton
+              product={{
+                id: product.id,
+                article: product.article,
+                brand: product.brand,
+                name: product.name,
+                retailPrice: product.retailPrice,
+                stock: product.stock,
+              }}
+            />
+            <QuickOrderModal
+              product={{
+                id: product.id,
+                article: product.article,
+                brand: product.brand,
+                name: product.name,
+                retailPrice: product.retailPrice,
+              }}
+            />
+          </div>
         </div>
       </div>
 
