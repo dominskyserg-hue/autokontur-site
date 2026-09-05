@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
-import { Space_Grotesk, Inter } from 'next/font/google';
+import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 
 // Друга пара шрифтів — ТІЛЬКИ для нового розділу "Tech Premium"
@@ -21,6 +21,17 @@ const interTech = Inter({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
   variable: '--font-inter-tech',
+  display: 'swap',
+});
+
+// Моноширинний шрифт — ТІЛЬКИ для артикулів/OEM-кодів у блоці
+// результатів пошуку (Tech Premium). У каталозі запчастин код має
+// значення символ-у-символ, тож моноширинний накреслення читається
+// й копіюється надійніше за звичайний текстовий шрифт
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-jetbrains-mono',
   display: 'swap',
 });
 
@@ -80,7 +91,7 @@ export default function RootLayout({
   modal: React.ReactNode;
 }>) {
   return (
-    <html lang="uk" className={`${spaceGrotesk.variable} ${interTech.variable}`}>
+    <html lang="uk" className={`${spaceGrotesk.variable} ${interTech.variable} ${jetbrainsMono.variable}`}>
       {/* Шрифти фірмового стилю "Wasteland" вітрини (Bebas Neue/Rajdhani/Barlow) —
           підключені глобально, але реально використовуються лише в
           components/StorefrontHome.tsx; на адмін-панель (/admin) не впливають,

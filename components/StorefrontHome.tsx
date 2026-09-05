@@ -49,7 +49,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileSearch, ArrowRight, ShieldCheck } from 'lucide-react';
+import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX } from 'lucide-react';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { DEPARTMENTS } from '@/lib/departments';
@@ -170,12 +170,14 @@ const HEADER_TEXT = 'rgba(255,255,255,0.92)';
 const HEADER_MUTED = 'rgba(255,255,255,0.55)';
 const HEADER_BORDER = 'rgba(255,255,255,0.18)';
 
-// ---- "Tech Premium" — ЛИШЕ шапка + hero (затверджений концепт,
-// див. Artifact "Tech Premium Redesign"). Решта сторінки (переваги,
-// результати пошуку, футер) свідомо лишається на старій світлій
-// палітрі вище — редизайн цих екранів окремим кроком, не зараз ----
+// ---- "Tech Premium" — шапка + hero + результати пошуку (затверджені
+// концепти, див. Artifact "Tech Premium Redesign" та "Search Results
+// Console"). Решта сторінки (переваги, розділи, футер) свідомо
+// лишається на старій світлій палітрі вище — редизайн цих екранів
+// окремим кроком, не зараз ----
 const TECH_BG = '#0B0F17';
 const TECH_SURFACE = 'rgba(20,27,41,0.6)';
+const TECH_SURFACE_2 = '#1B2436';
 const TECH_BORDER = 'rgba(255,255,255,0.08)';
 const TECH_BORDER_2 = 'rgba(255,255,255,0.14)';
 const TECH_ACCENT = '#3B82F6';
@@ -188,6 +190,19 @@ const TECH_GLOW = '0 0 0 1px rgba(59,130,246,0.4), 0 0 24px 2px rgba(59,130,246,
 const TECH_GLOW_LG = '0 0 0 1px rgba(59,130,246,0.5), 0 0 60px 8px rgba(59,130,246,0.28)';
 const DISPLAY_FONT_TECH = 'var(--font-space-grotesk), "Space Grotesk", sans-serif';
 const SANS_TECH = 'var(--font-inter-tech), Inter, sans-serif';
+// Моноширинний — лише для артикулів/OEM-кодів у таблиці/сітці
+// результатів: код читається символ-у-символ, звичайний шрифт тут
+// плутає (наприклад O/0 чи I/1)
+const MONO_TECH = 'var(--font-jetbrains-mono), "JetBrains Mono", ui-monospace, monospace';
+
+// ---- статуси наявності товару в результатах пошуку. TECH_HEAT —
+// той самий колір, що вже закладений у tailwind.config.ts (там він
+// поки що ніде не використовувався) — тут він нарешті отримує
+// смислове навантаження: "під замовлення"
+const TECH_GOOD = '#34D399';
+const TECH_GOOD_SOFT = 'rgba(52,211,153,0.14)';
+const TECH_HEAT = '#FF6B00';
+const TECH_HEAT_SOFT = 'rgba(255,107,0,0.14)';
 
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const LABEL_FONT = "'Rajdhani', sans-serif";
@@ -283,6 +298,27 @@ export default function StorefrontHome() {
   // Запам'ятовуємо вибір у localStorage, щоб покупець не перемикав
   // його заново при кожному новому пошуку чи візиті на сайт
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+
+  // ID товару, чий артикул щойно скопійовано в буфер обміну — керує
+  // короткою підказкою "Скопійовано" біля коду в таблиці результатів.
+  // Автоматично гасне через 1.4с у copyArticle() нижче
+  const [copiedProductId, setCopiedProductId] = useState<string | null>(null);
+  const copyArticle = useCallback((product: Product) => {
+    // navigator.clipboard.writeText() повертає Promise — вона може
+    // відхилитися асинхронно (немає дозволу, недоступний контекст),
+    // тому звичайний try/catch її не ловить. Підказку "Скопійовано"
+    // показуємо лише при реальному успіху — інакше вона обманювала б
+    // покупця, що код уже в буфері, хоча насправді копіювання не сталось
+    navigator.clipboard?.writeText(product.article).then(
+      () => {
+        setCopiedProductId(product.id);
+        window.setTimeout(() => setCopiedProductId((current) => (current === product.id ? null : current)), 1400);
+      },
+      () => {
+        // дозволу на буфер обміну немає — мовчки нічого не показуємо
+      }
+    );
+  }, []);
 
   // ---- фільтри результатів пошуку (наявність / бренд / ціна) ----
   // На відміну від самого пошуку (запит до бази), фільтри звужують
@@ -1534,435 +1570,581 @@ export default function StorefrontHome() {
           </div>
         </section>
 
-        {/* ==================== РЕЗУЛЬТАТЫ ПОИСКА ==================== */}
+        {/* ==================== РЕЗУЛЬТАТИ ПОШУКУ (Tech Premium) ==================== */}
+        {/* Затверджений концепт — Artifact "Search Results Console":
+            та сама темна скляна панель, що і в hero, плюс моноширинний
+            шрифт для артикулів (MONO_TECH) і два статусні токени
+            TECH_GOOD/TECH_HEAT. Логіка (фільтри, сортування, кошик,
+            перемикач вигляду) — та сама, змінена лише розмітка/стилі */}
         {hasSearched && (
-          <section className="max-w-6xl mx-auto px-5 md:px-8 py-12">
-            <h2 className="text-xl md:text-2xl mb-1" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
-              Результати пошуку: «{submittedQuery}»
-            </h2>
-            <div className="flex items-center justify-between mb-4 gap-4">
-              <p className="text-sm" style={{ color: MUTED }}>
-                {searching
-                  ? 'Шукаємо...'
-                  : hasActiveFilters
-                    ? `Показано: ${filteredResults.length} з ${results.length}`
-                    : `Знайдено: ${results.length}`}
-              </p>
+          <section className="relative" style={{ background: TECH_BG }}>
+            <div className="relative max-w-6xl mx-auto px-5 md:px-8 py-14">
+              <h2
+                className="mb-1 text-xl md:text-2xl"
+                style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff', letterSpacing: '-0.01em' }}
+              >
+                Результати пошуку:{' '}
+                <code
+                  className="rounded-md px-2 py-0.5 text-[0.75em] font-medium"
+                  style={{ fontFamily: MONO_TECH, color: TECH_ACCENT_BRIGHT, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)' }}
+                >
+                  {submittedQuery}
+                </code>
+              </h2>
 
-              {/* ---- перемикач вигляду: плиткою або таблицею ---- */}
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+                <p className="text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                  {searching ? (
+                    'Шукаємо...'
+                  ) : hasActiveFilters ? (
+                    <>
+                      Показано: <b style={{ color: TECH_INK, fontVariantNumeric: 'tabular-nums' }}>{filteredResults.length}</b> з {results.length}
+                    </>
+                  ) : (
+                    <>
+                      Знайдено: <b style={{ color: TECH_INK, fontVariantNumeric: 'tabular-nums' }}>{results.length}</b>
+                    </>
+                  )}
+                </p>
+
+                {/* ---- перемикач вигляду: плиткою або таблицею ---- */}
+                {!searching && results.length > 0 && (
+                  <div className="inline-flex shrink-0 gap-0.5 rounded-lg p-1" style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}>
+                    <button
+                      type="button"
+                      onClick={() => changeViewMode('grid')}
+                      aria-label="Показати плиткою"
+                      title="Плиткою"
+                      className="grid h-8 w-8 place-items-center rounded-md transition-colors"
+                      style={viewMode === 'grid' ? { background: TECH_ACCENT, color: '#fff', boxShadow: TECH_GLOW } : { color: TECH_FAINT }}
+                    >
+                      <GridViewIcon />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => changeViewMode('table')}
+                      aria-label="Показати таблицею"
+                      title="Таблицею"
+                      className="grid h-8 w-8 place-items-center rounded-md transition-colors"
+                      style={viewMode === 'table' ? { background: TECH_ACCENT, color: '#fff', boxShadow: TECH_GLOW } : { color: TECH_FAINT }}
+                    >
+                      <TableViewIcon />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ==================== ФІЛЬТРИ РЕЗУЛЬТАТІВ ==================== */}
               {!searching && results.length > 0 && (
-                <div className="flex gap-1 p-1 shrink-0" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
-                  <button
-                    type="button"
-                    onClick={() => changeViewMode('grid')}
-                    aria-label="Показати плиткою"
-                    title="Плиткою"
-                    className="p-1.5"
-                    style={viewMode === 'grid' ? { background: RED, color: INK } : { color: MUTED }}
-                  >
-                    <GridViewIcon />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => changeViewMode('table')}
-                    aria-label="Показати таблицею"
-                    title="Таблицею"
-                    className="p-1.5"
-                    style={viewMode === 'table' ? { background: RED, color: INK } : { color: MUTED }}
-                  >
-                    <TableViewIcon />
-                  </button>
+                <div className="mb-6 flex flex-wrap items-center gap-2.5">
+                  {hasActiveFilters && (
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="mr-1 text-xs font-semibold hover:underline"
+                      style={{ fontFamily: SANS_TECH, color: TECH_ACCENT_BRIGHT }}
+                    >
+                      Скинути все
+                    </button>
+                  )}
+
+                  {/* Наявність — сегментований перемикач із рухомим індикатором,
+                      той самий прийом, що і в перемикачі пошуку в hero */}
+                  <div className="relative inline-flex gap-0.5 rounded-lg p-1" style={{ border: `1px solid ${TECH_BORDER}`, background: 'rgba(255,255,255,0.03)' }}>
+                    {(
+                      [
+                        ['all', 'Всі'],
+                        ['inStock', 'В наявності'],
+                        ['backorder', 'Під замовлення'],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setFilterAvailability(value)}
+                        className="relative z-10 rounded-md px-3.5 py-1.5 text-xs font-semibold transition-colors"
+                        style={{ fontFamily: SANS_TECH, color: filterAvailability === value ? '#fff' : TECH_MUTED }}
+                      >
+                        {filterAvailability === value && (
+                          <motion.span
+                            layoutId="results-avail-thumb"
+                            className="absolute inset-0 -z-10 rounded-md"
+                            style={{ background: TECH_ACCENT, boxShadow: TECH_GLOW }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                          />
+                        )}
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Бренд — випадаючий список із чекбоксами */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPriceDropdownOpen(false);
+                        setBrandDropdownOpen((open) => !open);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors"
+                      style={{
+                        fontFamily: SANS_TECH,
+                        border: `1px solid ${filterBrands.size > 0 ? 'rgba(59,130,246,0.45)' : TECH_BORDER}`,
+                        background: filterBrands.size > 0 ? 'rgba(59,130,246,0.08)' : TECH_SURFACE,
+                        color: filterBrands.size > 0 ? TECH_ACCENT_BRIGHT : TECH_MUTED,
+                      }}
+                    >
+                      <Layers className="h-3.5 w-3.5" />
+                      Бренд{filterBrands.size > 0 ? ` (${filterBrands.size})` : ''}
+                      <svg
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        className="transition-transform"
+                        style={{ transform: brandDropdownOpen ? 'rotate(180deg)' : 'none' }}
+                      >
+                        <polyline points="6 9 12 15 18 9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+
+                    {brandDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setBrandDropdownOpen(false)} />
+                        <div
+                          className="absolute z-50 mt-2 max-h-64 overflow-y-auto rounded-xl p-2"
+                          style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER_2}`, minWidth: '220px', boxShadow: '0 16px 40px rgba(0,0,0,0.45)' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {availableBrands.map(([label, count]) => (
+                            <label
+                              key={label}
+                              className="flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-white/5"
+                              style={{ fontFamily: SANS_TECH, color: TECH_INK }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={filterBrands.has(label)}
+                                onChange={() => toggleBrandFilter(label)}
+                                className="h-3.5 w-3.5 accent-[#3B82F6]"
+                              />
+                              <span className="flex-1">{label}</span>
+                              <span className="text-xs tabular-nums" style={{ color: TECH_FAINT }}>
+                                {count}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Ціна — випадаюче поле "від / до" */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBrandDropdownOpen(false);
+                        setPriceDropdownOpen((open) => !open);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-colors"
+                      style={{
+                        fontFamily: SANS_TECH,
+                        border: `1px solid ${priceFilter.min || priceFilter.max ? 'rgba(59,130,246,0.45)' : TECH_BORDER}`,
+                        background: priceFilter.min || priceFilter.max ? 'rgba(59,130,246,0.08)' : TECH_SURFACE,
+                        color: priceFilter.min || priceFilter.max ? TECH_ACCENT_BRIGHT : TECH_MUTED,
+                      }}
+                    >
+                      <Banknote className="h-3.5 w-3.5" />
+                      Ціна
+                      <svg
+                        width="11"
+                        height="11"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        className="transition-transform"
+                        style={{ transform: priceDropdownOpen ? 'rotate(180deg)' : 'none' }}
+                      >
+                        <polyline points="6 9 12 15 18 9" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+
+                    {priceDropdownOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setPriceDropdownOpen(false)} />
+                        <div
+                          className="absolute z-50 mt-2 flex flex-col gap-2 rounded-xl p-3"
+                          style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER_2}`, minWidth: '220px', boxShadow: '0 16px 40px rgba(0,0,0,0.45)' }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <p className="text-xs tabular-nums" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                            {formatMoney(priceBounds.min)}–{formatMoney(priceBounds.max)} грн
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder={`від ${Math.floor(priceBounds.min)}`}
+                              value={priceFilter.min}
+                              onChange={(e) => setPriceFilter((prev) => ({ ...prev, min: e.target.value }))}
+                              className="w-full min-w-0 rounded-lg px-2.5 py-2 text-sm outline-none"
+                              style={{ fontFamily: MONO_TECH, background: TECH_BG, border: `1px solid ${TECH_BORDER}`, color: TECH_INK }}
+                            />
+                            <span style={{ color: TECH_FAINT }}>—</span>
+                            <input
+                              type="number"
+                              min={0}
+                              placeholder={`до ${Math.ceil(priceBounds.max)}`}
+                              value={priceFilter.max}
+                              onChange={(e) => setPriceFilter((prev) => ({ ...prev, max: e.target.value }))}
+                              className="w-full min-w-0 rounded-lg px-2.5 py-2 text-sm outline-none"
+                              style={{ fontFamily: MONO_TECH, background: TECH_BG, border: `1px solid ${TECH_BORDER}`, color: TECH_INK }}
+                            />
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {searchError && (
+                <p
+                  className="rounded-xl p-4 text-sm"
+                  style={{ fontFamily: SANS_TECH, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}
+                >
+                  {searchError}
+                </p>
+              )}
+
+              {/* ---- нічого не знайдено за артикулом: спільна скляна
+                  панель, як і в таблиці/сітці нижче, щоб перехід між
+                  станами не "смикав" макет ---- */}
+              {!searching && !searchError && results.length === 0 && (
+                <div
+                  className="overflow-hidden rounded-2xl"
+                  style={{ background: TECH_SURFACE, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER}` }}
+                >
+                  <div className="flex flex-col items-center gap-1.5 px-8 py-16 text-center">
+                    <div
+                      className="mb-3 grid h-14 w-14 place-items-center rounded-2xl"
+                      style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.16), rgba(255,255,255,0.02))', border: `1px dashed ${TECH_BORDER_2}`, color: TECH_ACCENT_BRIGHT }}
+                    >
+                      <FileSearch className="h-6 w-6" />
+                    </div>
+                    <h3 style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: '1.1rem', color: '#fff', textWrap: 'balance' }}>
+                      За запитом{' '}
+                      <span style={{ fontFamily: MONO_TECH, color: TECH_ACCENT_BRIGHT }}>«{submittedQuery}»</span> нічого не знайдено
+                    </h3>
+                    <p className="max-w-sm text-sm leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                      Перевірте правильність артикула — або надішліть нам VIN-код автомобіля, і інженер підбере деталь вручну.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setVinModalOpen(true)}
+                      className="mt-4 inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
+                      style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
+                    >
+                      Підібрати за VIN
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ---- нічого не знайдено за обраними фільтрами (сам пошук
+                  щось знайшов, фільтри звузили список до нуля) ---- */}
+              {!searching && results.length > 0 && filteredResults.length === 0 && (
+                <div
+                  className="overflow-hidden rounded-2xl"
+                  style={{ background: TECH_SURFACE, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER}` }}
+                >
+                  <div className="flex flex-col items-center gap-1.5 px-8 py-16 text-center">
+                    <div
+                      className="mb-3 grid h-14 w-14 place-items-center rounded-2xl"
+                      style={{ background: 'rgba(255,255,255,0.03)', border: `1px dashed ${TECH_BORDER_2}`, color: TECH_ACCENT_BRIGHT }}
+                    >
+                      <SearchX className="h-6 w-6" />
+                    </div>
+                    <h3 style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: '1.1rem', color: '#fff', textWrap: 'balance' }}>
+                      Нічого не знайдено за обраними фільтрами
+                    </h3>
+                    <p className="max-w-sm text-sm leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                      Спробуйте зняти частину фільтрів — серед {results.length} знайдених товарів щось точно підійде.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="mt-4 rounded-xl px-6 py-3 text-sm font-semibold transition-colors hover:bg-white/5"
+                      style={{ fontFamily: SANS_TECH, background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER_2}`, color: TECH_INK }}
+                    >
+                      Скинути фільтри
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ---- сама видача: спільна скляна панель, усередині або
+                  таблиця, або сітка карток (розділені лінією в 1px) ---- */}
+              {!searching && filteredResults.length > 0 && (
+                <div
+                  className="overflow-hidden rounded-2xl"
+                  style={{ background: TECH_SURFACE, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER}` }}
+                >
+                  {viewMode === 'table' ? (
+                    <div className="overflow-x-auto">
+                      <div style={{ minWidth: '760px' }}>
+                        <div
+                          className="grid px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wide"
+                          style={{
+                            gridTemplateColumns: '1.3fr 2.2fr 1fr 1.1fr 1fr auto',
+                            gap: '12px',
+                            background: 'rgba(255,255,255,0.02)',
+                            borderBottom: `1px solid ${TECH_BORDER}`,
+                            color: TECH_FAINT,
+                            fontFamily: SANS_TECH,
+                          }}
+                        >
+                          <span>Бренд / Код</span>
+                          <span>Товар</span>
+                          <span>Наявність</span>
+                          <span>Термін</span>
+                          <span className="text-right">Ціна</span>
+                          <span></span>
+                        </div>
+
+                        {filteredResults.map((product) => (
+                          <div
+                            key={product.id}
+                            className="group relative grid items-center px-5 py-3.5 transition-colors hover:bg-[rgba(59,130,246,0.05)]"
+                            style={{ gridTemplateColumns: '1.3fr 2.2fr 1fr 1.1fr 1fr auto', gap: '12px', borderBottom: `1px solid ${TECH_BORDER}` }}
+                          >
+                            <div
+                              className="absolute bottom-2 left-0 top-2 w-0.5 rounded-full opacity-0 transition-opacity group-hover:opacity-100"
+                              style={{ background: TECH_ACCENT_BRIGHT }}
+                            />
+
+                            <div className="min-w-0">
+                              <p
+                                className="mb-0.5 truncate text-[10.5px] font-bold uppercase tracking-wide"
+                                style={{ fontFamily: SANS_TECH, color: TECH_ACCENT_BRIGHT }}
+                              >
+                                {product.brand || 'Без бренду'}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => copyArticle(product)}
+                                className="group/copy inline-flex max-w-full items-center gap-1.5 truncate text-sm font-medium"
+                                style={{ fontFamily: MONO_TECH, color: TECH_INK, cursor: 'copy' }}
+                                title="Скопіювати артикул"
+                              >
+                                <span className="truncate">{product.article}</span>
+                                {copiedProductId === product.id ? (
+                                  <Check className="h-3 w-3 shrink-0" style={{ color: TECH_GOOD }} />
+                                ) : (
+                                  <Copy
+                                    className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                                    style={{ color: TECH_FAINT }}
+                                  />
+                                )}
+                              </button>
+                            </div>
+
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div
+                                className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+                                style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
+                              >
+                                {product.imageUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setLightboxImage({ url: product.imageUrl as string, alt: product.name || product.article })
+                                    }
+                                    className="h-full w-full cursor-zoom-in"
+                                    aria-label="Збільшити фото товару"
+                                  >
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                      src={product.imageUrl}
+                                      alt={product.name || product.article}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  </button>
+                                ) : (
+                                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ color: TECH_FAINT }}>
+                                    <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
+                                    <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.6" />
+                                    <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+                                  </svg>
+                                )}
+                              </div>
+                              <Link
+                                href={buildProductPath(product.id, product)}
+                                className="truncate text-sm leading-snug hover:underline"
+                                style={{ fontFamily: SANS_TECH, color: TECH_INK }}
+                              >
+                                {product.name || 'Без назви'}
+                              </Link>
+                            </div>
+
+                            <div>
+                              {product.stock > 0 ? (
+                                <span
+                                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                                  style={{ fontFamily: SANS_TECH, background: TECH_GOOD_SOFT, color: TECH_GOOD, boxShadow: `0 0 0 1px rgba(52,211,153,0.25)` }}
+                                >
+                                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'currentColor' }} />
+                                  {product.stock} шт
+                                </span>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                                  style={{ fontFamily: SANS_TECH, background: TECH_HEAT_SOFT, color: TECH_HEAT, boxShadow: `0 0 0 1px rgba(255,107,0,0.28)` }}
+                                >
+                                  <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'currentColor' }} />
+                                  Під замовлення
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="whitespace-nowrap text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                              {product.stock > 0 ? 'сьогодні' : product.deliveryTime || '—'}
+                            </div>
+
+                            <div
+                              className="whitespace-nowrap text-right"
+                              style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 17, color: '#fff', fontVariantNumeric: 'tabular-nums' }}
+                            >
+                              {formatMoney(product.retailPrice)}
+                              <span className="ml-1 text-xs font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                                ГРН
+                              </span>
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={product.stock <= 0}
+                              onClick={() => addToCart(product)}
+                              aria-label="Додати в кошик"
+                              title="Додати в кошик"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-shadow hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
+                              style={
+                                product.stock > 0
+                                  ? { background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }
+                                  : { background: TECH_SURFACE_2, color: TECH_FAINT }
+                              }
+                            >
+                              <CartIcon />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: '1px', background: TECH_BORDER }}>
+                      {filteredResults.map((product) => (
+                        <div key={product.id} className="flex flex-col gap-3 p-4" style={{ background: TECH_SURFACE_2 }}>
+                          <div
+                            className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg"
+                            style={{
+                              background: TECH_SURFACE_2,
+                              backgroundImage:
+                                'linear-gradient(45deg, rgba(255,255,255,0.04) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.04) 25%, transparent 25%)',
+                              backgroundSize: '10px 10px',
+                              border: `1px solid ${TECH_BORDER}`,
+                            }}
+                          >
+                            {product.imageUrl ? (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setLightboxImage({ url: product.imageUrl as string, alt: product.name || product.article })
+                                }
+                                className="h-full w-full cursor-zoom-in"
+                                aria-label="Збільшити фото товару"
+                              >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={product.imageUrl} alt={product.name || product.article} className="h-full w-full object-cover" />
+                              </button>
+                            ) : (
+                              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" style={{ color: TECH_FAINT }}>
+                                <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                                <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.5" />
+                                <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </div>
+
+                          <Link href={buildProductPath(product.id, product)} className="block hover:underline">
+                            <p className="mb-1 flex items-center gap-1.5 text-xs" style={{ fontFamily: SANS_TECH }}>
+                              <span className="font-bold uppercase tracking-wide" style={{ color: TECH_ACCENT_BRIGHT }}>
+                                {product.brand || 'Без бренду'}
+                              </span>
+                              <span style={{ color: TECH_BORDER_2 }}>·</span>
+                              <span style={{ fontFamily: MONO_TECH, color: TECH_MUTED }}>{product.article}</span>
+                            </p>
+                            <p className="text-sm font-medium leading-snug" style={{ color: TECH_INK }}>
+                              {product.name || 'Без назви'}
+                            </p>
+                          </Link>
+
+                          <div className="mt-auto flex items-center justify-between gap-2">
+                            {product.stock > 0 ? (
+                              <span
+                                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                                style={{ fontFamily: SANS_TECH, background: TECH_GOOD_SOFT, color: TECH_GOOD, boxShadow: `0 0 0 1px rgba(52,211,153,0.25)` }}
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'currentColor' }} />
+                                {product.stock} шт
+                              </span>
+                            ) : (
+                              <span
+                                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
+                                style={{ fontFamily: SANS_TECH, background: TECH_HEAT_SOFT, color: TECH_HEAT, boxShadow: `0 0 0 1px rgba(255,107,0,0.28)` }}
+                              >
+                                <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'currentColor' }} />
+                                Під замовлення
+                              </span>
+                            )}
+                            <span
+                              className="whitespace-nowrap"
+                              style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 18, color: '#fff', fontVariantNumeric: 'tabular-nums' }}
+                            >
+                              {formatMoney(product.retailPrice)}
+                              <span className="ml-1 text-[11px] font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                                ГРН
+                              </span>
+                            </span>
+                          </div>
+
+                          {product.stock <= 0 && product.deliveryTime && (
+                            <p className="-mt-2 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                              Термін поставки: {product.deliveryTime}
+                            </p>
+                          )}
+
+                          <button
+                            type="button"
+                            disabled={product.stock <= 0}
+                            onClick={() => addToCart(product)}
+                            className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
+                            style={
+                              product.stock > 0
+                                ? { fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }
+                                : { fontFamily: SANS_TECH, background: TECH_SURFACE, color: TECH_FAINT }
+                            }
+                          >
+                            <CartIcon />
+                            До кошика
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-
-            {/* ==================== ФІЛЬТРИ РЕЗУЛЬТАТІВ ==================== */}
-            {!searching && results.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mb-6">
-                {hasActiveFilters && (
-                  <button
-                    type="button"
-                    onClick={resetFilters}
-                    className="text-xs font-semibold uppercase tracking-wide underline mr-1"
-                    style={{ fontFamily: LABEL_FONT, color: RED }}
-                  >
-                    Скинути все
-                  </button>
-                )}
-
-                {/* Наявність — сегментований перемикач із 3 станів */}
-                <div className="flex" style={{ border: `1px solid ${BORDER}` }}>
-                  {(
-                    [
-                      ['all', 'Всі'],
-                      ['inStock', 'В наявності'],
-                      ['backorder', 'Під замовлення'],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      onClick={() => setFilterAvailability(value)}
-                      className="px-3 py-1.5 text-xs font-semibold"
-                      style={
-                        filterAvailability === value
-                          ? { background: RED, color: INK }
-                          : { background: PANEL, color: MUTED }
-                      }
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Бренд — випадаючий список із чекбоксами */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPriceDropdownOpen(false);
-                      setBrandDropdownOpen((open) => !open);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
-                    style={{
-                      border: `1px solid ${filterBrands.size > 0 ? RED : BORDER}`,
-                      background: PANEL,
-                      color: filterBrands.size > 0 ? RED : MUTED,
-                    }}
-                  >
-                    Бренд{filterBrands.size > 0 ? ` (${filterBrands.size})` : ''}
-                    <ChevronDownIcon />
-                  </button>
-
-                  {brandDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setBrandDropdownOpen(false)} />
-                      <div
-                        className="absolute z-50 mt-1 py-2 max-h-64 overflow-y-auto"
-                        style={{ background: PANEL, border: `1px solid ${BORDER}`, minWidth: '220px' }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {availableBrands.map(([label, count]) => (
-                          <label
-                            key={label}
-                            className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-[#F1EBE0]"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={filterBrands.has(label)}
-                              onChange={() => toggleBrandFilter(label)}
-                            />
-                            <span className="flex-1">{label}</span>
-                            <span style={{ color: FAINT }}>{count}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {/* Ціна — випадаюче поле "від / до" */}
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBrandDropdownOpen(false);
-                      setPriceDropdownOpen((open) => !open);
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold"
-                    style={{
-                      border: `1px solid ${priceFilter.min || priceFilter.max ? RED : BORDER}`,
-                      background: PANEL,
-                      color: priceFilter.min || priceFilter.max ? RED : MUTED,
-                    }}
-                  >
-                    Ціна
-                    <ChevronDownIcon />
-                  </button>
-
-                  {priceDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setPriceDropdownOpen(false)} />
-                      <div
-                        className="absolute z-50 mt-1 p-3 flex flex-col gap-2"
-                        style={{ background: PANEL, border: `1px solid ${BORDER}`, minWidth: '220px' }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <p className="text-xs" style={{ color: FAINT }}>
-                          {formatMoney(priceBounds.min)}–{formatMoney(priceBounds.max)} грн
-                        </p>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="number"
-                            min={0}
-                            placeholder={`від ${Math.floor(priceBounds.min)}`}
-                            value={priceFilter.min}
-                            onChange={(e) => setPriceFilter((prev) => ({ ...prev, min: e.target.value }))}
-                            className="w-full px-2 py-1.5 text-sm"
-                            style={{ border: `1px solid ${BORDER}` }}
-                          />
-                          <span style={{ color: FAINT }}>—</span>
-                          <input
-                            type="number"
-                            min={0}
-                            placeholder={`до ${Math.ceil(priceBounds.max)}`}
-                            value={priceFilter.max}
-                            onChange={(e) => setPriceFilter((prev) => ({ ...prev, max: e.target.value }))}
-                            className="w-full px-2 py-1.5 text-sm"
-                            style={{ border: `1px solid ${BORDER}` }}
-                          />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {searchError && (
-              <p className="text-sm p-4" style={{ background: DANGER_BG, color: DANGER_TEXT }}>
-                {searchError}
-              </p>
-            )}
-
-            {!searching && !searchError && results.length === 0 && (
-              <div
-                className="text-center py-14 px-6"
-                style={{ background: PANEL, border: `1px solid ${BORDER}` }}
-              >
-                <div className="text-4xl mb-3">🔍</div>
-                <h3 className="text-lg font-semibold mb-2">За вашим запитом нічого не знайдено</h3>
-                <p className="text-sm mb-6" style={{ color: MUTED }}>
-                  Перевірте правильність артикула або залиште заявку — наші менеджери підберуть деталь вручну.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setVinModalOpen(true)}
-                  className="px-6 py-3 text-sm font-bold uppercase tracking-wide"
-                  style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
-                >
-                  Залишити заявку на підбір
-                </button>
-              </div>
-            )}
-
-            {!searching && results.length > 0 && filteredResults.length === 0 && (
-              <div className="text-center py-14 px-6" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
-                <h3 className="text-lg font-semibold mb-2">Нічого не знайдено за обраними фільтрами</h3>
-                <p className="text-sm mb-6" style={{ color: MUTED }}>
-                  Спробуйте зняти частину фільтрів — серед {results.length} знайдених товарів щось точно підійде.
-                </p>
-                <button
-                  type="button"
-                  onClick={resetFilters}
-                  className="px-6 py-3 text-sm font-bold uppercase tracking-wide"
-                  style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
-                >
-                  Скинути фільтри
-                </button>
-              </div>
-            )}
-
-            {!searching && filteredResults.length > 0 && viewMode === 'grid' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {filteredResults.map((product) => (
-                  <div
-                    key={product.id}
-                    className="p-4 flex flex-col gap-3"
-                    style={{
-                      background: PANEL,
-                      border: `1px solid ${BORDER}`,
-                      clipPath: 'polygon(0 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%)',
-                    }}
-                  >
-                    <div
-                      className="w-full aspect-square flex items-center justify-center overflow-hidden"
-                      style={{ background: IMG_PLACEHOLDER_BG }}
-                    >
-                      {product.imageUrl ? (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setLightboxImage({ url: product.imageUrl as string, alt: product.name || product.article })
-                          }
-                          className="w-full h-full cursor-zoom-in"
-                          aria-label="Збільшити фото товару"
-                        >
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={product.imageUrl} alt={product.name || product.article} className="w-full h-full object-cover" />
-                        </button>
-                      ) : (
-                        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" style={{ color: '#5A4C40' }}>
-                          <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
-                          <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.6" />
-                          <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </div>
-
-                    <Link href={buildProductPath(product.id, product)} className="block hover:underline">
-                      <p className="text-xs font-mono uppercase tracking-wide mb-1" style={{ fontFamily: LABEL_FONT, color: YELLOW }}>
-                        {product.article}
-                        {product.brand ? ` · ${product.brand}` : ''}
-                      </p>
-                      <p className="text-sm font-medium leading-snug">{product.name || 'Без назви'}</p>
-                    </Link>
-
-                    <div className="flex items-center justify-between mt-auto">
-                      <span
-                        className="text-xs px-2 py-1 font-medium"
-                        style={
-                          product.stock > 0
-                            ? { background: SUCCESS_BG, color: SUCCESS_TEXT }
-                            : { background: DANGER_BG, color: DANGER_TEXT }
-                        }
-                      >
-                        {product.stock > 0 ? `В наявності: ${product.stock}` : 'Немає в наявності'}
-                      </span>
-                      <span style={{ fontFamily: DISPLAY_FONT, fontSize: 22 }}>{formatMoney(product.retailPrice)} ГРН</span>
-                    </div>
-
-                    {/* Термін поставки під замовлення — тільки якщо товару
-                        немає в наявності, і постачальник цей термін вказав
-                        (див. поле "Термін поставки" у формі поставщика в
-                        адмінці, components/SupplierMappingScreen.tsx) */}
-                    {product.stock <= 0 && product.deliveryTime && (
-                      <p className="text-xs -mt-2" style={{ color: MUTED }}>
-                        Термін поставки: {product.deliveryTime}
-                      </p>
-                    )}
-
-                    <button
-                      type="button"
-                      disabled={product.stock <= 0}
-                      onClick={() => addToCart(product)}
-                      className="w-full py-2.5 text-sm font-bold uppercase tracking-wide disabled:opacity-40"
-                      style={{ fontFamily: LABEL_FONT, background: RED, color: INK }}
-                    >
-                      До кошика
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {!searching && filteredResults.length > 0 && viewMode === 'table' && (
-              <div className="overflow-x-auto" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
-                <div style={{ minWidth: '820px' }}>
-                  {/* Заголовок — окрема колонка "Термін поставки", щоб було
-                      видно одразу, не розкриваючи кожен товар (у плитці цю
-                      інформацію ховаємо під ціною, тут — навпаки, весь сенс
-                      цього вигляду в тому, щоб порівнювати бренди/ціни/строки
-                      одним поглядом) */}
-                  <div
-                    className="grid text-xs font-semibold uppercase tracking-wide px-4 py-3"
-                    style={{
-                      gridTemplateColumns: '1.3fr 2.2fr 1fr 1.3fr 1fr auto',
-                      gap: '12px',
-                      background: PANEL_SOFT,
-                      color: MUTED,
-                      fontFamily: LABEL_FONT,
-                    }}
-                  >
-                    <span>Бренд / Код</span>
-                    <span>Товар</span>
-                    <span>Наявність</span>
-                    <span>Термін поставки</span>
-                    <span className="text-right">Ціна</span>
-                    <span></span>
-                  </div>
-
-                  {filteredResults.map((product) => (
-                    <div
-                      key={product.id}
-                      className="grid items-center px-4 py-3 transition-colors hover:bg-[#F1EBE0]"
-                      style={{
-                        gridTemplateColumns: '1.3fr 2.2fr 1fr 1.3fr 1fr auto',
-                        gap: '12px',
-                        borderTop: `1px solid ${BORDER}`,
-                      }}
-                    >
-                      <Link href={buildProductPath(product.id, product)} className="min-w-0 hover:underline">
-                        <p className="text-[11px] font-bold uppercase tracking-wide truncate" style={{ fontFamily: LABEL_FONT, color: YELLOW }}>
-                          {product.brand || 'Без бренду'}
-                        </p>
-                        <p className="text-sm font-mono font-semibold truncate">{product.article}</p>
-                      </Link>
-
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="w-10 h-10 shrink-0 flex items-center justify-center overflow-hidden"
-                          style={{ background: IMG_PLACEHOLDER_BG }}
-                        >
-                          {product.imageUrl ? (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setLightboxImage({ url: product.imageUrl as string, alt: product.name || product.article })
-                              }
-                              className="w-full h-full cursor-zoom-in"
-                              aria-label="Збільшити фото товару"
-                            >
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={product.imageUrl}
-                                alt={product.name || product.article}
-                                className="w-full h-full object-cover"
-                              />
-                            </button>
-                          ) : (
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ color: '#5A4C40' }}>
-                              <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.6" />
-                              <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.6" />
-                              <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
-                            </svg>
-                          )}
-                        </div>
-                        <Link href={buildProductPath(product.id, product)} className="text-sm font-medium leading-snug truncate hover:underline">
-                          {product.name || 'Без назви'}
-                        </Link>
-                      </div>
-
-                      <div>
-                        <span
-                          className="text-xs px-2 py-1 font-medium whitespace-nowrap inline-block"
-                          style={
-                            product.stock > 0
-                              ? { background: SUCCESS_BG, color: SUCCESS_TEXT }
-                              : { background: DANGER_BG, color: DANGER_TEXT }
-                          }
-                        >
-                          {product.stock > 0 ? `${product.stock} шт` : 'Немає'}
-                        </span>
-                      </div>
-
-                      <div className="text-sm whitespace-nowrap" style={{ color: TEXT }}>
-                        {product.stock > 0 ? 'сьогодні' : product.deliveryTime || '—'}
-                      </div>
-
-                      <div
-                        className="text-right whitespace-nowrap"
-                        style={{ fontFamily: DISPLAY_FONT, fontSize: 20, fontVariantNumeric: 'tabular-nums' }}
-                      >
-                        {formatMoney(product.retailPrice)} грн
-                      </div>
-
-                      <button
-                        type="button"
-                        disabled={product.stock <= 0}
-                        onClick={() => addToCart(product)}
-                        aria-label="Додати в кошик"
-                        title="Додати в кошик"
-                        className="w-9 h-9 flex items-center justify-center shrink-0 disabled:opacity-40"
-                        style={{ background: RED, color: INK }}
-                      >
-                        <CartIcon />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </section>
         )}
 
