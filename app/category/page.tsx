@@ -12,6 +12,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CATEGORIES } from '@/lib/categories';
+import { TECH_BG, TECH_SURFACE_2, TECH_BORDER, TECH_INK, TECH_MUTED, TECH_FAINT, TECH_DISPLAY_FONT, TECH_BODY_FONT } from '@/lib/techTheme';
 
 export const metadata: Metadata = {
   title: 'Категорії автозапчастин — DominatorParts',
@@ -19,45 +20,38 @@ export const metadata: Metadata = {
     'Гальмівні колодки та диски, амортизатори, сайлентблоки, фільтри, свічки та інші деталі для Toyota, Ford, Volkswagen, Audi, Skoda з доставкою по Україні.',
 };
 
-// Світла палітра "Workshop" — узгоджена з components/StorefrontHome.tsx
-const BG = '#FAF7F2';
-const BORDER_SOFT = '#E3DAC9';
-const RED = '#E5231C';
-const YELLOW = '#B45309';
-const PAPER = '#1C1917';
-const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
-const BODY_FONT = "'Barlow', sans-serif";
-
 export default function CategoryIndexPage() {
   return (
-    <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
-      <div className="max-w-6xl mx-auto px-5 md:px-8 py-8">
-        <nav className="text-xs mb-5 opacity-70" aria-label="Хлібні крихти">
-          <Link href="/" className="underline">
+    <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
+      <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
+        <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
+          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
             Головна
           </Link>{' '}
           / <span>Категорії</span>
         </nav>
 
         <h1
-          className="text-3xl md:text-4xl mb-6"
-          style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
+          className="mb-6 text-3xl md:text-4xl"
+          style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, letterSpacing: '-0.01em', color: '#fff' }}
         >
           Категорії автозапчастин
         </h1>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {CATEGORIES.map((c) => (
             <Link
               key={c.slug}
               href={`/category/${c.slug}`}
-              className="block p-4 rounded-md hover:shadow-sm transition-shadow"
-              style={{ background: '#FFFFFF', border: `1px solid ${BORDER_SOFT}`, borderLeft: `3px solid ${RED}` }}
+              className="block rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+              style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
             >
-              <div className="text-lg mb-1" style={{ fontFamily: DISPLAY_FONT, color: PAPER }}>
+              <div className="mb-1 text-base font-semibold" style={{ fontFamily: TECH_DISPLAY_FONT, color: '#fff' }}>
                 {c.name}
               </div>
-              <div className="text-xs opacity-75">{c.intro.slice(0, 90)}…</div>
+              <div className="text-xs leading-relaxed" style={{ color: TECH_MUTED }}>
+                {c.intro.slice(0, 90)}…
+              </div>
             </Link>
           ))}
         </div>

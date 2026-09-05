@@ -19,11 +19,27 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CategoryDef, getToCategories } from '@/lib/categories';
-import { CarMakeDef, getCarMakeBySlug } from '@/lib/carMakes';
+import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
+import {
+  TECH_BG,
+  TECH_SURFACE_2,
+  TECH_BORDER,
+  TECH_ACCENT_BRIGHT,
+  TECH_INK,
+  TECH_MUTED,
+  TECH_FAINT,
+  TECH_GOOD,
+  TECH_GOOD_SOFT,
+  TECH_HEAT,
+  TECH_HEAT_SOFT,
+  TECH_DISPLAY_FONT,
+  TECH_BODY_FONT,
+  TECH_MONO_FONT,
+} from '@/lib/techTheme';
 
 export const runtime = 'nodejs';
 // Захист від спроби зібрати сторінку заздалегідь під час білда на
@@ -131,19 +147,25 @@ export async function generateMetadata({
   };
 }
 
-const BG = '#F5F6F9';
-const PANEL_SOFT = '#EAEDF2';
-const BORDER_SOFT = '#DDE2EA';
-const RED = '#1D5FD6';
-const YELLOW = '#1D5FD6';
-const PAPER = '#12192A';
-const SUCCESS_TEXT = '#15803D';
-const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
-const BODY_FONT = "'Barlow', sans-serif";
-
 // Копійки покупцю не показуємо — тільки цілі гривні, округлені ВГОРУ
 function formatMoney(value: number): string {
   return Math.ceil(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
+}
+
+function StockBadge({ stock }: { stock: number }) {
+  const inStock = stock > 0;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
+      style={{
+        fontFamily: TECH_BODY_FONT,
+        background: inStock ? TECH_GOOD_SOFT : TECH_HEAT_SOFT,
+        color: inStock ? TECH_GOOD : TECH_HEAT,
+      }}
+    >
+      {inStock ? 'В наявності' : 'Під замовлення'}
+    </span>
+  );
 }
 
 export default async function MakeToPage({ params }: { params: Promise<PageParams> }) {
@@ -170,7 +192,7 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+    <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
@@ -183,17 +205,17 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
           dangerouslySetInnerHTML={{ __html: jsonLdScript(buildProductListJsonLd(uniqueProducts)) }}
         />
       )}
-      <div className="max-w-6xl mx-auto px-5 md:px-8 py-8">
-        <nav className="text-xs mb-5 opacity-70" aria-label="Хлібні крихти">
-          <Link href="/" className="underline">
+      <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
+        <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
+          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
             Головна
           </Link>{' '}
           /{' '}
-          <Link href="/marky" className="underline">
+          <Link href="/marky" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
             Марки авто
           </Link>{' '}
           /{' '}
-          <Link href={`/marky/${slug}`} className="underline">
+          <Link href={`/marky/${slug}`} className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
             {make.name}
           </Link>{' '}
           / <span>ТО</span>
@@ -201,12 +223,12 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
 
         <header className="mb-8">
           <h1
-            className="text-3xl md:text-4xl mb-3"
-            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
+            className="mb-3 text-3xl md:text-4xl"
+            style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, letterSpacing: '-0.01em', color: '#fff', textWrap: 'balance' }}
           >
             Регламент ТО для {make.name}
           </h1>
-          <p className="text-sm max-w-2xl" style={{ color: PAPER, opacity: 0.85 }}>
+          <p className="max-w-2xl text-sm" style={{ color: TECH_MUTED }}>
             Що зазвичай перевіряють і міняють на плановому ТО: оливні рідини й фільтри, свічки запалювання,
             ремінь ГРМ, а також гальмівні колодки й диски (їх перевіряють щоразу, міняють — за зносом).
             Нижче — по кілька варіантів з наявності під {make.name}, повний список — за посиланням
@@ -217,15 +239,15 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
         <div className="flex flex-col gap-10">
           {sections.map(({ category, products, total }) => (
             <section key={category.slug}>
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <h2 className="text-xl" style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.01em' }}>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h2 className="text-xl" style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>
                   {category.name}
                 </h2>
                 {total > 0 && (
                   <Link
                     href={`/category/${category.slug}?marka=${slug}`}
-                    className="text-xs font-semibold uppercase tracking-wide underline shrink-0"
-                    style={{ color: RED }}
+                    className="shrink-0 text-xs font-semibold uppercase tracking-wide underline"
+                    style={{ color: TECH_ACCENT_BRIGHT }}
                   >
                     Показати всі {total.toLocaleString('uk-UA')} →
                   </Link>
@@ -233,40 +255,36 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
               </div>
 
               {products.length === 0 ? (
-                <p className="text-sm p-4 rounded-md" style={{ background: PANEL_SOFT, opacity: 0.8 }}>
+                <p className="rounded-xl p-4 text-sm" style={{ background: TECH_SURFACE_2, color: TECH_FAINT }}>
                   Поки немає в наявності для {make.name}.
                 </p>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                   {products.map((product) => (
                     <Link
                       key={product.id}
                       href={buildProductPath(product.id, product)}
-                      className="block p-4 rounded-md transition-colors hover:opacity-90 hover:shadow-sm"
-                      style={{ background: '#FFFFFF', border: `1px solid ${BORDER_SOFT}` }}
+                      className="block rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+                      style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                     >
-                      <div className="text-xs uppercase mb-1" style={{ color: YELLOW, opacity: 0.9 }}>
-                        {product.brand || 'Без бренду'} · {product.article}
+                      <div className="mb-1 flex items-center gap-1.5 text-[11px]" style={{ fontFamily: TECH_BODY_FONT }}>
+                        <span className="font-bold uppercase tracking-wide" style={{ color: TECH_ACCENT_BRIGHT }}>
+                          {product.brand || 'Без бренду'}
+                        </span>
+                        <span style={{ color: TECH_FAINT }}>·</span>
+                        <span style={{ fontFamily: TECH_MONO_FONT, color: TECH_MUTED }}>{product.article}</span>
                       </div>
-                      <div className="text-sm mb-2 line-clamp-2" style={{ color: PAPER }}>
+                      <div className="mb-2 line-clamp-2 text-sm" style={{ color: TECH_INK }}>
                         {product.name || category.name}
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-base font-semibold" style={{ fontFamily: DISPLAY_FONT }}>
+                        <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 16, color: '#fff' }}>
                           {formatMoney(product.retailPrice)} грн
                         </span>
-                        <span
-                          className="text-[11px] px-1.5 py-0.5 rounded"
-                          style={{
-                            background: product.stock > 0 ? '#DCFCE7' : PANEL_SOFT,
-                            color: product.stock > 0 ? SUCCESS_TEXT : PAPER,
-                          }}
-                        >
-                          {product.stock > 0 ? 'В наявності' : 'Під замовлення'}
-                        </span>
+                        <StockBadge stock={product.stock} />
                       </div>
                       {product.stock <= 0 && product.deliveryTime && (
-                        <div className="text-[11px] mt-1" style={{ color: PAPER, opacity: 0.7 }}>
+                        <div className="mt-1 text-[11px]" style={{ color: TECH_FAINT }}>
                           Термін поставки: {product.deliveryTime}
                         </div>
                       )}
@@ -278,8 +296,8 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
           ))}
         </div>
 
-        <div className="pt-8 mt-8" style={{ borderTop: `1px solid ${BORDER_SOFT}` }}>
-          <Link href={`/marky/${slug}`} className="text-sm underline" style={{ color: RED }}>
+        <div className="mt-8 pt-8" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+          <Link href={`/marky/${slug}`} className="text-sm underline" style={{ color: TECH_ACCENT_BRIGHT }}>
             ← Усі запчастини для {make.name}
           </Link>
         </div>

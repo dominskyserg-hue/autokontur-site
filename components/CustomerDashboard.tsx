@@ -19,12 +19,36 @@
 // components/StorefrontHome.tsx) — так покупець не вводить його
 // заново при кожному відкритті сторінки.
 //
+// Стиль — темний Tech Premium, той самий, що і на Головній та картці
+// товару (lib/techTheme.ts).
+//
 // 'use client' в самому верху обов'язковий: компонент використовує
 // хуки (useState/useEffect) і працює з браузерним fetch/localStorage
 // ============================================================
 
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import {
+  TECH_BG,
+  TECH_SURFACE,
+  TECH_SURFACE_2,
+  TECH_BORDER,
+  TECH_BORDER_2,
+  TECH_ACCENT,
+  TECH_ACCENT_BRIGHT,
+  TECH_ACCENT_DIM,
+  TECH_INK,
+  TECH_MUTED,
+  TECH_FAINT,
+  TECH_GOOD,
+  TECH_GOOD_SOFT,
+  TECH_HEAT,
+  TECH_HEAT_SOFT,
+  TECH_GLOW,
+  TECH_DISPLAY_FONT,
+  TECH_BODY_FONT,
+  TECH_MONO_FONT,
+} from '@/lib/techTheme';
 
 // ------------------------------------------------------------
 // ТИПИ — повторюють те, що віддає бекенд
@@ -61,17 +85,19 @@ interface OrderDetails {
 
 const PHONE_STORAGE_KEY = 'autokontur-customer-phone';
 
-// Людський переклад статусу + колір — точно за вимогами задання
+// Людський переклад статусу + колір — той самий язик кольорів, що і
+// статуси наявності товару (зелене світіння "готово", бурштинове
+// "в роботі", нейтральне "новий", червонувате "скасовано")
 const STATUS_META: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
-  new: { label: 'Новий', bg: '#EEF0F3', fg: '#5B6472' },
-  processing: { label: 'В обробці', bg: '#FFF1E8', fg: '#EA580C' },
-  awaiting_parts: { label: 'Очікує запчастини', bg: '#FEF9C3', fg: '#A16207' },
-  ready: { label: 'Готовий до видачі', bg: '#DCFCE7', fg: '#16A34A' },
-  cancelled: { label: 'Скасовано', bg: '#FEE2E2', fg: '#DC2626' },
+  new: { label: 'Новий', bg: 'rgba(255,255,255,0.06)', fg: TECH_MUTED },
+  processing: { label: 'В обробці', bg: TECH_HEAT_SOFT, fg: TECH_HEAT },
+  awaiting_parts: { label: 'Очікує запчастини', bg: 'rgba(59,130,246,0.14)', fg: TECH_ACCENT_BRIGHT },
+  ready: { label: 'Готовий до видачі', bg: TECH_GOOD_SOFT, fg: TECH_GOOD },
+  cancelled: { label: 'Скасовано', bg: 'rgba(239,68,68,0.14)', fg: '#FCA5A5' },
 };
 
-// Статуси, которые считаются "в работе" для сводной статистики
-// кабинета — всё, что ещё не завершилось (готово или отменено)
+// Статуси, які вважаються "в роботі" для зведеної статистики кабінету —
+// все, що ще не завершилось (готово чи скасовано)
 const IN_PROGRESS_STATUSES: OrderStatus[] = ['new', 'processing', 'awaiting_parts'];
 
 // Копійки покупцю не показуємо — тільки цілі гривні, округлені ВГОРУ
@@ -266,24 +292,32 @@ export default function CustomerDashboard() {
   };
 
   if (restoringSession) {
-    return <div className="min-h-screen" style={{ background: '#F7F8FA' }} />;
+    return <div className="min-h-screen" style={{ background: TECH_BG }} />;
   }
 
   // ==================== ЕКРАН ВХОДУ ====================
   if (!loggedInPhone) {
     return (
-      <div className="min-h-screen flex items-center justify-center px-5" style={{ background: '#F7F8FA', color: '#14181F' }}>
-        <div className="w-full max-w-sm p-7 rounded-2xl" style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}>
+      <div className="flex min-h-screen items-center justify-center px-5" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
+        <div
+          className="w-full max-w-sm rounded-2xl p-7"
+          style={{ background: TECH_SURFACE, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER_2}` }}
+        >
           <div
-            className="w-11 h-11 rounded-xl flex items-center justify-center font-bold text-base mb-5"
-            style={{ background: '#EA580C', color: '#FFFFFF' }}
+            className="mb-5 flex h-11 w-11 items-center justify-center rounded-xl text-base font-bold"
+            style={{ background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
           >
-            A
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M4.5 20c1.4-3.8 4.2-5.8 7.5-5.8s6.1 2 7.5 5.8" strokeLinecap="round" />
+            </svg>
           </div>
-          <h1 className="text-xl font-bold mb-1.5">Особистий кабінет</h1>
-          <p className="text-sm mb-6" style={{ color: '#5B6472' }}>
-            Введіть номер телефону, який вказували при оформленні замовлення — покажемо всю
-            історію ваших покупок.
+          <h1 className="mb-1.5 text-xl font-semibold" style={{ fontFamily: TECH_DISPLAY_FONT, color: '#fff' }}>
+            Особистий кабінет
+          </h1>
+          <p className="mb-6 text-sm leading-relaxed" style={{ color: TECH_MUTED }}>
+            Введіть номер телефону, який вказували при оформленні замовлення — покажемо всю історію ваших
+            покупок.
           </p>
 
           <form onSubmit={handleLogin} className="flex flex-col gap-3">
@@ -293,12 +327,17 @@ export default function CustomerDashboard() {
                 value={phoneInput}
                 onChange={(e) => setPhoneInput(formatPhoneMask(e.target.value))}
                 placeholder="+380 XX XXX XX XX"
-                className="w-full px-4 py-3 text-base rounded-lg outline-none font-mono tracking-wide"
-                style={{ border: `1px solid ${loginError ? '#DC2626' : '#E2E5EA'}`, background: '#F7F8FA' }}
+                className="w-full rounded-xl px-4 py-3 text-base tracking-wide outline-none transition-colors focus:border-[rgba(59,130,246,0.5)]"
+                style={{
+                  fontFamily: TECH_MONO_FONT,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: `1px solid ${loginError ? 'rgba(239,68,68,0.55)' : TECH_BORDER_2}`,
+                  color: TECH_INK,
+                }}
                 autoFocus
               />
               {loginError && (
-                <p className="text-xs mt-1.5" style={{ color: '#DC2626' }}>
+                <p className="mt-1.5 text-xs" style={{ color: '#FCA5A5' }}>
                   {loginError}
                 </p>
               )}
@@ -307,14 +346,14 @@ export default function CustomerDashboard() {
             <button
               type="submit"
               disabled={loggingIn || !isCompletePhone(phoneInput)}
-              className="w-full py-3 rounded-lg text-sm font-semibold disabled:opacity-50"
-              style={{ background: '#EA580C', color: '#FFFFFF' }}
+              className="w-full rounded-xl py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50 disabled:shadow-none"
+              style={{ fontFamily: TECH_BODY_FONT, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
             >
               {loggingIn ? 'Перевіряємо...' : 'Увійти'}
             </button>
           </form>
 
-          <p className="text-xs mt-5" style={{ color: '#8A93A2' }}>
+          <p className="mt-5 text-xs" style={{ color: TECH_FAINT }}>
             Підтвердження кодом із СМС тут не потрібне — це спрощена демо-версія входу.
           </p>
         </div>
@@ -326,62 +365,66 @@ export default function CustomerDashboard() {
   const inProgressCount = orders.filter((order) => IN_PROGRESS_STATUSES.includes(order.status)).length;
 
   return (
-    <div className="min-h-screen" style={{ background: '#F7F8FA', color: '#14181F' }}>
-      <header style={{ background: '#0F172A' }}>
-        <div className="max-w-4xl mx-auto px-5 md:px-8 py-5 flex items-center justify-between">
+    <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
+      <header className="backdrop-blur-xl" style={{ background: 'rgba(11,15,23,0.82)', borderBottom: `1px solid ${TECH_BORDER}` }}>
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-5 py-5 md:px-8">
           <div>
-            <p className="text-white font-semibold text-lg">Особистий кабінет</p>
-            <p className="text-xs font-mono mt-0.5" style={{ color: '#94A3B8' }}>
+            <p className="text-lg font-semibold" style={{ fontFamily: TECH_DISPLAY_FONT, color: '#fff' }}>
+              Особистий кабінет
+            </p>
+            <p className="mt-0.5 text-xs" style={{ fontFamily: TECH_MONO_FONT, color: TECH_MUTED }}>
               {loggedInPhone}
             </p>
           </div>
           <button
             type="button"
             onClick={handleLogout}
-            className="text-xs px-3 py-2 rounded-md font-medium"
-            style={{ background: '#1E293B', color: '#CBD5E1' }}
+            className="rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-white/5"
+            style={{ background: 'rgba(255,255,255,0.05)', color: TECH_MUTED }}
           >
             Вийти
           </button>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-5 md:px-8 py-8">
+      <main className="mx-auto max-w-4xl px-5 py-8 md:px-8">
         {/* ---- зведена статистика ---- */}
-        <div className="grid grid-cols-2 gap-4 mb-8">
-          <div className="p-5 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}>
-            <p className="text-2xl font-bold">{orders.length}</p>
-            <p className="text-xs mt-1" style={{ color: '#8A93A2' }}>
+        <div className="mb-8 grid grid-cols-2 gap-4">
+          <div className="rounded-2xl p-5" style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}>
+            <p style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 26, color: '#fff' }}>{orders.length}</p>
+            <p className="mt-1 text-xs" style={{ color: TECH_FAINT }}>
               Всього замовлень
             </p>
           </div>
-          <div className="p-5 rounded-xl" style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}>
-            <p className="text-2xl font-bold" style={{ color: inProgressCount > 0 ? '#EA580C' : undefined }}>
+          <div className="rounded-2xl p-5" style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}>
+            <p style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 26, color: inProgressCount > 0 ? TECH_HEAT : '#fff' }}>
               {inProgressCount}
             </p>
-            <p className="text-xs mt-1" style={{ color: '#8A93A2' }}>
+            <p className="mt-1 text-xs" style={{ color: TECH_FAINT }}>
               В роботі
             </p>
           </div>
         </div>
 
         {/* ---- список замовлень ---- */}
-        <h2 className="text-base font-semibold mb-3">Історія замовлень</h2>
+        <h2 className="mb-3 text-base font-semibold" style={{ fontFamily: TECH_DISPLAY_FONT, color: '#fff' }}>
+          Історія замовлень
+        </h2>
 
         {loadingOrders && (
-          <p className="text-sm" style={{ color: '#8A93A2' }}>
+          <p className="text-sm" style={{ color: TECH_FAINT }}>
             Завантаження...
           </p>
         )}
 
         {ordersError && (
-          <p className="text-sm p-4 rounded-lg" style={{ background: '#FEE2E2', color: '#DC2626' }}>
+          <p className="rounded-xl p-4 text-sm" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#FCA5A5' }}>
             {ordersError}
           </p>
         )}
 
         {!loadingOrders && !ordersError && orders.length === 0 && (
-          <p className="text-sm" style={{ color: '#8A93A2' }}>
+          <p className="text-sm" style={{ color: TECH_FAINT }}>
             Замовлень поки немає.
           </p>
         )}
@@ -395,56 +438,58 @@ export default function CustomerDashboard() {
             return (
               <div
                 key={order.id}
-                className="rounded-xl overflow-hidden"
-                style={{ background: '#FFFFFF', border: '1px solid #E2E5EA' }}
+                className="overflow-hidden rounded-2xl"
+                style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
               >
                 <button
                   type="button"
                   onClick={() => toggleOrder(order.id)}
-                  className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left"
+                  className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
                 >
-                  <div className="flex items-center gap-4 min-w-0">
-                    <span className="font-mono text-sm" style={{ color: '#8A93A2' }}>
+                  <div className="flex min-w-0 items-center gap-4">
+                    <span className="text-sm" style={{ fontFamily: TECH_MONO_FONT, color: TECH_FAINT }}>
                       {shortId(order.id)}
                     </span>
-                    <span className="text-sm" style={{ color: '#5B6472' }}>
+                    <span className="text-sm" style={{ color: TECH_MUTED }}>
                       {formatDate(order.createdAt)}
                     </span>
-                    <span className="text-sm hidden sm:inline" style={{ color: '#5B6472' }}>
+                    <span className="hidden text-sm sm:inline" style={{ color: TECH_MUTED }}>
                       {order.itemsCount} {order.itemsCount === 1 ? 'товар' : 'товарів'}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex shrink-0 items-center gap-3">
                     <span
-                      className="text-xs px-2.5 py-1 rounded-full font-medium whitespace-nowrap"
+                      className="whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium"
                       style={{ background: statusMeta.bg, color: statusMeta.fg }}
                     >
                       {statusMeta.label}
                     </span>
-                    <span className="text-sm font-semibold whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    <span className="whitespace-nowrap text-sm font-semibold" style={{ color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
                       {formatMoney(order.totalAmount)} грн
                     </span>
-                    <span style={{ color: '#8A93A2', transform: isExpanded ? 'rotate(180deg)' : 'none' }}>▾</span>
+                    <span style={{ color: TECH_FAINT, transform: isExpanded ? 'rotate(180deg)' : 'none', display: 'inline-block', transition: 'transform .15s' }}>
+                      ▾
+                    </span>
                   </div>
                 </button>
 
                 {isExpanded && (
-                  <div className="px-5 pb-5" style={{ borderTop: '1px solid #F0F1F3' }}>
+                  <div className="px-5 pb-5" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
                     {loadingDetailsId === order.id && (
-                      <p className="text-xs pt-4" style={{ color: '#8A93A2' }}>
+                      <p className="pt-4 text-xs" style={{ color: TECH_FAINT }}>
                         Завантаження складу замовлення...
                       </p>
                     )}
 
                     {detailsError && loadingDetailsId !== order.id && !details && (
-                      <p className="text-xs pt-4" style={{ color: '#DC2626' }}>
+                      <p className="pt-4 text-xs" style={{ color: '#FCA5A5' }}>
                         {detailsError}
                       </p>
                     )}
 
                     {details && (
                       <div className="pt-4">
-                        <div className="flex flex-col gap-2 mb-4 text-xs" style={{ color: '#5B6472' }}>
+                        <div className="mb-4 flex flex-col gap-2 text-xs" style={{ color: TECH_MUTED }}>
                           <p>
                             Доставка: {details.city}, {details.novaPoshtaAddress}
                           </p>
@@ -456,20 +501,22 @@ export default function CustomerDashboard() {
                             <div
                               key={item.id}
                               className="flex items-center justify-between gap-3 py-2"
-                              style={{ borderTop: '1px solid #F0F1F3' }}
+                              style={{ borderTop: `1px solid ${TECH_BORDER}` }}
                             >
                               <div className="min-w-0">
-                                <p className="text-sm">{item.name || 'Без назви'}</p>
-                                <p className="text-xs font-mono mt-0.5" style={{ color: '#8A93A2' }}>
+                                <p className="text-sm" style={{ color: TECH_INK }}>
+                                  {item.name || 'Без назви'}
+                                </p>
+                                <p className="mt-0.5 text-xs" style={{ fontFamily: TECH_MONO_FONT, color: TECH_ACCENT_BRIGHT }}>
                                   {item.article}
                                   {item.brand ? ` · ${item.brand}` : ''}
                                 </p>
                               </div>
-                              <div className="text-right shrink-0">
-                                <p className="text-xs font-mono" style={{ color: '#8A93A2' }}>
+                              <div className="shrink-0 text-right">
+                                <p className="text-xs" style={{ fontFamily: TECH_MONO_FONT, color: TECH_FAINT }}>
                                   {item.quantity} × {formatMoney(item.price)} грн
                                 </p>
-                                <p className="text-sm font-mono font-semibold">
+                                <p className="text-sm font-semibold" style={{ fontFamily: TECH_MONO_FONT, color: '#fff' }}>
                                   {formatMoney(item.price * item.quantity)} грн
                                 </p>
                               </div>

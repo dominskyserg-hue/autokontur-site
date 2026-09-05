@@ -14,15 +14,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getDepartmentBySlug } from '@/lib/departments';
 import { getCategoryBySlug } from '@/lib/categories';
-
-// Світла палітра "Workshop" — узгоджена з components/StorefrontHome.tsx
-const BG = '#F5F6F9';
-const BORDER_SOFT = '#DDE2EA';
-const RED = '#1D5FD6';
-const YELLOW = '#1D5FD6';
-const PAPER = '#12192A';
-const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
-const BODY_FONT = "'Barlow', sans-serif";
+import { TECH_BG, TECH_SURFACE_2, TECH_BORDER, TECH_ACCENT_BRIGHT, TECH_INK, TECH_MUTED, TECH_FAINT, TECH_DISPLAY_FONT, TECH_BODY_FONT } from '@/lib/techTheme';
 
 type PageParams = { slug: string };
 
@@ -50,46 +42,46 @@ export default async function DepartmentPage({ params }: { params: Promise<PageP
     .filter((c): c is NonNullable<typeof c> => Boolean(c));
 
   return (
-    <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
-      <div className="max-w-6xl mx-auto px-5 md:px-8 py-8">
-        <nav className="text-xs mb-5 opacity-70" aria-label="Хлібні крихти">
-          <Link href="/" className="underline">
+    <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
+      <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
+        <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
+          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
             Головна
           </Link>{' '}
           / <span>{department.name}</span>
         </nav>
 
         <h1
-          className="text-3xl md:text-4xl mb-3"
-          style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
+          className="mb-3 text-3xl md:text-4xl"
+          style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, letterSpacing: '-0.01em', color: '#fff' }}
         >
           {department.name}
         </h1>
-        <p className="text-sm max-w-2xl mb-8" style={{ opacity: 0.85 }}>
+        <p className="mb-8 max-w-2xl text-sm" style={{ color: TECH_MUTED }}>
           Оберіть категорію, щоб побачити товари в наявності — або скористайтесь пошуком за артикулом чи VIN
           на Головній, якщо потрібної деталі немає в списку нижче.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {categories.map((category) => (
             <Link
               key={category.slug}
               href={`/category/${category.slug}`}
-              className="block p-5 rounded-md hover:shadow-sm transition-shadow"
-              style={{ background: '#FFFFFF', border: `1px solid ${BORDER_SOFT}`, borderLeft: `3px solid ${RED}` }}
+              className="block rounded-xl p-5 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+              style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
             >
-              <div className="text-lg mb-1.5" style={{ fontFamily: DISPLAY_FONT, color: PAPER }}>
+              <div className="mb-1.5 text-base font-semibold" style={{ fontFamily: TECH_DISPLAY_FONT, color: '#fff' }}>
                 {category.name}
               </div>
-              <p className="text-xs leading-relaxed" style={{ opacity: 0.75 }}>
+              <p className="text-xs leading-relaxed" style={{ color: TECH_MUTED }}>
                 {category.intro}
               </p>
             </Link>
           ))}
         </div>
 
-        <div className="pt-8 mt-8" style={{ borderTop: `1px solid ${BORDER_SOFT}` }}>
-          <Link href="/" className="text-sm underline" style={{ color: RED }}>
+        <div className="mt-8 pt-8" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+          <Link href="/" className="text-sm underline" style={{ color: TECH_ACCENT_BRIGHT }}>
             ← На головну
           </Link>
         </div>

@@ -18,6 +18,26 @@ import { CAR_MAKES, getCarMakeBySlug, buildMakeWhereClause } from '@/lib/carMake
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
+import {
+  TECH_BG,
+  TECH_SURFACE,
+  TECH_SURFACE_2,
+  TECH_BORDER,
+  TECH_ACCENT,
+  TECH_ACCENT_DIM,
+  TECH_ACCENT_BRIGHT,
+  TECH_INK,
+  TECH_MUTED,
+  TECH_FAINT,
+  TECH_GOOD,
+  TECH_GOOD_SOFT,
+  TECH_HEAT,
+  TECH_HEAT_SOFT,
+  TECH_GLOW,
+  TECH_DISPLAY_FONT,
+  TECH_BODY_FONT,
+  TECH_MONO_FONT,
+} from '@/lib/techTheme';
 
 export const runtime = 'nodejs';
 // Захист від спроби зібрати сторінку заздалегідь під час білда на
@@ -114,20 +134,26 @@ export async function generateMetadata({
   };
 }
 
-// Світла палітра "Workshop" — узгоджена з components/StorefrontHome.tsx
-const BG = '#F5F6F9';
-const PANEL_SOFT = '#EAEDF2';
-const BORDER_SOFT = '#DDE2EA';
-const RED = '#1D5FD6';
-const YELLOW = '#1D5FD6';
-const PAPER = '#12192A';
-const SUCCESS_TEXT = '#15803D';
-const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
-const BODY_FONT = "'Barlow', sans-serif";
-
 // Копійки покупцю не показуємо — тільки цілі гривні, округлені ВГОРУ
 function formatMoney(value: number): string {
   return Math.ceil(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
+}
+
+function StockBadge({ stock }: { stock: number }) {
+  const inStock = stock > 0;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold"
+      style={{
+        fontFamily: TECH_BODY_FONT,
+        background: inStock ? TECH_GOOD_SOFT : TECH_HEAT_SOFT,
+        color: inStock ? TECH_GOOD : TECH_HEAT,
+      }}
+    >
+      <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'currentColor' }} />
+      {inStock ? 'В наявності' : 'Під замовлення'}
+    </span>
+  );
 }
 
 export default async function CarMakePage({
@@ -156,7 +182,7 @@ export default async function CarMakePage({
   ];
 
   return (
-    <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+    <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
@@ -169,13 +195,13 @@ export default async function CarMakePage({
           dangerouslySetInnerHTML={{ __html: jsonLdScript(buildProductListJsonLd(products)) }}
         />
       )}
-      <div className="max-w-6xl mx-auto px-5 md:px-8 py-8">
-        <nav className="text-xs mb-5 opacity-70" aria-label="Хлібні крихти">
-          <Link href="/" className="underline">
+      <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
+        <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
+          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
             Головна
           </Link>{' '}
           /{' '}
-          <Link href="/marky" className="underline">
+          <Link href="/marky" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
             Марки авто
           </Link>{' '}
           / <span>{make.name}</span>
@@ -183,20 +209,20 @@ export default async function CarMakePage({
 
         <header className="mb-6">
           <h1
-            className="text-3xl md:text-4xl mb-3"
-            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
+            className="mb-3 text-3xl md:text-4xl"
+            style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, letterSpacing: '-0.01em', color: '#fff', textWrap: 'balance' }}
           >
             Запчастини {make.name} — купити з доставкою по Україні
           </h1>
-          <p className="text-sm max-w-2xl" style={{ color: PAPER, opacity: 0.85 }}>
+          <p className="max-w-2xl text-sm" style={{ color: TECH_MUTED }}>
             {total > 0
               ? `У каталозі понад ${total.toLocaleString('uk-UA')} запчастин для ${make.name}: оригінал та перевірені аналоги. Знайдіть потрібну деталь за артикулом або підберіть за моделлю й роком авто.`
               : `Зараз у каталозі немає в наявності запчастин ${make.name} — скористайтесь підбором за VIN на Головній, і ми підберемо деталь під замовлення.`}
           </p>
           <Link
             href={`/marky/${slug}/to`}
-            className="inline-block mt-4 px-4 py-2 text-xs font-bold uppercase tracking-wide"
-            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', background: RED, color: '#FFFFFF' }}
+            className="mt-4 inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
+            style={{ fontFamily: TECH_BODY_FONT, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
           >
             Що потрібно на ТО для {make.name} →
           </Link>
@@ -204,47 +230,43 @@ export default async function CarMakePage({
 
         {products.length === 0 ? (
           <div
-            className="p-6 rounded-md text-sm"
-            style={{ background: PANEL_SOFT, border: `1px dashed ${RED}` }}
+            className="rounded-2xl p-6 text-sm"
+            style={{ background: TECH_SURFACE, border: `1px dashed ${TECH_BORDER}`, color: TECH_MUTED }}
           >
             Немає товарів {make.name} у наявності просто зараз. Скористайтесь{' '}
-            <Link href="/" className="underline" style={{ color: YELLOW }}>
+            <Link href="/" className="font-medium underline" style={{ color: TECH_ACCENT_BRIGHT }}>
               підбором за VIN на Головній
             </Link>{' '}
             — ми підберемо деталь під замовлення.
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+            <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {products.map((product) => (
                 <Link
                   key={product.id}
                   href={buildProductPath(product.id, product)}
-                  className="block p-4 rounded-md transition-colors hover:opacity-90 hover:shadow-sm"
-                  style={{ background: '#FFFFFF', border: `1px solid ${BORDER_SOFT}` }}
+                  className="block rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+                  style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                 >
-                  <div className="text-xs uppercase mb-1" style={{ color: YELLOW, opacity: 0.9 }}>
-                    {product.brand || 'Без бренду'} · {product.article}
+                  <div className="mb-1 flex items-center gap-1.5 text-xs" style={{ fontFamily: TECH_BODY_FONT }}>
+                    <span className="font-bold uppercase tracking-wide" style={{ color: TECH_ACCENT_BRIGHT }}>
+                      {product.brand || 'Без бренду'}
+                    </span>
+                    <span style={{ color: TECH_FAINT }}>·</span>
+                    <span style={{ fontFamily: TECH_MONO_FONT, color: TECH_MUTED }}>{product.article}</span>
                   </div>
-                  <div className="text-sm mb-2" style={{ color: PAPER }}>
+                  <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
                     {product.name || `Деталь для ${make.name}`}
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: PAPER }}>
+                    <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
                       {formatMoney(product.retailPrice)} грн
                     </span>
-                    <span
-                      className="text-xs px-2 py-0.5 rounded"
-                      style={{
-                        background: product.stock > 0 ? '#DCFCE7' : PANEL_SOFT,
-                        color: product.stock > 0 ? SUCCESS_TEXT : PAPER,
-                      }}
-                    >
-                      {product.stock > 0 ? 'В наявності' : 'Під замовлення'}
-                    </span>
+                    <StockBadge stock={product.stock} />
                   </div>
                   {product.stock <= 0 && product.deliveryTime && (
-                    <div className="text-xs mt-1.5" style={{ color: PAPER, opacity: 0.7 }}>
+                    <div className="mt-1.5 text-xs" style={{ color: TECH_FAINT }}>
                       Термін поставки: {product.deliveryTime}
                     </div>
                   )}
@@ -253,17 +275,17 @@ export default async function CarMakePage({
             </div>
 
             {totalPages > 1 && (
-              <div className="flex items-center gap-3 text-sm mb-8">
+              <div className="mb-8 flex items-center gap-3 text-sm">
                 {page > 1 && (
-                  <Link href={`/marky/${slug}?page=${page - 1}`} className="underline" style={{ color: YELLOW }}>
+                  <Link href={`/marky/${slug}?page=${page - 1}`} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
                     ← Попередня
                   </Link>
                 )}
-                <span style={{ opacity: 0.7 }}>
+                <span style={{ color: TECH_FAINT }}>
                   Сторінка {page} з {totalPages}
                 </span>
                 {page < totalPages && (
-                  <Link href={`/marky/${slug}?page=${page + 1}`} className="underline" style={{ color: YELLOW }}>
+                  <Link href={`/marky/${slug}?page=${page + 1}`} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
                     Наступна →
                   </Link>
                 )}
@@ -272,8 +294,8 @@ export default async function CarMakePage({
           </>
         )}
 
-        <div className="pt-6" style={{ borderTop: `1px solid ${BORDER_SOFT}` }}>
-          <h2 className="text-sm font-semibold mb-3" style={{ color: PAPER }}>
+        <div className="pt-6" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+          <h2 className="mb-3 text-sm font-semibold" style={{ color: TECH_FAINT }}>
             Інші марки
           </h2>
           <div className="flex flex-wrap gap-2">
@@ -281,8 +303,8 @@ export default async function CarMakePage({
               <Link
                 key={m.slug}
                 href={`/marky/${m.slug}`}
-                className="text-xs px-3 py-1.5 rounded-full"
-                style={{ border: `1px solid ${RED}`, color: PAPER }}
+                className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+                style={{ border: `1px solid ${TECH_BORDER}`, color: TECH_MUTED }}
               >
                 {m.name}
               </Link>
