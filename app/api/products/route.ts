@@ -56,6 +56,8 @@ import { Pool } from 'pg';
 import { loadSynonymDictionary, expandSearchQuery, buildSynonymWhereClause } from '@/lib/searchSynonyms';
 import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline';
 import { resolveMakeDbValues } from '@/lib/carMakes';
+import { detectCategoryInText, buildCategoryWhereClause } from '@/lib/categories';
+import { extractCarReference } from '@/lib/searchCarText';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -257,6 +259,61 @@ export async function GET(request: NextRequest) {
       if (synonymClause) {
         orParts.push(`(${synonymClause.clause})`);
         values.push(...synonymClause.params);
+      }
+
+      // Розумний пошук "деталь + авто одним реченням" — покупець не
+      // знає точний артикул і просто пише "ремінь грм на мазду 626
+      // 1992 року" чи "колодки на лексус gs". Розпізнаємо марку/рік/
+      // модель авто у тексті запиту (lib/searchCarText.ts) і, якщо
+      // марку знайдено, додаємо ще одну гілку через OR: назва товару
+      // підходить під розпізнану категорію деталі (якщо вона теж
+      // впізнана, lib/categories.ts) І авто підходить під розпізнані
+      // марку/модель/рік — за тією ж схемою "власні поля товару АБО
+      // tecdoc_compatibility", що й у "Підбір за автомобілем" нижче.
+      // Це СУТО ДОДАТКОВА гілка (просто ще один OR): якщо марку авто
+      // в тексті не розпізнано, поведінка запиту не змінюється взагалі
+      const carRef = extractCarReference(expanded.leftoverRaw || search);
+      if (carRef) {
+        const carRefAndParts: string[] = [];
+
+        const detectedCategory = detectCategoryInText(search);
+        if (detectedCategory) {
+          const categoryClause = buildCategoryWhereClause(detectedCategory, values.length + 1);
+          values.push(...categoryClause.params);
+          carRefAndParts.push(`(${categoryClause.clause})`);
+        }
+
+        values.push(carRef.makeDbValues);
+        const carRefOwnParts = [`UPPER(p.car_make) = ANY($${values.length}::text[])`];
+        values.push(carRef.makeDbValues);
+        const carRefTecdocParts = [`UPPER(tc2.make) = ANY($${values.length}::text[])`];
+
+        if (carRef.modelHint) {
+          values.push(`%${carRef.modelHint}%`);
+          carRefOwnParts.push(`p.car_model ILIKE $${values.length}`);
+          values.push(`%${carRef.modelHint}%`);
+          carRefTecdocParts.push(`tc2.model ILIKE $${values.length}`);
+        }
+
+        if (carRef.year) {
+          values.push(`%${carRef.year}%`);
+          carRefOwnParts.push(`p.car_year ILIKE $${values.length}`);
+          values.push(carRef.year);
+          carRefTecdocParts.push(
+            `$${values.length}::int BETWEEN COALESCE(tc2.year_from, 1900) AND COALESCE(tc2.year_to, 2100)`
+          );
+        }
+
+        carRefAndParts.push(`(
+          (${carRefOwnParts.join(' AND ')})
+          OR EXISTS (
+            SELECT 1 FROM tecdoc_compatibility tc2
+            WHERE tc2.brand = p.brand AND tc2.article = p.article
+            AND ${carRefTecdocParts.join(' AND ')}
+          )
+        )`);
+
+        orParts.push(`(${carRefAndParts.join('\n            AND ')})`);
       }
 
       conditions.push(`(${orParts.join('\n          OR ')})`);

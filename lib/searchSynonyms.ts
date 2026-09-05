@@ -62,11 +62,16 @@ export interface ExpandedSearch {
   // Залишок запиту після вирізання відомих словнику фраз, очищений
   // від розділювачів. null, якщо після вирізання нічого не лишилось
   leftover: string | null;
+  // Той самий залишок, але БЕЗ очищення від пробілів — потрібен
+  // lib/searchCarText.ts, де марка/рік/модель розпізнаються по цілих
+  // словах ("мазда", "1992"), а не по злитому в одне слово тексту.
+  // null з тієї ж причини, що й leftover вище
+  leftoverRaw: string | null;
 }
 
 export function expandSearchQuery(rawQuery: string, dictionary: SynonymGroup[]): ExpandedSearch {
   const query = normalizeForPhraseMatch(rawQuery);
-  if (!query) return { synonymTermGroups: [], leftover: null };
+  if (!query) return { synonymTermGroups: [], leftover: null, leftoverRaw: null };
 
   // Плоский список усіх термінів з усіх груп, найдовші фрази (за
   // кількістю слів) — першими
@@ -99,10 +104,10 @@ export function expandSearchQuery(rawQuery: string, dictionary: SynonymGroup[]):
     return group.terms.map((term) => normalizeForPhraseMatch(term)).filter(Boolean);
   });
 
-  const leftoverRaw = remaining.trim();
-  const leftover = leftoverRaw ? stripSeparators(leftoverRaw) : null;
+  const leftoverTrimmed = remaining.trim();
+  const leftover = leftoverTrimmed ? stripSeparators(leftoverTrimmed) : null;
 
-  return { synonymTermGroups, leftover };
+  return { synonymTermGroups, leftover, leftoverRaw: leftoverTrimmed || null };
 }
 
 // Перетворює результат expandSearchQuery() на SQL-умову й параметри —

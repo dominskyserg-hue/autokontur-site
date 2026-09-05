@@ -236,3 +236,42 @@ export function buildCategoryWhereClause(
   });
   return { clause: conditions.join(' AND '), params };
 }
+
+// ------------------------------------------------------------
+// РОЗПІЗНАВАННЯ КАТЕГОРІЇ У ВІЛЬНОМУ ТЕКСТІ ПОШУКУ
+// ------------------------------------------------------------
+// Потрібно для запитів на кшталт "ремінь грм на мазду 626 1992 року"
+// (lib/searchCarText.ts, app/api/products/route.ts) — покупець описує
+// одразу і деталь, і авто, одним реченням, без точного артикула.
+// matchGroups тут ідеально підходять і для цього: та сама логіка "усі
+// групи мають знайтись" (лише замість перевірки p.name перевіряємо
+// текст самого запиту)
+
+// Усі слова-корені з усіх категорій одним плоским списком — потрібні,
+// щоб відрізнити "назву деталі" від "назви моделі авто" у залишку
+// тексту (напр. "ремінь грм 626" → прибрати "ремінь" і "грм" як
+// відомі слова про деталь, лишити тільки "626")
+const ALL_MATCH_TERMS: string[] = Array.from(new Set(CATEGORIES.flatMap((c) => c.matchGroups.flat())));
+
+// Категорія підходить, якщо в тексті є ХОЧА Б ОДНЕ слово з КОЖНОЇ її
+// групи matchGroups — та сама умова "І" між групами, "АБО" всередині
+// групи, що й у buildCategoryWhereClause вище, тільки застосована до
+// тексту запиту, а не до назви товару в базі
+export function detectCategoryInText(text: string): CategoryDef | null {
+  const lower = text.toLowerCase();
+  return CATEGORIES.find((category) => category.matchGroups.every((group) => group.some((term) => lower.includes(term)))) ?? null;
+}
+
+// Прибирає з тексту слова, що є "словником запчастин" (ремінь, грм,
+// колодки, фільтр...), лишаючи тільки те, що НЕ про деталь — типово
+// це і є назва моделі авто ("626", "camry", "gs"). Використовується
+// в lib/searchCarText.ts ПІСЛЯ того, як з тексту вже прибрано марку
+// авто й рік — усе, що лишається "невідомим" словом, і є моделлю
+export function stripPartVocabularyWords(text: string): string {
+  return text
+    .split(/\s+/)
+    .filter((word) => word.trim().length > 0)
+    .filter((word) => !ALL_MATCH_TERMS.some((term) => word.toLowerCase().includes(term)))
+    .join(' ')
+    .trim();
+}
