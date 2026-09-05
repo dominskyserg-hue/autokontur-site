@@ -86,8 +86,8 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
   if (added) {
     return (
       <div className="flex items-center gap-3 text-sm">
-        <span style={{ color: '#15803D' }}>✓ Додано в кошик</span>
-        <Link href="/" className="underline font-semibold" style={{ color: '#1D5FD6' }}>
+        <span style={{ color: '#34D399' }}>✓ Додано в кошик</span>
+        <Link href="/" className="font-semibold underline" style={{ color: '#60A5FA' }}>
           Перейти в кошик →
         </Link>
       </div>
@@ -98,8 +98,8 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
     <button
       type="button"
       onClick={handleAdd}
-      className="px-6 py-3 text-sm font-bold uppercase tracking-wide rounded-md"
-      style={{ background: '#1D5FD6', color: '#FFFFFF' }}
+      className="rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
+      style={{ background: 'linear-gradient(90deg, #3B82F6, #1D4ED8)', color: '#FFFFFF', boxShadow: '0 0 0 1px rgba(59,130,246,0.4), 0 0 24px 2px rgba(59,130,246,0.35)' }}
     >
       Додати в кошик
     </button>

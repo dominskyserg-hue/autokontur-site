@@ -38,6 +38,7 @@ const TECH_SURFACE_2 = '#1B2436';
 const TECH_BORDER = 'rgba(255,255,255,0.08)';
 const TECH_BORDER_2 = 'rgba(255,255,255,0.14)';
 const TECH_ACCENT = '#3B82F6';
+const TECH_ACCENT_BRIGHT = '#60A5FA';
 const TECH_ACCENT_DIM = '#1D4ED8';
 const TECH_INK = '#F1F5F9';
 const TECH_MUTED = '#94A3B8';
@@ -151,8 +152,8 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-md px-6 py-3 text-sm font-bold uppercase tracking-wide transition-colors hover:bg-[rgba(29,95,214,0.06)]"
-        style={{ border: '1.5px solid #1D5FD6', color: '#1D5FD6' }}
+        className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+        style={{ fontFamily: SANS_TECH, border: '1.5px solid rgba(59,130,246,0.5)', color: TECH_ACCENT_BRIGHT }}
       >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
           <path d="M13 2 3 14h7l-1 8 11-14h-7l1-8Z" />

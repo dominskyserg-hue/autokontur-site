@@ -13,10 +13,10 @@ export default function ProductPageLoading() {
         <div className="flex flex-col items-center justify-center py-24 gap-4">
           <div
             className="w-10 h-10 rounded-full animate-spin"
-            style={{ border: '3px solid #EAEDF2', borderTopColor: '#1D5FD6' }}
+            style={{ border: '3px solid rgba(255,255,255,0.1)', borderTopColor: '#3B82F6' }}
             aria-hidden="true"
           />
-          <p className="text-sm" style={{ color: '#5C6678' }}>
+          <p className="text-sm" style={{ color: '#94A3B8' }}>
             Завантаження товару...
           </p>
         </div>

@@ -57,6 +57,7 @@ import { FAQ_ITEMS } from '@/lib/faq';
 import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
 import { trackAddToCart, trackBeginCheckout, trackPurchase } from '@/lib/analytics';
+import NovaPoshtaAddressFields from '@/components/NovaPoshtaAddressFields';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -2809,42 +2810,18 @@ function CartDrawer({
                   </button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <input
-                      type="text"
-                      value={city}
-                      onChange={(e) => onCityChange(e.target.value)}
-                      onBlur={onCityBlur}
-                      placeholder="Місто"
-                      className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
-                      style={fieldStyle(!!cityError)}
-                    />
-                    {cityError && (
-                      <p className="mt-1 text-xs" style={{ color: '#FCA5A5' }}>
-                        {cityError}
-                      </p>
-                    )}
-                  </div>
-
-                  <div>
-                    <input
-                      type="text"
-                      value={novaPoshtaAddress}
-                      onChange={(e) => onAddressChange(e.target.value)}
-                      onBlur={onAddressBlur}
-                      placeholder={addressCopy.placeholder}
-                      title={addressCopy.label}
-                      className="w-full rounded-xl px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[rgba(59,130,246,0.5)] placeholder:text-[#54607A]"
-                      style={fieldStyle(!!addressError)}
-                    />
-                    {addressError && (
-                      <p className="mt-1 text-xs" style={{ color: '#FCA5A5' }}>
-                        {addressError}
-                      </p>
-                    )}
-                  </div>
-                </div>
+                <NovaPoshtaAddressFields
+                  deliveryMethod={deliveryMethod}
+                  city={city}
+                  onCityChange={onCityChange}
+                  onCityBlur={onCityBlur}
+                  cityError={cityError}
+                  address={novaPoshtaAddress}
+                  onAddressChange={onAddressChange}
+                  onAddressBlur={onAddressBlur}
+                  addressError={addressError}
+                  addressPlaceholder={addressCopy.placeholder}
+                />
 
                 <div>
                   {/* Комментарий — единственное необязательное поле,

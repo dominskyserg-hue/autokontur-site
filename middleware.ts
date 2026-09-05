@@ -53,6 +53,8 @@ const PUBLIC_API_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: 'POST', pattern: /^\/api\/vin-requests$/ },
   { method: 'GET', pattern: /^\/api\/announcements$/ },
   { method: 'GET', pattern: /^\/api\/site-settings$/ },
+  { method: 'GET', pattern: /^\/api\/nova-poshta\/cities$/ },
+  { method: 'GET', pattern: /^\/api\/nova-poshta\/warehouses$/ },
   { method: 'POST', pattern: /^\/api\/admin\/login$/ },
   { method: 'POST', pattern: /^\/api\/admin\/logout$/ },
 ];
