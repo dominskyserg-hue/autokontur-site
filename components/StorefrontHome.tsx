@@ -961,16 +961,28 @@ export default function StorefrontHome() {
       </svg>
 
       <div className="relative" style={{ zIndex: 1 }}>
-        {/* ==================== ОБЪЯВЛЕНИЯ ==================== */}
+        {/* ==================== ОБ'ЯВИ (Tech Premium) ==================== */}
         {/* Настраиваются в админке /admin/settings (см. AnnouncementsManager) —
             показываем только те, что админ явно включил. Если объявлений
-            несколько, выводим все подряд узкими полосками */}
+            несколько, выводим все подряд узкими полосками. Стиль узгоджено
+            з рештою Головної: градієнт бренд-синього замість суцільної
+            заливки, і той самий світний акцентний маркер, що і в бейджі
+            "Понад 20 000 запчастин" у hero */}
         {announcements.map((announcement) => (
           <div
             key={announcement.id}
-            className="text-center text-xs md:text-sm py-2 px-4 font-semibold"
-            style={{ background: RED, color: INK }}
+            className="flex items-center justify-center gap-2 px-4 py-2 text-center text-xs font-semibold md:text-sm"
+            style={{
+              fontFamily: SANS_TECH,
+              background: `linear-gradient(90deg, ${TECH_ACCENT_DIM}, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`,
+              color: '#fff',
+              borderBottom: '1px solid rgba(255,255,255,0.12)',
+            }}
           >
+            <span
+              className="h-1.5 w-1.5 shrink-0 rounded-full"
+              style={{ background: '#fff', boxShadow: '0 0 8px 2px rgba(255,255,255,0.75)' }}
+            />
             {announcement.text}
           </div>
         ))}
