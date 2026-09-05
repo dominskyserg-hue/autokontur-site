@@ -49,7 +49,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX } from 'lucide-react';
+import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock } from 'lucide-react';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { DEPARTMENTS } from '@/lib/departments';
@@ -170,11 +170,13 @@ const HEADER_TEXT = 'rgba(255,255,255,0.92)';
 const HEADER_MUTED = 'rgba(255,255,255,0.55)';
 const HEADER_BORDER = 'rgba(255,255,255,0.18)';
 
-// ---- "Tech Premium" — шапка + hero + результати пошуку (затверджені
-// концепти, див. Artifact "Tech Premium Redesign" та "Search Results
-// Console"). Решта сторінки (переваги, розділи, футер) свідомо
-// лишається на старій світлій палітрі вище — редизайн цих екранів
-// окремим кроком, не зараз ----
+// ---- "Tech Premium" — уся Головна сторінка цілком: шапка, hero,
+// результати пошуку, переваги, розділи, марки авто, FAQ і футер
+// (затверджені концепти, див. Artifact "Tech Premium Redesign",
+// "Search Results Console" та "Homepage Foundation"). Світла палітра
+// вище (RED/PANEL/BORDER/...) лишається для решти сторінок сайту
+// (категорії, картка товару, кошик, адмінка) — Головну редизайнили
+// цілком, інші екрани не займали ----
 const TECH_BG = '#0B0F17';
 const TECH_SURFACE = 'rgba(20,27,41,0.6)';
 const TECH_SURFACE_2 = '#1B2436';
@@ -2148,206 +2150,337 @@ export default function StorefrontHome() {
           </section>
         )}
 
-        {/* ==================== ПРЕИМУЩЕСТВА ==================== */}
-        <section className="max-w-6xl mx-auto px-5 md:px-8 py-14">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            <BenefitCard
-              icon={<TruckIcon />}
-              title="Швидка доставка"
-              description="Відправляємо замовлення в день оформлення по всій Україні"
-            />
-            <BenefitCard
-              icon={<CheckIcon />}
-              title="Оригінальні запчастини"
-              description="Працюємо тільки з перевіреними постачальниками та брендами"
-            />
-            <BenefitCard
-              icon={<CarIcon />}
-              title="Підбір за VIN"
-              description="Не знайшли за артикулом? Надішліть VIN — підберемо точно"
-              onClick={() => setVinModalOpen(true)}
-            />
+        {/* ==================== ПЕРЕВАГИ (Tech Premium) ==================== */}
+        {/* Затверджений концепт — Artifact "Homepage Foundation": далі
+            й до кінця сторінки — той самий темний Tech Premium полотно,
+            що і в hero/результатах, без переходу назад у світлу тему */}
+        <section className="relative" style={{ background: TECH_BG }}>
+          <div className="max-w-6xl mx-auto px-5 md:px-8 py-14">
+            <p className="mb-4 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+              Чому обирають нас
+            </p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <TechValueCard icon={<TruckIcon />} title="Швидка доставка" description="Відправляємо замовлення в день оформлення по всій Україні" />
+              <TechValueCard icon={<CheckIcon />} title="Оригінальні запчастини" description="Працюємо тільки з перевіреними постачальниками та брендами" />
+              <TechValueCard
+                icon={<CarIcon />}
+                title="Підбір за VIN"
+                description="Не знайшли за артикулом? Надішліть VIN — підберемо точно"
+                onClick={() => setVinModalOpen(true)}
+              />
+            </div>
           </div>
-        </section>
 
-        {/* ==================== РОЗДІЛИ АВТО ==================== */}
-        {/* Велика іконна сітка по системах автомобіля — за мотивами
-            каталогу lr-parts.com.ua (стандартна для запчастин
-            категорійна структура). На відміну від вузьких категорій
-            нижче ("Популярні категорії"), кожна іконка тут об'єднує
-            кілька таких категорій одразу (lib/departments.ts).
-            Розділ, під який у нас поки що НЕМАЄ жодного товару, веде
-            не на порожню сторінку, а в підбір за VIN — чесніше, ніж
-            обіцяти те, чого немає в каталозі. Таких зараз більшість
-            (14 з 18) — це нормально: сітка одразу показує покупцю
-            повний спектр авто, а не тільки те, що вже є на складі */}
-        <section className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
-          <h2
-            className="text-sm font-semibold uppercase tracking-wide mb-3"
-            style={{ fontFamily: LABEL_FONT, color: MUTED }}
-          >
-            Розділи
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {DEPARTMENTS.map((department) => {
-              const Icon = DEPARTMENT_ICONS[department.slug];
-              const hasCategories = department.categorySlugs.length > 0;
-              const content = (
-                <>
-                  <div className="flex items-center justify-center shrink-0" style={{ color: RED }}>
-                    <Icon />
-                  </div>
-                  <span className="text-sm font-semibold leading-tight" style={{ fontFamily: LABEL_FONT }}>
-                    {department.name}
-                  </span>
-                </>
-              );
+          {/* ==================== РОЗДІЛИ АВТО ==================== */}
+          {/* Велика іконна сітка по системах автомобіля — за мотивами
+              каталогу lr-parts.com.ua (стандартна для запчастин
+              категорійна структура). На відміну від вузьких категорій
+              нижче ("Популярні категорії"), кожна іконка тут об'єднує
+              кілька таких категорій одразу (lib/departments.ts).
+              Розділ, під який у нас поки що НЕМАЄ жодного товару, веде
+              не на порожню сторінку, а в підбір за VIN — чесніше, ніж
+              обіцяти те, чого немає в каталозі. Таких зараз більшість
+              (14 з 18) — це нормально: сітка одразу показує покупцю
+              повний спектр авто, а не тільки те, що вже є на складі */}
+          <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10" style={{ borderTop: `1px solid ${TECH_BORDER}`, paddingTop: 40 }}>
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+              Каталог за системами авто
+            </p>
+            <h2 className="mb-4 text-xl" style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff' }}>
+              Розділи
+            </h2>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              {DEPARTMENTS.map((department) => {
+                const Icon = DEPARTMENT_ICONS[department.slug];
+                const hasCategories = department.categorySlugs.length > 0;
+                const content = (
+                  <>
+                    <motion.div
+                      className="flex shrink-0 items-center justify-center"
+                      style={{ color: TECH_FAINT }}
+                      whileHover={{ scale: 1.15, rotate: -4, color: TECH_ACCENT_BRIGHT }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                    >
+                      <Icon />
+                    </motion.div>
+                    <span className="text-sm font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: TECH_INK }}>
+                      {department.name}
+                    </span>
+                  </>
+                );
 
-              return hasCategories ? (
-                <Link
-                  key={department.slug}
-                  href={`/rozdil/${department.slug}`}
-                  className="flex items-center gap-3 px-4 py-3.5 rounded-md hover:shadow-sm transition-shadow"
-                  style={{ background: PANEL_SOFT }}
-                >
-                  {content}
-                </Link>
-              ) : (
-                <button
-                  key={department.slug}
-                  type="button"
-                  onClick={() => setVinModalOpen(true)}
-                  title="У нас поки немає товарів цього розділу в каталозі — підберемо за VIN"
-                  className="flex items-center gap-3 px-4 py-3.5 rounded-md text-left hover:shadow-sm transition-shadow"
-                  style={{ background: PANEL_SOFT }}
-                >
-                  {content}
-                </button>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ==================== КАТЕГОРІЇ ДЕТАЛЕЙ ==================== */}
-        {/* Список посилань на SEO-сторінки категорій (app/category/[slug]) —
-            і зручність для покупця, і сигнал для Google приходити сюди
-            за новими сторінками */}
-        <section className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
-          <h2
-            className="text-sm font-semibold uppercase tracking-wide mb-3"
-            style={{ fontFamily: LABEL_FONT, color: MUTED }}
-          >
-            Популярні категорії
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => (
-              <Link
-                key={c.slug}
-                href={`/category/${c.slug}`}
-                className="text-xs px-3 py-1.5 rounded-full"
-                style={{ border: `1px solid ${BORDER}`, color: MUTED }}
-              >
-                {c.name}
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        {/* ==================== МАРКИ АВТО ==================== */}
-        {/* Те саме, що й блок категорій вище, але для сторінок
-            /marky/[slug] (lib/carMakes.ts) — список складений за
-            реальними марками з каталогу, а не довільний */}
-        <section className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
-          <h2
-            className="text-sm font-semibold uppercase tracking-wide mb-3"
-            style={{ fontFamily: LABEL_FONT, color: MUTED }}
-          >
-            Популярні марки авто
-          </h2>
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
-            {CAR_MAKES.map((m) => (
-              <Link
-                key={m.slug}
-                href={`/marky/${m.slug}`}
-                title={m.name}
-                className="flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-md hover:shadow-sm transition-shadow"
-                style={{ background: PANEL_SOFT }}
-              >
-                <img
-                  src={m.logo}
-                  alt={m.name}
-                  className="h-7 w-auto max-w-[64px] object-contain"
-                  loading="lazy"
-                />
-                <span className="text-[11px] leading-tight text-center" style={{ color: MUTED }}>
-                  {m.name}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        {/* ==================== FAQ ==================== */}
-        {/* Текст питань/відповідей — з lib/faq.ts, ТОЧНО той самий, що
-            й у розмітці FAQPage (JSON-LD) в app/page.tsx: Google звіряє
-            видимий текст із структурованими даними, і розбіжність може
-            коштувати розширеного сніппета у видачі */}
-        <section className="max-w-3xl mx-auto px-5 md:px-8 pb-14">
-          <h2
-            className="text-2xl md:text-3xl mb-6"
-            style={{ fontFamily: DISPLAY_FONT, letterSpacing: '0.02em', color: YELLOW }}
-          >
-            Питання, які нам часто задають
-          </h2>
-          <div className="flex flex-col gap-2">
-            {FAQ_ITEMS.map((item, index) => {
-              const isOpen = openFaqIndex === index;
-              return (
-                <div key={item.question} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenFaqIndex(isOpen ? null : index)}
-                    className="w-full flex items-center justify-between gap-4 py-4 text-left text-sm font-semibold"
-                    style={{ fontFamily: LABEL_FONT, color: TEXT }}
-                    aria-expanded={isOpen}
+                return hasCategories ? (
+                  <Link
+                    key={department.slug}
+                    href={`/rozdil/${department.slug}`}
+                    className="flex items-center gap-3 rounded-xl px-4 py-3.5 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+                    style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                   >
-                    <span>{item.question}</span>
-                    <span style={{ color: YELLOW, fontSize: 20, lineHeight: 1 }}>{isOpen ? '−' : '+'}</span>
+                    {content}
+                  </Link>
+                ) : (
+                  <button
+                    key={department.slug}
+                    type="button"
+                    onClick={() => setVinModalOpen(true)}
+                    title="У нас поки немає товарів цього розділу в каталозі — підберемо за VIN"
+                    className="flex items-center gap-3 rounded-xl px-4 py-3.5 text-left transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+                    style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
+                  >
+                    {content}
                   </button>
-                  {isOpen && (
-                    <p className="pb-4 text-sm" style={{ color: MUTED }}>
-                      {item.answer}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </section>
 
-        <footer className="py-8 text-center text-xs" style={{ color: FAINT }}>
-          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 mb-3">
-            <Link href="/about" className="underline">
-              Про нас
-            </Link>
-            <Link href="/delivery" className="underline">
-              Доставка
-            </Link>
-            <Link href="/contacts" className="underline">
-              Контакти
-            </Link>
-            <Link href="/returns" className="underline">
-              Повернення та обмін
-            </Link>
-            <Link href="/terms" className="underline">
-              Публічна оферта
-            </Link>
-            <Link href="/privacy" className="underline">
-              Політика конфіденційності
-            </Link>
+          {/* ==================== КАТЕГОРІЇ ДЕТАЛЕЙ ==================== */}
+          {/* Список посилань на SEO-сторінки категорій (app/category/[slug]) —
+              і зручність для покупця, і сигнал для Google приходити сюди
+              за новими сторінками */}
+          <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+              Швидкий перехід
+            </p>
+            <h2 className="mb-4 text-xl" style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff' }}>
+              Популярні категорії
+            </h2>
+            <div className="flex flex-wrap gap-2.5">
+              {CATEGORIES.map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/category/${c.slug}`}
+                  className="rounded-full px-4 py-2 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+                  style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_BORDER}`, color: TECH_MUTED }}
+                >
+                  {c.name}
+                </Link>
+              ))}
+            </div>
           </div>
-          © {new Date().getFullYear()} {shopName} — автозапчастини з доставкою по Україні
-        </footer>
+
+          {/* ==================== МАРКИ АВТО ==================== */}
+          {/* Те саме, що й блок категорій вище, але для сторінок
+              /marky/[slug] (lib/carMakes.ts) — список складений за
+              реальними марками з каталогу, а не довільний. Лого за
+              замовчуванням монохромне (grayscale), кольору набуває
+              лише при наведенні — так велика сітка різних фірмових
+              кольорів не спорить із темною палітрою сторінки */}
+          <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+              {CAR_MAKES.length} марок у каталозі
+            </p>
+            <h2 className="mb-4 text-xl" style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff' }}>
+              Популярні марки авто
+            </h2>
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8">
+              {CAR_MAKES.map((m) => (
+                <Link
+                  key={m.slug}
+                  href={`/marky/${m.slug}`}
+                  title={m.name}
+                  className="group flex flex-col items-center justify-center gap-2 rounded-xl px-2 py-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+                  style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
+                >
+                  <img
+                    src={m.logo}
+                    alt={m.name}
+                    className="h-7 w-auto max-w-[64px] object-contain opacity-60 grayscale transition-all duration-200 group-hover:opacity-100 group-hover:grayscale-0"
+                    loading="lazy"
+                  />
+                  <span
+                    className="text-[11px] leading-tight text-center transition-colors"
+                    style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}
+                  >
+                    {m.name}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* ==================== FAQ ==================== */}
+          {/* Текст питань/відповідей — з lib/faq.ts, ТОЧНО той самий, що
+              й у розмітці FAQPage (JSON-LD) в app/page.tsx: Google звіряє
+              видимий текст із структурованими даними, і розбіжність може
+              коштувати розширеного сніппета у видачі. Розкриття відповіді —
+              через Framer Motion (висота/прозорість замість "j-jump" від
+              звичайного display:none), той самий прийом, що й
+              крос-фейд панелей пошуку в hero */}
+          <div className="max-w-3xl mx-auto px-5 md:px-8 pb-16">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+              Питання
+            </p>
+            <h2 className="mb-5 text-xl" style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff' }}>
+              Питання, які нам часто задають
+            </h2>
+            <div className="flex flex-col gap-2.5">
+              {FAQ_ITEMS.map((item, index) => {
+                const isOpen = openFaqIndex === index;
+                return (
+                  <div
+                    key={item.question}
+                    className="relative overflow-hidden rounded-2xl transition-colors"
+                    style={{ background: TECH_SURFACE_2, border: `1px solid ${isOpen ? 'rgba(59,130,246,0.35)' : TECH_BORDER}` }}
+                  >
+                    {isOpen && <div className="absolute bottom-0 left-0 top-0 w-0.5" style={{ background: TECH_ACCENT_BRIGHT }} />}
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaqIndex(isOpen ? null : index)}
+                      className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left text-sm font-semibold"
+                      style={{ fontFamily: SANS_TECH, color: TECH_INK }}
+                      aria-expanded={isOpen}
+                    >
+                      <span>{item.question}</span>
+                      <motion.span
+                        className="shrink-0"
+                        style={{ color: isOpen ? TECH_ACCENT_BRIGHT : TECH_FAINT }}
+                        animate={{ rotate: isOpen ? 180 : 0 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDownIcon />
+                      </motion.span>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {isOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2, ease: 'easeInOut' }}
+                          style={{ overflow: 'hidden' }}
+                        >
+                          <p
+                            className="px-5 pb-4 text-sm leading-relaxed"
+                            style={{
+                              fontFamily: SANS_TECH,
+                              color: TECH_MUTED,
+                              background: 'linear-gradient(180deg, rgba(59,130,246,0.06), transparent 45%)',
+                            }}
+                          >
+                            {item.answer}
+                          </p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ==================== ФУТЕР ==================== */}
+          <footer style={{ borderTop: `1px solid ${TECH_BORDER}`, background: 'linear-gradient(180deg, transparent, rgba(59,130,246,0.03))' }}>
+            <div className="max-w-6xl mx-auto px-5 md:px-8">
+              <div className="grid grid-cols-2 gap-8 py-12 sm:grid-cols-4">
+                <div className="col-span-2 sm:col-span-1">
+                  <div className="mb-3.5 flex items-center gap-2.5">
+                    <DominatorMark />
+                    <span style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 700, fontSize: 15, color: '#fff', letterSpacing: '-0.01em' }}>
+                      {shopName.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="max-w-[26ch] text-[13px] leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                    Команда професіоналів з підбору автозапчастин. Знаходимо потрібну деталь за артикулом або за VIN —
+                    швидко і без помилок сумісності.
+                  </p>
+                </div>
+
+                <div>
+                  <h4 className="mb-3.5 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                    Навігація
+                  </h4>
+                  <ul className="flex flex-col gap-2.5">
+                    <li>
+                      <Link href="/about" className="text-[13.5px] transition-colors hover:text-[#60A5FA]" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                        Про нас
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/category" className="text-[13.5px] transition-colors hover:text-[#60A5FA]" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                        Категорії
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/contacts" className="text-[13.5px] transition-colors hover:text-[#60A5FA]" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                        Контакти
+                      </Link>
+                    </li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="mb-3.5 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                    Сервіс та доставка
+                  </h4>
+                  <ul className="flex flex-col gap-2.5">
+                    <li>
+                      <Link href="/delivery" className="text-[13.5px] transition-colors hover:text-[#60A5FA]" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                        Доставка Новою Поштою
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/returns" className="text-[13.5px] transition-colors hover:text-[#60A5FA]" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                        Повернення та обмін
+                      </Link>
+                    </li>
+                    <li>
+                      <button
+                        type="button"
+                        onClick={() => setVinModalOpen(true)}
+                        className="text-left text-[13.5px] transition-colors hover:text-[#60A5FA]"
+                        style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+                      >
+                        Підбір за VIN
+                      </button>
+                    </li>
+                    <li>
+                      <Link href="/terms" className="text-[13.5px] transition-colors hover:text-[#60A5FA]" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                        Публічна оферта
+                      </Link>
+                    </li>
+                    <li>
+                      <Link href="/privacy" className="text-[13.5px] transition-colors hover:text-[#60A5FA]" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                        Політика конфіденційності
+                      </Link>
+                    </li>
+                  </ul>
+                </div>
+
+                <div>
+                  <h4 className="mb-3.5 text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                    Контакти
+                  </h4>
+                  <div className="flex flex-col gap-3">
+                    <a
+                      href={`tel:${phone.replace(/[^\d+]/g, '')}`}
+                      className="flex items-center gap-2.5 text-[13.5px] transition-colors hover:text-[#60A5FA]"
+                      style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+                    >
+                      <span style={{ color: TECH_ACCENT_BRIGHT }}>
+                        <PhoneIcon />
+                      </span>
+                      {phone}
+                    </a>
+                    <div className="flex items-center gap-2.5 text-[13.5px]" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                      <Clock className="h-[15px] w-[15px]" style={{ color: TECH_ACCENT_BRIGHT }} />
+                      {workingHours}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                className="flex flex-wrap items-center justify-between gap-3 py-4 text-xs"
+                style={{ fontFamily: SANS_TECH, color: TECH_FAINT, borderTop: `1px solid ${TECH_BORDER}` }}
+              >
+                <span>
+                  © {new Date().getFullYear()} {shopName} — автозапчастини з доставкою по Україні
+                </span>
+              </div>
+            </div>
+          </footer>
+        </section>
       </div>
     </div>
   );
@@ -2751,7 +2884,11 @@ function OrderSuccessScreen({ orderId, onClose }: { orderId: string | null; onCl
 // МЕЛКИЕ КОМПОНЕНТЫ ОФОРМЛЕНИЯ
 // ------------------------------------------------------------
 
-function BenefitCard({
+// Картка "Переваги" на Головній у стилі Tech Premium (замінила
+// колишню світлу BenefitCard) — скляна підкладка з розмиттям,
+// іконка в градієнтній плитці, підйом картки й посилення світіння
+// при наведенні
+function TechValueCard({
   icon,
   title,
   description,
@@ -2765,21 +2902,24 @@ function BenefitCard({
   const content = (
     <>
       <div
-        className="w-11 h-11 flex items-center justify-center shrink-0"
-        style={{ background: 'rgba(229,35,28,0.12)', color: RED }}
+        className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-xl"
+        style={{ background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
       >
         {icon}
       </div>
       <div>
-        <h3 className="text-sm font-semibold mb-1 uppercase tracking-wide" style={{ fontFamily: LABEL_FONT }}>
+        <h3 className="mb-1 text-sm font-semibold" style={{ fontFamily: DISPLAY_FONT_TECH, color: '#fff' }}>
           {title}
         </h3>
-        <p className="text-xs" style={{ color: MUTED }}>
+        <p className="text-xs leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
           {description}
         </p>
       </div>
     </>
   );
+
+  const sharedStyle = { background: TECH_SURFACE, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER}` };
+  const sharedClass = 'flex items-start gap-4 rounded-2xl p-5 transition-all hover:-translate-y-0.5 hover:shadow-glow-lg hover:border-[rgba(59,130,246,0.35)]';
 
   // onClick переданий лише для картки "Підбір за VIN" — вона відкриває
   // форму заявки, тому рендериться як справжня кнопка, а не просто
@@ -2787,19 +2927,14 @@ function BenefitCard({
   // не тільки мишкою
   if (onClick) {
     return (
-      <button
-        type="button"
-        onClick={onClick}
-        className="p-5 flex items-start gap-4 text-left w-full"
-        style={{ background: PANEL, border: `1px solid ${BORDER}`, cursor: 'pointer' }}
-      >
+      <button type="button" onClick={onClick} className={`${sharedClass} w-full text-left`} style={{ ...sharedStyle, cursor: 'pointer' }}>
         {content}
       </button>
     );
   }
 
   return (
-    <div className="p-5 flex items-start gap-4" style={{ background: PANEL, border: `1px solid ${BORDER}` }}>
+    <div className={sharedClass} style={sharedStyle}>
       {content}
     </div>
   );
