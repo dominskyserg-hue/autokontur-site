@@ -2312,10 +2312,15 @@ export default function StorefrontHome() {
           {/* ==================== МАРКИ АВТО ==================== */}
           {/* Те саме, що й блок категорій вище, але для сторінок
               /marky/[slug] (lib/carMakes.ts) — список складений за
-              реальними марками з каталогу, а не довільний. Лого за
-              замовчуванням монохромне (grayscale), кольору набуває
-              лише при наведенні — так велика сітка різних фірмових
-              кольорів не спорить із темною палітрою сторінки */}
+              реальними марками з каталогу, а не довільний. Самі файли
+              лого — це темні контури на ПРОЗОРОМУ фоні (розраховані на
+              світлу сторінку), тому пряме розміщення на темній картці
+              робить їх майже невидимими. Вирішено світлою "підкладкою"
+              під кожним лого — так само, як типово показують логотипи
+              партнерів на темних сайтах. Лого за замовчуванням
+              монохромне (grayscale), кольору набуває лише при
+              наведенні — так велика сітка різних фірмових кольорів не
+              спорить із темною палітрою сторінки */}
           <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
             <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
               {CAR_MAKES.length} марок у каталозі
@@ -2332,12 +2337,14 @@ export default function StorefrontHome() {
                   className="group flex flex-col items-center justify-center gap-2 rounded-xl px-2 py-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                   style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                 >
-                  <img
-                    src={m.logo}
-                    alt={m.name}
-                    className="h-7 w-auto max-w-[64px] object-contain opacity-60 grayscale transition-all duration-200 group-hover:opacity-100 group-hover:grayscale-0"
-                    loading="lazy"
-                  />
+                  <div className="flex h-9 w-16 items-center justify-center rounded-lg" style={{ background: '#F1F5F9' }}>
+                    <img
+                      src={m.logo}
+                      alt={m.name}
+                      className="h-6 w-auto max-w-[52px] object-contain opacity-80 grayscale transition-all duration-200 group-hover:opacity-100 group-hover:grayscale-0"
+                      loading="lazy"
+                    />
+                  </div>
                   <span
                     className="text-[11px] leading-tight text-center transition-colors"
                     style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}
