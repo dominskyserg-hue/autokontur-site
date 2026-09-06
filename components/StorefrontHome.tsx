@@ -2094,7 +2094,7 @@ export default function StorefrontHome() {
                       </div>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" style={{ gap: '1px', background: TECH_BORDER }}>
+                    <div className="grid" style={{ gap: '1px', background: TECH_BORDER, gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))' }}>
                       {filteredResults.map((product) => (
                         <div key={product.id} className="flex flex-col gap-3 p-4" style={{ background: TECH_SURFACE_2 }}>
                           <div
