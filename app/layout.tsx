@@ -54,6 +54,14 @@ const GSC_VERIFICATION = process.env.NEXT_PUBLIC_GSC_VERIFICATION;
 // файла), а не прямо в коде — так его можно менять без правки кода
 const META_PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID;
 
+// ID аккаунта Google Ads (кабинет DOMINATOR) — нужен для отслеживания
+// конверсий по рекламе Google Ads. В отличие от GA_MEASUREMENT_ID и
+// META_PIXEL_ID выше, это значение НЕ вынесено в переменную окружения:
+// оно и так открыто видно в исходном коде страницы у любого посетителя
+// (это не секрет, а просто публичный идентификатор рекламного кабинета),
+// поэтому хранить его отдельно от кода смысла нет
+const GOOGLE_ADS_ID = 'AW-18434035736';
+
 // ВАЖЛИВО: тут навмисно СТАТИЧНІ дані, без звернення до бази.
 // Раніше тут була generateMetadata() з pg-запитом до site_settings —
 // але layout.tsx рендериться АБСОЛЮТНО на кожен запит до сайту
@@ -168,26 +176,45 @@ export default function RootLayout({
           </Script>
         )}
 
-        {/* ==================== GOOGLE ANALYTICS 4 ====================
+        {/* ==================== GOOGLE ANALYTICS 4 + GOOGLE ADS (gtag.js) ====================
+            Один и тот же файл gtag.js обслуживает сразу оба счётчика —
+            и GA4, и Google Ads: не важно, чей ID указан в адресе самого
+            скрипта, достаточно загрузить его один раз, а дальше просто
+            вызвать gtag('config', ...) отдельно для каждого нужного
+            идентификатора. Поэтому базовый тег Google Ads (GOOGLE_ADS_ID)
+            всегда в одном <Script> вместе с GA4, а не в отдельном втором
+            <script src="...gtag/js?id=...">, который заново загружал бы
+            тот же файл ещё раз.
+
             strategy="afterInteractive" — те саме, що рекомендує сам
             Next.js для gtag.js: завантажується ПІСЛЯ того, як сторінка
             стала інтерактивною, щоб не затримувати перший рендер і
             Core Web Vitals (LCP) заради стороннього скрипта аналітики.
-            Якщо NEXT_PUBLIC_GA_MEASUREMENT_ID не задано — обидва
-            <Script> просто не рендеряться, на сайті це ніяк не видно */}
-        {GA_MEASUREMENT_ID && (
-          <>
-            <Script src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`} strategy="afterInteractive" />
-            <Script id="ga4-init" strategy="afterInteractive">
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${GA_MEASUREMENT_ID}');
-              `}
-            </Script>
-          </>
-        )}
+
+            GOOGLE_ADS_ID (AW-18434035736) підключений БЕЗУМОВНО — цей
+            тег має бути на КОЖНІЙ сторінці сайту незалежно від того,
+            чи налаштована змінна оточення GA_MEASUREMENT_ID. Якщо ж
+            NEXT_PUBLIC_GA_MEASUREMENT_ID не задано — просто не буде
+            другого виклику gtag('config', ...) для GA4, сам Google Ads
+            тег це ніяк не зачіпає.
+
+            Подія "покупка" (purchase) для конверсій Google Ads окремо
+            ніде не дублюється: вона й так один раз відправляється через
+            trackPurchase() у lib/analytics.ts (викликається з
+            components/StorefrontHome.tsx одразу після успішного
+            оформлення замовлення) — а gtag() сам розсилає кожну подію
+            відразу на ВСІ підключені тут config-цілі, і GA4, і Google
+            Ads, без додаткового коду */}
+        <Script src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`} strategy="afterInteractive" />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', '${GOOGLE_ADS_ID}');
+            ${GA_MEASUREMENT_ID ? `gtag('config', '${GA_MEASUREMENT_ID}');` : ''}
+          `}
+        </Script>
       </body>
     </html>
   );
@@ -245,6 +272,28 @@ export default function RootLayout({
 //
 // Локально (.env.local) можна лишити обидві порожніми — тоді ні
 // лічильник, ні тег верифікації просто не рендеряться, помилки не буде
+// ============================================================
+
+// ============================================================
+// GOOGLE ADS — конверсії
+//
+// AW-18434035736 — ID акаунта Google Ads (кабінет DOMINATOR), заданий
+// прямо в коді константою GOOGLE_ADS_ID вище (не через змінну оточення,
+// на відміну від GA4/Meta Pixel — це публічний ідентифікатор, не секрет).
+//
+// Базовий тег (gtag('config', GOOGLE_ADS_ID)) стоїть безумовно на КОЖНІЙ
+// сторінці сайту — так вимагає Google Ads.
+//
+// Подія конверсії "purchase" окремого коду не потребує: вона й так
+// відправляється один раз на кожне успішно оформлене замовлення через
+// trackPurchase() у lib/analytics.ts (викликається з
+// components/StorefrontHome.tsx одразу після відповіді
+// POST /api/orders/create) — gtag() сам розсилає цю подію одразу на
+// GA4 і на Google Ads, тому що обидва підключені через 'config' в
+// одному й тому самому дата-шарі (dataLayer).
+//
+// Якщо колись знадобиться замінити акаунт Google Ads — досить
+// поправити один рядок: const GOOGLE_ADS_ID = '...' вище у цьому файлі.
 // ============================================================
 
 // ============================================================
