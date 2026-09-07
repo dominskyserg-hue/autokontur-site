@@ -277,8 +277,39 @@ export default function VehicleFilterModal({ open, categoryName, onClose, onSubm
 
             {/* ==================== ФОРМА, ЩО ПРОКРУЧУЄТЬСЯ ==================== */}
             <div className="flex-1 overflow-y-auto px-6 py-5">
+              {/* Кроки 2-4 — каскадні селекти (навмисно ВИЩЕ великої сітки
+                  логотипів марок нижче: вони компактні, тому одразу
+                  видно всю форму без прокрутки, поки покупач ще не
+                  почав гортати логотипи) */}
+              <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <SelectField
+                  label="2. Модель"
+                  value={model}
+                  onChange={setModel}
+                  options={modelOptions}
+                  disabled={!make}
+                  placeholder={make ? 'Будь-яка' : 'Спершу марка'}
+                />
+                <SelectField
+                  label="3. Рік випуску"
+                  value={year}
+                  onChange={setYear}
+                  options={yearOptions}
+                  disabled={!make}
+                  placeholder={make ? 'Будь-який' : 'Спершу марка'}
+                />
+                <SelectField
+                  label="4. Об'єм / двигун"
+                  value={engine}
+                  onChange={setEngine}
+                  options={engineOptions}
+                  disabled={!year}
+                  placeholder={year ? 'Будь-який' : 'Спершу рік'}
+                />
+              </div>
+
               {/* Крок 1 — марка, з логотипами */}
-              <div className="mb-5">
+              <div>
                 <label className="mb-2 block text-xs font-medium" style={{ fontFamily: TECH_BODY_FONT, color: TECH_MUTED }}>
                   1. Марка авто {loadingMakes && '· завантаження…'}
                 </label>
@@ -314,34 +345,6 @@ export default function VehicleFilterModal({ open, categoryName, onClose, onSubm
                     );
                   })}
                 </div>
-              </div>
-
-              {/* Кроки 2-4 — каскадні селекти */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <SelectField
-                  label="2. Модель"
-                  value={model}
-                  onChange={setModel}
-                  options={modelOptions}
-                  disabled={!make}
-                  placeholder={make ? 'Будь-яка' : 'Спершу марка'}
-                />
-                <SelectField
-                  label="3. Рік випуску"
-                  value={year}
-                  onChange={setYear}
-                  options={yearOptions}
-                  disabled={!make}
-                  placeholder={make ? 'Будь-який' : 'Спершу марка'}
-                />
-                <SelectField
-                  label="4. Об'єм / двигун"
-                  value={engine}
-                  onChange={setEngine}
-                  options={engineOptions}
-                  disabled={!year}
-                  placeholder={year ? 'Будь-який' : 'Спершу рік'}
-                />
               </div>
             </div>
 
