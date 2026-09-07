@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
+import VinRequestButton from '@/components/VinRequestButton';
 import './globals.css';
 
 // Друга пара шрифтів — ТІЛЬКИ для нового розділу "Tech Premium"
@@ -148,6 +149,10 @@ export default function RootLayout({
 
         {children}
         {modal}
+
+        {/* Плаваюча кнопка "Не знайшли, що шукали?" — на КОЖНІЙ сторінці
+            сайту (сама ховає себе під /admin, див. components/VinRequestButton.tsx) */}
+        <VinRequestButton />
 
         {/* ==================== META (FACEBOOK) PIXEL — базовый код ====================
             Стандартный код инициализации fbq() — ровно такой же, какой
