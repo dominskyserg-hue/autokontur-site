@@ -52,12 +52,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock, Warehouse, Lock } from 'lucide-react';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
-import { DEPARTMENTS } from '@/lib/departments';
 import { FAQ_ITEMS } from '@/lib/faq';
 import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
 import { trackAddToCart, trackBeginCheckout, trackPurchase } from '@/lib/analytics';
 import NovaPoshtaAddressFields from '@/components/NovaPoshtaAddressFields';
+import CategoryGridSection from '@/components/CategoryGridSection';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -210,30 +210,6 @@ const TECH_HEAT_SOFT = 'rgba(255,107,0,0.14)';
 const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const LABEL_FONT = "'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
-
-// Іконка для кожного розділу з lib/departments.ts — саме тому мапа
-// живе тут, а не в lib/departments.ts: та лишається чистими даними,
-// без JSX/React-залежності
-const DEPARTMENT_ICONS: Record<string, () => React.JSX.Element> = {
-  to: ServiceWrenchIcon,
-  'dvyhun-detali': PistonIcon,
-  palyvna: FuelCanIcon,
-  vypusk: ExhaustIcon,
-  oholodzhennya: CoolingFanIcon,
-  'dvyhun-v-zbori': EngineIcon,
-  opalennya: VentIcon,
-  transmisiya: TransmissionIcon,
-  hodova: ShockAbsorberIcon,
-  kuzov: CarBodyIcon,
-  kriplennya: BoltIcon,
-  halmivna: BrakeDiscIcon,
-  kermo: SteeringWheelIcon,
-  salon: SeatIcon,
-  dysky: WheelIcon,
-  bezpeka: ShieldIcon,
-  elektro: BatteryIcon,
-  aksesuary: BagIcon,
-};
 
 export default function StorefrontHome() {
   // ---- магазин, контакты и объявления (настраиваются в админке /admin/settings) ----
@@ -948,6 +924,17 @@ export default function StorefrontHome() {
     setSearchInput(articleFromUrl);
     runSearch(new URLSearchParams({ search: articleFromUrl, pageSize: '24' }), articleFromUrl);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- перехід із картки розділу без жодної категорії (?vin=1) ----
+  // components/CategoryGridSection.tsx веде сюди, коли покупач клікнув
+  // по розділу, для якого в каталозі поки що немає жодної категорії
+  // товару (напр. "Паливна система") — замість порожньої сторінки
+  // одразу відкриваємо заявку "Підбір за VIN", той самий модал, що і
+  // кнопка в блоці "Чому обирають нас" нижче на сторінці
+  useEffect(() => {
+    const vinFromUrl = new URLSearchParams(window.location.search).get('vin');
+    if (vinFromUrl === '1') setVinModalOpen(true);
   }, []);
 
   // Підбір за автомобілем — марка обов'язкова (без неї запит повернув
@@ -2222,66 +2209,16 @@ export default function StorefrontHome() {
           </div>
 
           {/* ==================== РОЗДІЛИ АВТО ==================== */}
-          {/* Велика іконна сітка по системах автомобіля — за мотивами
-              каталогу lr-parts.com.ua (стандартна для запчастин
-              категорійна структура). На відміну від вузьких категорій
-              нижче ("Популярні категорії"), кожна іконка тут об'єднує
-              кілька таких категорій одразу (lib/departments.ts).
-              Розділ, під який у нас поки що НЕМАЄ жодного товару, веде
-              не на порожню сторінку, а в підбір за VIN — чесніше, ніж
-              обіцяти те, чого немає в каталозі. Таких зараз більшість
-              (14 з 18) — це нормально: сітка одразу показує покупцю
-              повний спектр авто, а не тільки те, що вже є на складі */}
+          {/* Преміальна сітка розділів з підбором авто через модалку —
+              components/CategoryGridSection.tsx (+ VehicleFilterModal.tsx).
+              Клік по картці більше не веде миттєво на сторінку: спершу
+              пропонує уточнити марку/модель/рік/двигун (необов'язково),
+              і лише після цього — або після "Пропустити" — веде далі в
+              каталог. Логіка переходів (у т.ч. фолбек у підбір за VIN
+              для розділів без жодної категорії товару) — у самому
+              компоненті, resolveDestination() */}
           <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10" style={{ borderTop: `1px solid ${TECH_BORDER}`, paddingTop: 40 }}>
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
-              Каталог за системами авто
-            </p>
-            <h2 className="mb-4 text-xl" style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff' }}>
-              Розділи
-            </h2>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              {DEPARTMENTS.map((department) => {
-                const Icon = DEPARTMENT_ICONS[department.slug];
-                const hasCategories = department.categorySlugs.length > 0;
-                const content = (
-                  <>
-                    <motion.div
-                      className="flex shrink-0 items-center justify-center"
-                      style={{ color: TECH_FAINT }}
-                      whileHover={{ scale: 1.15, rotate: -4, color: TECH_ACCENT_BRIGHT }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-                    >
-                      <Icon />
-                    </motion.div>
-                    <span className="text-sm font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: TECH_INK }}>
-                      {department.name}
-                    </span>
-                  </>
-                );
-
-                return hasCategories ? (
-                  <Link
-                    key={department.slug}
-                    href={`/rozdil/${department.slug}`}
-                    className="flex items-center gap-3 rounded-xl px-4 py-3.5 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
-                    style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <button
-                    key={department.slug}
-                    type="button"
-                    onClick={() => setVinModalOpen(true)}
-                    title="У нас поки немає товарів цього розділу в каталозі — підберемо за VIN"
-                    className="flex items-center gap-3 rounded-xl px-4 py-3.5 text-left transition-colors hover:bg-[rgba(59,130,246,0.07)]"
-                    style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
-                  >
-                    {content}
-                  </button>
-                );
-              })}
-            </div>
+            <CategoryGridSection />
           </div>
 
           {/* ==================== КАТЕГОРІЇ ДЕТАЛЕЙ ==================== */}
@@ -3336,233 +3273,3 @@ function CarIcon() {
   );
 }
 
-// ---- іконки розділів авто (lib/departments.ts, розділ "РОЗДІЛИ") ----
-
-function EngineIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="9" width="14" height="9" rx="1" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <path d="M7 9V6h6v3" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-      <circle cx="19" cy="13.5" r="2.5" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M17 13.5h-3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M6 18v2M12 18v2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function TransmissionIcon() {
-  // Важіль перемикання передач на консолі — впізнаваніше за абстрактну
-  // шестерню: саме так позначають трансмісію в більшості автомобільних
-  // інтерфейсів
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <rect x="5" y="16" width="14" height="4" rx="1.5" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8.5 16c0-2.2 1.6-4 3.5-4s3.5 1.8 3.5 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <line x1="12" y1="12.3" x2="12" y2="3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="12" cy="2.8" r="1.9" stroke="currentColor" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function SteeringWheelIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="12" cy="12" r="2.3" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M12 5.5v4.2M6.5 15.8l3.5-2.3M17.5 15.8l-3.5-2.3"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function CarBodyIcon() {
-  // Силует авто збоку — для "Деталі кузова" це впізнаваніше, ніж
-  // окремі двері
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M3.5 16 4 12.5c.3-1 1-1.8 2-2.2l2.3-.9 1.6-2.4c.4-.6 1-1 1.7-1h3.4c.7 0 1.3.4 1.7 1l1.6 2.4 2.3.9c1 .4 1.7 1.2 2 2.2l.5 3.5"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <line x1="2" y1="16" x2="22" y2="16" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <circle cx="7" cy="16" r="1.8" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="17" cy="16" r="1.8" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function ServiceWrenchIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function PistonIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="6.5" r="4" stroke="currentColor" strokeWidth="1.7" />
-      <line x1="12" y1="10.5" x2="12" y2="14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      <rect x="9.5" y="14" width="5" height="6" rx="1.2" stroke="currentColor" strokeWidth="1.7" />
-    </svg>
-  );
-}
-
-function FuelCanIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <rect x="5" y="7" width="14" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.7" />
-      <rect x="9.5" y="4" width="5" height="3" rx="1" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="15.5" cy="11.2" r="1.2" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-function ExhaustIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <path d="M2.5 12h5.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <rect x="8" y="9" width="8" height="6" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M16 12h3.6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      <ellipse cx="21" cy="12" rx="1.3" ry="2.2" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function CoolingFanIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.7" />
-      <path
-        d="M12 12 12 5.5M12 12 17.3 8.8M12 12 17.3 15.2M12 12 12 18.5M12 12 6.7 15.2M12 12 6.7 8.8"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function VentIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="7.5" width="18" height="9" rx="2" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M7.5 7.5v9M12 7.5v9M16.5 7.5v9" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function ShockAbsorberIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <line x1="12" y1="2" x2="12" y2="5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-      <ellipse cx="12" cy="7" rx="4" ry="1.3" stroke="currentColor" strokeWidth="1.5" />
-      <ellipse cx="12" cy="10" rx="4" ry="1.3" stroke="currentColor" strokeWidth="1.5" />
-      <ellipse cx="12" cy="13" rx="4" ry="1.3" stroke="currentColor" strokeWidth="1.5" />
-      <ellipse cx="12" cy="16" rx="4" ry="1.3" stroke="currentColor" strokeWidth="1.5" />
-      <line x1="12" y1="18" x2="12" y2="21" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function BoltIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <path d="M8.5 4h7L19 10l-3.5 6h-7L5 10z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <circle cx="12" cy="10" r="2" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function SeatIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <rect x="9.5" y="2" width="5" height="3.6" rx="1.6" stroke="currentColor" strokeWidth="1.6" />
-      <path
-        d="M6.5 8.2a2.7 2.7 0 0 1 2.7-2.7h5.6a2.7 2.7 0 0 1 2.7 2.7V13H6.5z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <rect x="5" y="14.5" width="14" height="4.3" rx="1.8" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
-function ShieldIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <path
-        d="M12 3 19 6v5c0 5-3 8.5-7 10-4-1.5-7-5-7-10V6z"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <path d="M9 12l2 2 4-4.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function BatteryIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <rect x="3" y="8" width="16" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.7" />
-      <rect x="19" y="11" width="2" height="3" rx="0.5" fill="currentColor" />
-      <line x1="7.5" y1="8" x2="7.5" y2="6.3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <line x1="12.5" y1="8" x2="12.5" y2="6.3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-      <path d="M12.3 10.5 9.3 14.3h2.2l-0.9 3 3.6-4.3h-2.1z" fill="currentColor" />
-    </svg>
-  );
-}
-
-function BagIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <path d="M6 8h12l-1 12H7z" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round" />
-      <path d="M9 8V6a3 3 0 0 1 6 0v2" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function WheelIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="12" cy="12" r="2.6" stroke="currentColor" strokeWidth="1.8" />
-      <path
-        d="M12 3v6.4M12 14.6V21M3 12h6.4M14.6 12H21M5.6 5.6l4.5 4.5M13.9 13.9l4.5 4.5M5.6 18.4l4.5-4.5M13.9 10.1l4.5-4.5"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function BrakeDiscIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
-      <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="12" cy="12" r="2.2" stroke="currentColor" strokeWidth="1.8" />
-      <circle cx="12" cy="6.2" r="0.9" fill="currentColor" />
-      <circle cx="16.8" cy="9.5" r="0.9" fill="currentColor" />
-      <circle cx="15.1" cy="15.3" r="0.9" fill="currentColor" />
-      <circle cx="8.9" cy="15.3" r="0.9" fill="currentColor" />
-      <circle cx="7.2" cy="9.5" r="0.9" fill="currentColor" />
-    </svg>
-  );
-}
