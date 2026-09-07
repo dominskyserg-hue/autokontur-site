@@ -931,10 +931,27 @@ export default function StorefrontHome() {
   // по розділу, для якого в каталозі поки що немає жодної категорії
   // товару (напр. "Паливна система") — замість порожньої сторінки
   // одразу відкриваємо заявку "Підбір за VIN", той самий модал, що і
-  // кнопка в блоці "Чому обирають нас" нижче на сторінці
+  // кнопка в блоці "Чому обирають нас" нижче на сторінці.
+  //
+  // Якщо покупач у модалці підбору встиг обрати марку/модель/рік/двигун
+  // (VehicleFilterModal), ці дані прийшли сюди параметрами — підставляємо
+  // їх одразу в опис заявки, щоб не змушувати вводити те саме вдруге і
+  // щоб менеджер одразу бачив, яке авто й яку категорію шукав покупець
   useEffect(() => {
-    const vinFromUrl = new URLSearchParams(window.location.search).get('vin');
-    if (vinFromUrl === '1') setVinModalOpen(true);
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('vin') !== '1') return;
+    setVinModalOpen(true);
+
+    const category = params.get('category');
+    const carLabel = [params.get('make'), params.get('model'), params.get('year'), params.get('engine')]
+      .filter(Boolean)
+      .join(', ');
+
+    const descriptionParts: string[] = [];
+    if (category) descriptionParts.push(`Категорія: ${category}.`);
+    if (carLabel) descriptionParts.push(`Авто: ${carLabel}.`);
+    if (descriptionParts.length > 0) setVinDescription(descriptionParts.join(' '));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Підбір за автомобілем — марка обов'язкова (без неї запит повернув
@@ -2218,7 +2235,18 @@ export default function StorefrontHome() {
               для розділів без жодної категорії товару) — у самому
               компоненті, resolveDestination() */}
           <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10" style={{ borderTop: `1px solid ${TECH_BORDER}`, paddingTop: 40 }}>
-            <CategoryGridSection />
+            <CategoryGridSection
+              onOpenVinRequest={(category, selection) => {
+                setVinModalOpen(true);
+
+                const carLabel = selection
+                  ? [selection.make, selection.model, selection.year, selection.engine].filter(Boolean).join(', ')
+                  : '';
+                const parts = [`Категорія: ${category}.`];
+                if (carLabel) parts.push(`Авто: ${carLabel}.`);
+                setVinDescription(parts.join(' '));
+              }}
+            />
           </div>
 
           {/* ==================== КАТЕГОРІЇ ДЕТАЛЕЙ ==================== */}

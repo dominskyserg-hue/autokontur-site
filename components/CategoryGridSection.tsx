@@ -326,7 +326,18 @@ function resolveDestination(department: DepartmentDef, selection: VehicleSelecti
   const makeSlug = selection?.make ? findMakeSlug(selection.make) : null;
 
   if (department.categorySlugs.length === 0) {
-    return '/?vin=1';
+    // Товарів у цьому розділі поки що немає — ведемо на Головну, де
+    // ефект в components/StorefrontHome.tsx сам відкриє заявку "Підбір
+    // за VIN". Якщо покупач встиг щось обрати в модалці (марка/модель/
+    // рік/двигун), передаємо це параметрами — інакше вибір губився б,
+    // і покупачу довелось би вводити ті самі дані ще раз вручну у
+    // формі заявки
+    const params = new URLSearchParams({ vin: '1', category: department.name });
+    if (selection?.make) params.set('make', selection.make);
+    if (selection?.model) params.set('model', selection.model);
+    if (selection?.year) params.set('year', selection.year);
+    if (selection?.engine) params.set('engine', selection.engine);
+    return `/?${params.toString()}`;
   }
 
   if (department.categorySlugs.length === 1) {
@@ -340,11 +351,24 @@ function resolveDestination(department: DepartmentDef, selection: VehicleSelecti
 interface CategoryGridSectionProps {
   title?: string;
   subtitle?: string;
+  // Викликається ЗАМІСТЬ переходу на "/?vin=1..." для розділу без
+  // жодної категорії товару. CategoryGridSection рендериться ВСЕРЕДИНІ
+  // components/StorefrontHome.tsx (та сама сторінка "/"), тому клієнтський
+  // router.push('/?vin=1...') на ЦЮ Ж адресу не перемонтовує компонент —
+  // useEffect, який мав би зчитати нові query-параметри, просто не
+  // спрацьовує вдруге (Next.js App Router лишає інстанс сторінки як є
+  // при навігації в межах одного маршруту). Пряма передача даних через
+  // callback працює завжди, незалежно від цієї особливості навігації —
+  // якщо колись CategoryGridSection знадобиться на іншій сторінці без
+  // доступу до стану заявки "Підбір за VIN", він сам впаде назад на
+  // "/?vin=1..." (див. resolveDestination нижче)
+  onOpenVinRequest?: (category: string, selection: VehicleSelection | null) => void;
 }
 
 export default function CategoryGridSection({
   title = 'Розділи',
   subtitle = 'Каталог за системами авто',
+  onOpenVinRequest,
 }: CategoryGridSectionProps) {
   const router = useRouter();
   const [hoveredSlug, setHoveredSlug] = useState<string | null>(null);
@@ -352,15 +376,23 @@ export default function CategoryGridSection({
 
   const closeModal = () => setActiveDepartment(null);
 
+  const goToDestination = (department: DepartmentDef, selection: VehicleSelection | null) => {
+    if (department.categorySlugs.length === 0 && onOpenVinRequest) {
+      onOpenVinRequest(department.name, selection);
+      return;
+    }
+    router.push(resolveDestination(department, selection));
+  };
+
   const handleSubmit = (selection: VehicleSelection) => {
     if (!activeDepartment) return;
-    router.push(resolveDestination(activeDepartment, selection));
+    goToDestination(activeDepartment, selection);
     closeModal();
   };
 
   const handleSkip = () => {
     if (!activeDepartment) return;
-    router.push(resolveDestination(activeDepartment, null));
+    goToDestination(activeDepartment, null);
     closeModal();
   };
 
