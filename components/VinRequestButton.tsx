@@ -63,6 +63,15 @@ export default function VinRequestButton() {
 
   const vinDecoded = useMemo(() => decodeVin(vinCode), [vinCode]);
 
+  // Кнопка з'являється не одразу, а через 25 секунд після завантаження
+  // сторінки — щоб не відволікати покупця в перші секунди, поки він
+  // ще навіть не встиг подивитись на сам каталог
+  const [buttonVisible, setButtonVisible] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setButtonVisible(true), 25_000);
+    return () => window.clearTimeout(timer);
+  }, []);
+
   const close = useCallback(() => {
     setOpen(false);
     // Скидаємо форму при закритті — щоб наступного разу покупач
@@ -133,26 +142,31 @@ export default function VinRequestButton() {
 
   return (
     <>
-      <motion.button
-        type="button"
-        onClick={() => setOpen(true)}
-        initial={{ opacity: 0, scale: 0.8, y: 12 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        transition={{ delay: 0.6, type: 'spring', stiffness: 300, damping: 22 }}
-        whileHover={{ scale: 1.04 }}
-        whileTap={{ scale: 0.96 }}
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full py-3 pl-4 pr-5 text-sm font-semibold shadow-glow-lg transition-shadow hover:shadow-glow-lg sm:bottom-6 sm:right-6"
-        style={{
-          fontFamily: TECH_BODY_FONT,
-          background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`,
-          color: '#fff',
-        }}
-        aria-label="Не знайшли, що шукали? Написати нам"
-      >
-        <MessageCircleQuestion size={20} strokeWidth={1.8} />
-        <span className="hidden sm:inline">Не знайшли? Напишіть нам</span>
-        <span className="sm:hidden">Не знайшли?</span>
-      </motion.button>
+      <AnimatePresence>
+        {buttonVisible && (
+          <motion.button
+            type="button"
+            onClick={() => setOpen(true)}
+            initial={{ opacity: 0, scale: 0.8, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: 12 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full py-3 pl-4 pr-5 text-sm font-semibold shadow-glow-lg transition-shadow hover:shadow-glow-lg sm:bottom-6 sm:right-6"
+            style={{
+              fontFamily: TECH_BODY_FONT,
+              background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`,
+              color: '#fff',
+            }}
+            aria-label="Не знайшли, що шукали? Написати нам"
+          >
+            <MessageCircleQuestion size={20} strokeWidth={1.8} />
+            <span className="hidden sm:inline">Не знайшли? Напишіть нам</span>
+            <span className="sm:hidden">Не знайшли?</span>
+          </motion.button>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {open && (
