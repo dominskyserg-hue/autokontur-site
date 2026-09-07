@@ -54,7 +54,7 @@ export const DEPARTMENTS: DepartmentDef[] = [
   { slug: 'kuzov', name: 'Деталі кузова', categorySlugs: [] },
   { slug: 'kriplennya', name: "Кріплення і кронштейни", categorySlugs: [] },
   { slug: 'halmivna', name: 'Гальмівна система', categorySlugs: ['halmivni-kolodky', 'halmivni-dysky'] },
-  { slug: 'kermo', name: 'Кермове управління', categorySlugs: [] },
+  { slug: 'kermo', name: 'Кермове управління', categorySlugs: ['kermove-upravlinnya'] },
   { slug: 'salon', name: 'Елементи салону', categorySlugs: ['salonni-filtry'] },
   { slug: 'dysky', name: 'Колісні диски', categorySlugs: [] },
   { slug: 'bezpeka', name: 'Система безпеки', categorySlugs: [] },

@@ -185,6 +185,17 @@ export const CATEGORIES: CategoryDef[] = [
       ['мотор'],
     ],
   },
+  {
+    slug: 'kermove-upravlinnya',
+    name: 'Кермове управління',
+    h1: 'Кермове управління — рульові рейки, наконечники, тяги',
+    metaTitle: 'Рульова рейка, наконечники тяг купити — Toyota, Ford, VAG | DominatorParts',
+    metaDescription:
+      'Рульові рейки, наконечники та тяги керма для Toyota, Ford, Volkswagen, Audi, Skoda. Доставка по всій Україні.',
+    intro:
+      "Стук або люфт у кермі, важке керування чи витік гідропідсилювача — типові ознаки зношених деталей рульового управління. У наявності рульові рейки, наконечники й тяги під популярні моделі Toyota, Ford та автомобілів групи VAG.",
+    matchGroups: [['рульов', 'кермов']],
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
