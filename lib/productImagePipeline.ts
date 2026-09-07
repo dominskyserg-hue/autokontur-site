@@ -27,14 +27,49 @@ export interface ProductToProcess {
 
 export type PipelineResult = 'found' | 'not_found' | 'error';
 
-// Скільки кандидатів із видачі Bing пробуємо перед тим, як здатись —
-// перше фото в результатах не завжди підходить за розміром (буває
-// іконка чи скріншот), тому пробуємо кілька наступних по черзі
+// Скільки кандидатів із видачі Bing пробуємо ЗАВАНТАЖИТИ перед тим,
+// як здатись — перше фото в результатах не завжди підходить за
+// розміром (буває іконка чи скріншот), тому пробуємо кілька наступних
+// по черзі
 const MAX_SEARCH_CANDIDATES_TO_TRY = 5;
+
+// Скільки "сирих" кандидатів запитувати в Bing ЗА РАЗ — свідомо
+// набагато більше за MAX_SEARCH_CANDIDATES_TO_TRY, бо більшість із них
+// одразу відсіється фільтром за підписом (isRelevantCandidate нижче) —
+// без цього запасу до реального завантаження майже нічого не
+// доходило б, і товар помилково позначався б "фото не знайдено"
+const RAW_CANDIDATES_TO_FETCH = 25;
+
+// Порівнюємо текст без урахування регістру й розділювачів — той самий
+// принцип, що і в очищенні артикула при імпорті прайсів (див.
+// cleanArticle() в app/api/suppliers/parse-excel/route.ts): "GDB 1330",
+// "gdb-1330" і "GDB1330" повинні вважатись одним і тим самим значенням
+function normalizeForMatch(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9А-Я]/g, '');
+}
+
+// Головний захист від "фото не того товару": Bing повертає власний
+// підпис (title) для кожного результату — це те, що САМ BING вважає
+// зображеним на фото. Якщо в підписі немає навіть артикула товару —
+// майже напевно це чужа деталь, лого бренду, фото упаковки конкурента
+// чи випадкова ілюстративна картинка, а не саме ця запчастина.
+// Раніше пайплайн узагалі не дивився на title і брав перший кандидат,
+// що пройшов лише перевірку розміру — звідси й були помилкові фото
+function isRelevantCandidate(candidate: { title: string }, article: string): boolean {
+  const normalizedArticle = normalizeForMatch(article);
+  if (!normalizedArticle) return false;
+  return normalizeForMatch(candidate.title).includes(normalizedArticle);
+}
 
 export async function processProductImage(pool: Pool, product: ProductToProcess): Promise<PipelineResult> {
   const brand = product.brand?.trim() || '';
-  const query = [brand, product.article].filter(Boolean).join(' ');
+  // Кожен термін — в лапках: просимо в Bing ТОЧНЕ входження бренду і
+  // ТОЧНЕ входження артикула окремо, а не смислово схожий запит —
+  // це вже само по собі відсікає частину нерелевантної видачі
+  const query = [brand, product.article]
+    .filter(Boolean)
+    .map((term) => `"${term}"`)
+    .join(' ');
 
   try {
     // ---- Варіант Б: пряме вгадування (дешево — лише HEAD-запити) ----
@@ -55,9 +90,17 @@ export async function processProductImage(pool: Pool, product: ProductToProcess)
     }
 
     // ---- Варіант А: пошук у Bing ----
-    const candidates = await searchProductImages(query, { limit: MAX_SEARCH_CANDIDATES_TO_TRY });
+    // Запитуємо ЗНАЧНО ширший пул кандидатів (RAW_CANDIDATES_TO_FETCH),
+    // потім лишаємо лише ті, чий підпис реально згадує артикул товару,
+    // і вже з цього відфільтрованого списку пробуємо завантажити перші
+    // MAX_SEARCH_CANDIDATES_TO_TRY — навмисно НЕ повертаємось до
+    // невідфільтрованих кандидатів, якщо релевантних не знайшлось:
+    // краще чесно позначити "фото не знайдено", ніж показати покупцю
+    // фото чужої деталі
+    const rawCandidates = await searchProductImages(query, { limit: RAW_CANDIDATES_TO_FETCH });
+    const relevantCandidates = rawCandidates.filter((candidate) => isRelevantCandidate(candidate, product.article));
 
-    for (const candidate of candidates) {
+    for (const candidate of relevantCandidates.slice(0, MAX_SEARCH_CANDIDATES_TO_TRY)) {
       const validated = await downloadAndValidateImage(candidate.url);
       if (!validated) continue;
 

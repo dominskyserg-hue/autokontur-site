@@ -102,6 +102,36 @@ function parseSearchResultsHtml(html: string): ImageCandidate[] {
   return candidates;
 }
 
+// Домени, з яких фото ЗАВІДОМО не варто брати як фото КОНКРЕТНОГО
+// товару — фотостоки (Shutterstock, iStock тощо) продають абстрактні
+// ілюстративні картинки "запчастина взагалі", а не фото цієї моделі з
+// цим артикулом; Pinterest — це переважно репости чужих фото без
+// гарантії, що підпис відповідає вмісту. Перевіряємо і посилання на
+// саме фото (murl), і сторінку-джерело (purl) — обидва варіанти
+// трапляються в видачі Bing
+const BLOCKED_IMAGE_HOSTS = [
+  'shutterstock.com',
+  'istockphoto.com',
+  'gettyimages.com',
+  'alamy.com',
+  'dreamstime.com',
+  'depositphotos.com',
+  '123rf.com',
+  'stock.adobe.com',
+  'pinterest.com',
+  'pinimg.com',
+];
+
+function isBlockedHost(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return BLOCKED_IMAGE_HOSTS.some((blocked) => hostname === blocked || hostname.endsWith(`.${blocked}`));
+  } catch {
+    // Некоректний URL — нехай далі його відсіє downloadAndValidateImage
+    return false;
+  }
+}
+
 export interface SearchImagesOptions {
   // Скільки кандидатів повернути максимум (пайплайн все одно
   // перебирає їх по черзі, поки не знайде валідний — див.
@@ -146,7 +176,10 @@ export async function searchProductImages(
     }
 
     const html = await response.text();
-    return parseSearchResultsHtml(html).slice(0, limit);
+    const candidates = parseSearchResultsHtml(html).filter(
+      (candidate) => !isBlockedHost(candidate.url) && !isBlockedHost(candidate.sourcePageUrl)
+    );
+    return candidates.slice(0, limit);
   } finally {
     clearTimeout(timeout);
   }
