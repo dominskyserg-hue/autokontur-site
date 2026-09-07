@@ -73,6 +73,7 @@ interface MakeProduct {
   retailPrice: number;
   stock: number;
   deliveryTime: string | null;
+  imageUrl: string | null;
 }
 
 const loadMakeProducts = cache(async function loadMakeProducts(
@@ -88,7 +89,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
   const [productsResult, countResult] = await Promise.all([
     pool.query(
       `
-      SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, s.delivery_time
+      SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, p.image_url, s.delivery_time
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${clause}
@@ -108,6 +109,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
     retailPrice: parseFloat(row.retail_price),
     stock: row.stock,
     deliveryTime: row.delivery_time,
+    imageUrl: row.image_url,
   }));
 
   return { products, total: countResult.rows[0]?.total ?? 0 };
@@ -246,30 +248,64 @@ export default async function CarMakePage({
                 <Link
                   key={product.id}
                   href={buildProductPath(product.id, product)}
-                  className="block rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+                  className="flex gap-3 rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                   style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                 >
-                  <div className="mb-1 flex items-center gap-1.5 text-xs" style={{ fontFamily: TECH_BODY_FONT }}>
-                    <span className="font-bold uppercase tracking-wide" style={{ color: TECH_ACCENT_BRIGHT }}>
-                      {product.brand || 'Без бренду'}
-                    </span>
-                    <span style={{ color: TECH_FAINT }}>·</span>
-                    <span style={{ fontFamily: TECH_MONO_FONT, color: TECH_MUTED }}>{product.article}</span>
+                  {/* Мініатюра — той самий фікс, що і в app/category/[slug]/
+                      page.tsx: без неї фото товару вантажилось "з нуля"
+                      лише в момент відкриття модального вікна картки.
+                      loading="lazy" не заважає першому рендеру сторінки */}
+                  <div
+                    className="flex aspect-square w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+                    style={{
+                      background: TECH_SURFACE,
+                      backgroundImage: product.imageUrl
+                        ? undefined
+                        : 'linear-gradient(45deg, rgba(255,255,255,0.05) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.05) 25%, transparent 25%)',
+                      backgroundSize: '8px 8px',
+                      border: `1px solid ${TECH_BORDER}`,
+                    }}
+                  >
+                    {product.imageUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={product.imageUrl}
+                        alt={product.name || product.article}
+                        loading="lazy"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TECH_FAINT} strokeWidth="1.5">
+                        <rect x="3" y="5" width="18" height="14" rx="2" />
+                        <circle cx="8.5" cy="10" r="1.5" />
+                        <path d="M21 16l-5-5-4 4-2-2-7 7" strokeLinejoin="round" />
+                      </svg>
+                    )}
                   </div>
-                  <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
-                    {product.name || `Деталь для ${make.name}`}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
-                      {formatMoney(product.retailPrice)} грн
-                    </span>
-                    <StockBadge stock={product.stock} />
-                  </div>
-                  {product.stock <= 0 && product.deliveryTime && (
-                    <div className="mt-1.5 text-xs" style={{ color: TECH_FAINT }}>
-                      Термін поставки: {product.deliveryTime}
+
+                  <div className="min-w-0 flex-1">
+                    <div className="mb-1 flex items-center gap-1.5 text-xs" style={{ fontFamily: TECH_BODY_FONT }}>
+                      <span className="font-bold uppercase tracking-wide" style={{ color: TECH_ACCENT_BRIGHT }}>
+                        {product.brand || 'Без бренду'}
+                      </span>
+                      <span style={{ color: TECH_FAINT }}>·</span>
+                      <span style={{ fontFamily: TECH_MONO_FONT, color: TECH_MUTED }}>{product.article}</span>
                     </div>
-                  )}
+                    <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
+                      {product.name || `Деталь для ${make.name}`}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
+                        {formatMoney(product.retailPrice)} грн
+                      </span>
+                      <StockBadge stock={product.stock} />
+                    </div>
+                    {product.stock <= 0 && product.deliveryTime && (
+                      <div className="mt-1.5 text-xs" style={{ color: TECH_FAINT }}>
+                        Термін поставки: {product.deliveryTime}
+                      </div>
+                    )}
+                  </div>
                 </Link>
               ))}
             </div>
