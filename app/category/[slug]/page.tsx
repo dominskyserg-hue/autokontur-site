@@ -105,7 +105,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${clause}
-      ORDER BY (p.stock > 0) DESC, p.name ASC NULLS LAST
+      ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.name ASC NULLS LAST
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
       `,
       [...params, PAGE_SIZE, offset]

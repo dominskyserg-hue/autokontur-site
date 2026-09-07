@@ -431,7 +431,9 @@ export async function GET(request: NextRequest) {
     // більшої до меншої. Без пошуку (звичайний перегляд каталогу,
     // напр. в адмінці) лишаємо алфавітний порядок за артикулом —
     // його там очікують бачити стабільним при гортанні сторінок
-    const orderBySql = search ? 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC' : 'ORDER BY p.article ASC';
+    const orderBySql = search
+      ? 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.retail_price DESC'
+      : 'ORDER BY p.article ASC';
 
     // ---- сам запрос ----
     // COUNT(*) OVER() — считает общее количество подходящих строк
