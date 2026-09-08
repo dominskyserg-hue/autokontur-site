@@ -67,12 +67,11 @@ function getImapConfig(): ImapConfig | null {
 // не потеряется навсегда, а будет замечено на следующей проверке
 const LOOKBACK_DAYS = 5;
 
-// Ограничение на одну проверку — чтобы serverless-функция уложилась в
-// таймаут (см. maxDuration в app/api/cron/import-supplier-emails/route.ts,
-// тот же приём, что и в app/api/cron/fetch-product-images/route.ts).
-// Если писем от поставщиков реально больше за одну проверку — они
-// подхватятся на следующей (проверок несколько в день, см. vercel.json)
-const MAX_MESSAGES_PER_RUN = 20;
+// Сколько последних писем от ОДНОГО поставщика проверять за раз —
+// поставщик обычно шлёт прайс не чаще раза в день, этого с запасом
+// хватает. Ограничение нужно, чтобы serverless-функция уложилась в
+// таймаут (см. maxDuration в app/api/cron/import-supplier-emails/route.ts)
+const MAX_MESSAGES_PER_SUPPLIER = 5;
 
 // ------------------------------------------------------------
 // СОПОСТАВЛЕНИЕ ПИСЕМ С ПОСТАВЩИКАМИ
@@ -265,20 +264,39 @@ export async function runEmailPriceImport(pool: Pool): Promise<EmailImportSummar
     const lock = await client.getMailboxLock('INBOX');
     try {
       const since = new Date(Date.now() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
-      const uids = await client.search({ since }, { uid: true });
 
-      // Самые свежие письма — в конце списка (search возвращает по
-      // возрастанию UID). Если писем накопилось больше лимита за одну
-      // проверку, обрабатываем именно последние — они важнее старых,
-      // которые и так уже наверняка либо обработаны, либо не про прайс.
-      // search() может вернуть false, если в почте вообще нет писем за
-      // этот период — тогда просто нечего обрабатывать
-      const candidateUids = uids ? uids.slice(-MAX_MESSAGES_PER_RUN) : [];
+      // Ищем письма ОТДЕЛЬНО по каждому адресу поставщика (обычный IMAP
+      // SEARCH FROM), а не "последние N писем во входящих подряд". На
+      // загруженном ящике, где вперемешку идут заказы покупателей,
+      // системные уведомления и письма от десятков поставщиков, простой
+      // просмотр последних N писем мог вообще не долететь до письма с
+      // прайсом нужного поставщика — так и оказалось на практике: за
+      // одну проверку "последних 20 писем" ни одно письмо с прайсом не
+      // попало в выборку, хотя они были в ящике. Поиск по конкретному
+      // отправителю быстрый и не зависит от того, сколько постороннего
+      // трафика идёт в тот же ящик
+      for (const [address, supplier] of supplierMatchers) {
+        const uids = await client.search({ from: address, since }, { uid: true });
+        if (!uids || uids.length === 0) continue;
 
-      if (candidateUids.length > 0) {
-        for await (const message of client.fetch(candidateUids, { envelope: true, uid: true }, { uid: true })) {
-          checked++;
-          const entry = await processMessage(pool, client, message, supplierMatchers);
+        // Самые свежие письма ЭТОГО поставщика — в конце списка (search
+        // возвращает по возрастанию UID)
+        const candidateUids = uids.slice(-MAX_MESSAGES_PER_SUPPLIER);
+
+        // ВАЖНО: сначала получаем конверты ВСЕХ писем целиком через
+        // fetchAll (а не потоковый for-await над fetch()), и только
+        // потом, уже вне открытой команды FETCH, скачиваем вложения
+        // (client.download внутри processMessage). IMAP не умеет
+        // выполнять две команды одновременно на одном соединении —
+        // если вызвать download() прямо внутри цикла по fetch(), не
+        // дождавшись его завершения, соединение зависает намертво
+        // (именно так и было при первой попытке: запрос "Проверить
+        // почту сейчас" не завершался вообще)
+        const messages = await client.fetchAll(candidateUids, { envelope: true, uid: true }, { uid: true });
+        checked += messages.length;
+
+        for (const message of messages) {
+          const entry = await processMessage(pool, client, message, supplier);
           if (entry) entries.push(entry);
         }
       }
@@ -315,15 +333,17 @@ export async function runEmailPriceImport(pool: Pool): Promise<EmailImportSummar
   };
 }
 
-// Обрабатывает ОДНО письмо: сопоставляет с поставщиком, при
-// необходимости скачивает вложение и импортирует прайс. Возвращает
-// null, если письмо уже было обработано раньше (тогда журнал трогать
-// не нужно — запись там уже есть)
+// Обрабатывает ОДНО письмо УЖЕ ИЗВЕСТНОГО поставщика (мы нашли его
+// через SEARCH FROM <адрес поставщика> — см. runEmailPriceImport выше,
+// поэтому сопоставление здесь заново не требуется). При необходимости
+// скачивает вложение и импортирует прайс. Возвращает null, если письмо
+// уже было обработано раньше (тогда журнал трогать не нужно — запись
+// там уже есть)
 async function processMessage(
   pool: Pool,
   client: ImapFlow,
   message: FetchMessageObject,
-  supplierMatchers: Map<string, SupplierMatch>
+  supplier: SupplierMatch
 ): Promise<EmailImportLogEntry | null> {
   const envelope = message.envelope;
   // У писем без заголовка Message-ID (редкость, но встречается у
@@ -342,25 +362,6 @@ async function processMessage(
   // приводим к единому виду перед тем, как передать в pg (колонка
   // TIMESTAMPTZ ожидает Date, а не произвольную строку)
   const receivedAt = envelope?.date ? new Date(envelope.date) : null;
-
-  const supplier = supplierMatchers.get(fromAddress);
-
-  if (!supplier) {
-    const entry: EmailImportLogEntry = {
-      messageId,
-      supplierId: null,
-      supplierName: null,
-      fromAddress,
-      subject,
-      status: 'unmatched',
-      addedCount: 0,
-      updatedCount: 0,
-      errorMessage: null,
-      receivedAt,
-    };
-    await writeLogEntry(pool, entry);
-    return entry;
-  }
 
   // Отправитель совпал с поставщиком — скачиваем письмо целиком
   // (заголовки + тело + вложения) и ищем в нём Excel-файл
