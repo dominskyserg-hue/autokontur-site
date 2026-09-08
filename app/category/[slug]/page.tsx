@@ -77,6 +77,11 @@ interface CategoryProduct {
   brand: string | null;
   name: string | null;
   retailPrice: number;
+  // Скидка (%) от правила наценки поставщика (см. supplier_markup_rules
+  // в schema.sql) — ЧИСТО для отображения: retailPrice уже посчитана
+  // со скидкой, discountPercent нужен только чтобы показать зачёркнутую
+  // "старую" цену и бейдж "-X%". 0 — скидки нет
+  discountPercent: number;
   stock: number;
   deliveryTime: string | null;
   imageUrl: string | null;
@@ -101,7 +106,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
   const [productsResult, countResult] = await Promise.all([
     pool.query(
       `
-      SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, p.image_url, s.delivery_time
+      SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.discount_percent, p.stock, p.image_url, s.delivery_time
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${clause}
@@ -119,6 +124,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
     brand: row.brand,
     name: row.name,
     retailPrice: parseFloat(row.retail_price),
+    discountPercent: parseFloat(row.discount_percent),
     stock: row.stock,
     deliveryTime: row.delivery_time,
     imageUrl: row.image_url,
@@ -345,10 +351,25 @@ export default async function CategoryPage({
                     <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
                       {product.name || category.name}
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
-                        {formatMoney(product.retailPrice)} грн
-                      </span>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-baseline gap-1.5 min-w-0">
+                        <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
+                          {formatMoney(product.retailPrice)} грн
+                        </span>
+                        {product.discountPercent > 0 && (
+                          <>
+                            <span className="text-xs line-through" style={{ color: TECH_FAINT }}>
+                              {formatMoney(product.retailPrice / (1 - product.discountPercent / 100))} грн
+                            </span>
+                            <span
+                              className="text-xs font-semibold px-1.5 py-0.5 rounded"
+                              style={{ background: TECH_HEAT_SOFT, color: TECH_HEAT }}
+                            >
+                              −{product.discountPercent}%
+                            </span>
+                          </>
+                        )}
+                      </div>
                       <StockBadge stock={product.stock} />
                     </div>
                     {product.stock <= 0 && product.deliveryTime && (

@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { Pool, PoolClient } from 'pg';
+import { getCategoryBySlug, productMatchesCategory } from '@/lib/categories';
 
 // Библиотеки xlsx и pg используют Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -90,7 +91,53 @@ interface ParsedProduct {
   metaDescription: string;
   supplierPrice: number;
   retailPrice: number;
+  discountPercent: number;
   stock: number;
+}
+
+// ------------------------------------------------------------
+// ПРАВИЛА НАЦЕНКИ/СКИДКИ ПО ФИЛЬТРУ (supplier_markup_rules)
+// ------------------------------------------------------------
+// Дополнение к обычной единой наценке поставщика (mapping.markup) —
+// см. app/api/suppliers/[id]/markup-rules/route.ts. У поставщика может
+// быть несколько таких правил; здесь — только их ПРИМЕНЕНИЕ при разборе
+// прайса, само хранение и CRUD живут в markup-rules/route.ts
+interface MarkupRule {
+  brand: string | null;
+  categorySlug: string | null;
+  priceFrom: number | null;
+  priceTo: number | null;
+  discountPercent: number;
+  markupPercent: number;
+}
+
+// Возвращает наценку/скидку ПЕРВОГО правила, под которое подходит
+// товар (порядок массива rules — порядок создания правил, тот же, в
+// котором их отдаёт GET .../markup-rules), либо наценку поставщика по
+// умолчанию (defaultMarkup) без скидки, если ни одно правило не подошло
+function resolveMarkupAndDiscount(
+  rules: MarkupRule[],
+  brand: string,
+  name: string,
+  priceInLocalCurrency: number,
+  defaultMarkup: number
+): { markup: number; discount: number } {
+  for (const rule of rules) {
+    if (rule.brand && rule.brand !== brand.toUpperCase()) continue;
+    if (rule.categorySlug) {
+      const category = getCategoryBySlug(rule.categorySlug);
+      // Категория могла быть удалена из lib/categories.ts после того,
+      // как правило уже создали — тогда это правило больше никогда не
+      // подходит ни одному товару (безопасное поведение по умолчанию)
+      if (!category || !productMatchesCategory(category, name)) continue;
+    }
+    if (rule.priceFrom !== null && priceInLocalCurrency < rule.priceFrom) continue;
+    if (rule.priceTo !== null && priceInLocalCurrency > rule.priceTo) continue;
+
+    return { markup: rule.markupPercent, discount: rule.discountPercent };
+  }
+
+  return { markup: defaultMarkup, discount: 0 };
 }
 
 // Местная валюта — украинская гривна. Тот же код, что и
@@ -234,7 +281,12 @@ function parseCellNumber(value: unknown): number {
 }
 
 // exchangeRate — курс валюты поставщика к местной валюте
-function parseExcelBuffer(buffer: Buffer, mapping: MappingSettings, exchangeRate: number): ParsedProduct[] {
+function parseExcelBuffer(
+  buffer: Buffer,
+  mapping: MappingSettings,
+  exchangeRate: number,
+  markupRules: MarkupRule[]
+): ParsedProduct[] {
   if (!mapping.article || !mapping.price) {
     throw new Error('Не указаны колонки "Артикул" и/или "Цена поставщика"');
   }
@@ -311,10 +363,26 @@ function parseExcelBuffer(buffer: Buffer, mapping: MappingSettings, exchangeRate
     // Шаг 1: переводим цену из валюты поставщика в местную валюту
     const supplierPrice = Math.round(priceInSupplierCurrency * exchangeRate * 100) / 100;
 
-    // Шаг 2: сверху накидываем наценку
-    const retailPrice = Math.round(supplierPrice * (1 + markup / 100) * 100) / 100;
+    // Шаг 2: смотрим, подходит ли товар под одно из правил наценки
+    // поставщика (бренд/категория/диапазон цены) — если да, берём
+    // наценку И скидку ИЗ ПРАВИЛА вместо обычной наценки поставщика
+    const { markup: effectiveMarkup, discount: effectiveDiscount } = resolveMarkupAndDiscount(
+      markupRules,
+      brand,
+      name,
+      supplierPrice,
+      markup
+    );
 
-    // Шаг 3: SEO-наполнение карточки — slug и мета-теги, собранные
+    // Шаг 3: сверху накидываем наценку, затем — если сработало
+    // правило со скидкой — вычитаем её из уже готовой цены. Скидка
+    // применяется ПОСЛЕ наценки: она про то, что видит покупатель на
+    // витрине (зачёркнутая старая цена + "-8%"), а не про то, как
+    // считается сама наценка
+    const priceWithMarkup = Math.round(supplierPrice * (1 + effectiveMarkup / 100) * 100) / 100;
+    const retailPrice = Math.round(priceWithMarkup * (1 - effectiveDiscount / 100) * 100) / 100;
+
+    // Шаг 4: SEO-наполнение карточки — slug и мета-теги, собранные
     // из названия/бренда/марки-модели-года-объёма авто/артикула
     // (см. buildSeoFields)
     const { slug, metaTitle, metaDescription } = buildSeoFields(
@@ -341,6 +409,7 @@ function parseExcelBuffer(buffer: Buffer, mapping: MappingSettings, exchangeRate
       metaDescription,
       supplierPrice,
       retailPrice,
+      discountPercent: effectiveDiscount,
       stock,
     });
   }
@@ -374,10 +443,11 @@ async function upsertBatch(
   const values: unknown[] = [];
   const rowsSql: string[] = [];
 
-  // 15 значений на строку: supplier_id, article, brand, name,
-  // cost_price, retail_price, stock, car_make, car_model, car_year,
-  // engine_volume, image_url, slug, meta_title, meta_description
-  const COLUMNS_PER_ROW = 15;
+  // 16 значений на строку: supplier_id, article, brand, name,
+  // cost_price, retail_price, discount_percent, stock, car_make,
+  // car_model, car_year, engine_volume, image_url, slug, meta_title,
+  // meta_description
+  const COLUMNS_PER_ROW = 16;
 
   batch.forEach((product, i) => {
     const base = i * COLUMNS_PER_ROW;
@@ -390,6 +460,7 @@ async function upsertBatch(
       product.name,
       product.supplierPrice,
       product.retailPrice,
+      product.discountPercent,
       product.stock,
       product.carMake || null,
       product.carModel || null,
@@ -420,12 +491,13 @@ async function upsertBatch(
   // и ранее указанную ссылку
   const query = `
     INSERT INTO products
-      (supplier_id, article, brand, name, cost_price, retail_price, stock, car_make, car_model, car_year, engine_volume, image_url, slug, meta_title, meta_description)
+      (supplier_id, article, brand, name, cost_price, retail_price, discount_percent, stock, car_make, car_model, car_year, engine_volume, image_url, slug, meta_title, meta_description)
     VALUES
       ${rowsSql.join(', ')}
     ON CONFLICT (supplier_id, article)
     DO UPDATE SET
       retail_price = EXCLUDED.retail_price,
+      discount_percent = EXCLUDED.discount_percent,
       cost_price = EXCLUDED.cost_price,
       name = EXCLUDED.name,
       brand = EXCLUDED.brand,
@@ -579,6 +651,30 @@ export async function POST(request: NextRequest) {
       exchangeRate = parseFloat(rateResult.rows[0].rate);
     }
 
+    // ------------------------------------------------------------
+    // ПРАВИЛА НАЦЕНКИ/СКИДКИ ПОСТАВЩИКА (supplier_markup_rules)
+    // ------------------------------------------------------------
+    // Только АКТИВНЫЕ, по порядку создания — тот же порядок, в котором
+    // их отдаёт GET .../markup-rules, и в котором их проверяет
+    // resolveMarkupAndDiscount (первое подошедшее правило выигрывает)
+    const rulesResult = await pool.query(
+      `
+      SELECT brand, category_slug, price_from, price_to, discount_percent, markup_percent
+      FROM supplier_markup_rules
+      WHERE supplier_id = $1 AND is_active = true
+      ORDER BY created_at ASC
+      `,
+      [supplierId]
+    );
+    const markupRules: MarkupRule[] = rulesResult.rows.map((row) => ({
+      brand: row.brand,
+      categorySlug: row.category_slug,
+      priceFrom: row.price_from === null ? null : parseFloat(row.price_from),
+      priceTo: row.price_to === null ? null : parseFloat(row.price_to),
+      discountPercent: parseFloat(row.discount_percent),
+      markupPercent: parseFloat(row.markup_percent),
+    }));
+
     const MAX_FILE_SIZE = 10 * 1024 * 1024;
     if (file.size > MAX_FILE_SIZE) {
       return NextResponse.json(
@@ -590,7 +686,7 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    const allProducts = parseExcelBuffer(buffer, mapping, exchangeRate);
+    const allProducts = parseExcelBuffer(buffer, mapping, exchangeRate, markupRules);
 
     if (allProducts.length === 0) {
       return NextResponse.json(

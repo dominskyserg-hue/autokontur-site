@@ -268,6 +268,18 @@ const ALL_MATCH_TERMS: string[] = Array.from(new Set(CATEGORIES.flatMap((c) => c
 // групи matchGroups — та сама умова "І" між групами, "АБО" всередині
 // групи, що й у buildCategoryWhereClause вище, тільки застосована до
 // тексту запиту, а не до назви товару в базі
+// Проверяет, подходит ли ОДНА конкретная категория под текст (та же
+// логика "И между групп, ИЛИ внутри группы", что и в
+// detectCategoryInText, только не перебирает все категории подряд, а
+// проверяет заданную). Используется app/api/suppliers/parse-excel/route.ts
+// для правил наценки (supplier_markup_rules.category_slug) — там нужно
+// узнать именно "подходит ли товар ПОД ЭТУ категорию", а не какая
+// категория подходит первой
+export function productMatchesCategory(category: CategoryDef, text: string): boolean {
+  const lower = text.toLowerCase();
+  return category.matchGroups.every((group) => group.some((term) => lower.includes(term)));
+}
+
 export function detectCategoryInText(text: string): CategoryDef | null {
   const lower = text.toLowerCase();
   return CATEGORIES.find((category) => category.matchGroups.every((group) => group.some((term) => lower.includes(term)))) ?? null;

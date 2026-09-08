@@ -29,6 +29,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import AdminLayout from './AdminLayout';
+import { CATEGORIES } from '@/lib/categories';
 
 // ------------------------------------------------------------
 // ТИПЫ — повторяют то, что отдаёт бэкенд
@@ -61,6 +62,64 @@ interface Supplier {
   createdAt: string;
   lastSyncedAt: string | null;
   mapping: MappingData | null;
+}
+
+// ------------------------------------------------------------
+// ПРАВИЛА НАЦЕНКИ ПО ФИЛЬТРУ (бренд / категория / диапазон цены) —
+// см. app/api/suppliers/[id]/markup-rules/route.ts
+// ------------------------------------------------------------
+interface MarkupRule {
+  id: string;
+  supplierId: string;
+  brand: string | null;
+  categorySlug: string | null;
+  priceFrom: number | null;
+  priceTo: number | null;
+  discountPercent: number;
+  markupPercent: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface RuleFormState {
+  brand: string;
+  categorySlug: string;
+  priceFrom: string;
+  priceTo: string;
+  discountPercent: string;
+  markupPercent: string;
+  isActive: boolean;
+}
+
+const EMPTY_RULE_FORM: RuleFormState = {
+  brand: '',
+  categorySlug: '',
+  priceFrom: '',
+  priceTo: '',
+  discountPercent: '0',
+  markupPercent: '0',
+  isActive: true,
+};
+
+// Короткое читаемое описание условий правила для списка — например
+// "BOSCH · Гальмівні колодки · від 500 грн" или "будь-який товар",
+// если ни одно условие не задано
+function describeRuleConditions(rule: MarkupRule): string {
+  const parts: string[] = [];
+  if (rule.brand) parts.push(rule.brand);
+  if (rule.categorySlug) {
+    const category = CATEGORIES.find((c) => c.slug === rule.categorySlug);
+    parts.push(category?.name || rule.categorySlug);
+  }
+  if (rule.priceFrom !== null && rule.priceTo !== null) {
+    parts.push(`${rule.priceFrom}–${rule.priceTo} грн`);
+  } else if (rule.priceFrom !== null) {
+    parts.push(`від ${rule.priceFrom} грн`);
+  } else if (rule.priceTo !== null) {
+    parts.push(`до ${rule.priceTo} грн`);
+  }
+  return parts.length > 0 ? parts.join(' · ') : 'будь-який товар';
 }
 
 interface Stats {
@@ -223,6 +282,17 @@ export default function SupplierMappingScreen() {
   const [uploadResult, setUploadResult] = useState<{ addedCount: number; updatedCount: number } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // ---- правила наценки по фильтру выбранного поставщика ----
+  const [markupRules, setMarkupRules] = useState<MarkupRule[]>([]);
+  const [loadingRules, setLoadingRules] = useState(false);
+  const [rulesError, setRulesError] = useState<string | null>(null);
+  const [ruleModalOpen, setRuleModalOpen] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [ruleForm, setRuleForm] = useState<RuleFormState>(EMPTY_RULE_FORM);
+  const [ruleFormError, setRuleFormError] = useState<string | null>(null);
+  const [savingRule, setSavingRule] = useState(false);
+  const [deletingRuleId, setDeletingRuleId] = useState<string | null>(null);
+
   // ------------------------------------------------------------
   // ЗАГРУЗКА СПИСКА ПОСТАВЩИКОВ И СТАТИСТИКИ
   // ------------------------------------------------------------
@@ -261,6 +331,34 @@ export default function SupplierMappingScreen() {
     fetchSuppliers();
     fetchStats();
   }, [fetchSuppliers, fetchStats]);
+
+  // ------------------------------------------------------------
+  // ПРАВИЛА НАЦЕНКИ ВЫБРАННОГО ПОСТАВЩИКА (GET .../markup-rules)
+  // ------------------------------------------------------------
+  const fetchMarkupRules = useCallback(async (supplierId: string) => {
+    setLoadingRules(true);
+    setRulesError(null);
+    try {
+      const response = await fetch(`/api/suppliers/${supplierId}/markup-rules`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось загрузить правила наценки');
+      }
+      setMarkupRules(data.rules as MarkupRule[]);
+    } catch (error) {
+      setRulesError(error instanceof Error ? error.message : 'Ошибка сети при загрузке правил наценки');
+    } finally {
+      setLoadingRules(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (selectedId) {
+      fetchMarkupRules(selectedId);
+    } else {
+      setMarkupRules([]);
+    }
+  }, [selectedId, fetchMarkupRules]);
 
   const selectedSupplier = suppliers.find((s) => s.id === selectedId) || null;
   const isCreateMode = selectedId === '';
@@ -481,6 +579,107 @@ export default function SupplierMappingScreen() {
       setUploadError(error instanceof Error ? error.message : 'Ошибка сети при загрузке файла');
     } finally {
       setUploading(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // ПРАВИЛА НАЦЕНКИ — открыть модалку создания/редактирования
+  // ------------------------------------------------------------
+  const openNewRuleModal = () => {
+    setEditingRuleId(null);
+    setRuleForm(EMPTY_RULE_FORM);
+    setRuleFormError(null);
+    setRuleModalOpen(true);
+  };
+
+  const openEditRuleModal = (rule: MarkupRule) => {
+    setEditingRuleId(rule.id);
+    setRuleForm({
+      brand: rule.brand || '',
+      categorySlug: rule.categorySlug || '',
+      priceFrom: rule.priceFrom !== null ? String(rule.priceFrom) : '',
+      priceTo: rule.priceTo !== null ? String(rule.priceTo) : '',
+      discountPercent: String(rule.discountPercent),
+      markupPercent: String(rule.markupPercent),
+      isActive: rule.isActive,
+    });
+    setRuleFormError(null);
+    setRuleModalOpen(true);
+  };
+
+  // ------------------------------------------------------------
+  // ПРАВИЛА НАЦЕНКИ — сохранить (создать или обновить)
+  // ------------------------------------------------------------
+  const handleSaveRule = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setRuleFormError(null);
+
+    if (!selectedSupplier) return;
+
+    // null (а не undefined) для пустых полей цены — при редактировании
+    // это единственный способ сказать бэкенду "очисти это условие", а
+    // не "оставь как было" (см. PATCH .../markup-rules/[ruleId]/route.ts)
+    const priceFrom = ruleForm.priceFrom.trim() ? parseFloat(ruleForm.priceFrom) : null;
+    const priceTo = ruleForm.priceTo.trim() ? parseFloat(ruleForm.priceTo) : null;
+    if (priceFrom !== null && priceTo !== null && priceFrom > priceTo) {
+      setRuleFormError('"Цена от" не может быть больше "Цена до"');
+      return;
+    }
+
+    setSavingRule(true);
+    try {
+      const url = editingRuleId
+        ? `/api/suppliers/${selectedSupplier.id}/markup-rules/${editingRuleId}`
+        : `/api/suppliers/${selectedSupplier.id}/markup-rules`;
+
+      const response = await fetch(url, {
+        method: editingRuleId ? 'PATCH' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brand: ruleForm.brand.trim() || null,
+          categorySlug: ruleForm.categorySlug || null,
+          priceFrom,
+          priceTo,
+          discountPercent: parseFloat(ruleForm.discountPercent) || 0,
+          markupPercent: parseFloat(ruleForm.markupPercent) || 0,
+          isActive: ruleForm.isActive,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось сохранить правило наценки');
+      }
+
+      await fetchMarkupRules(selectedSupplier.id);
+      setRuleModalOpen(false);
+    } catch (error) {
+      setRuleFormError(error instanceof Error ? error.message : 'Ошибка сети при сохранении правила');
+    } finally {
+      setSavingRule(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // ПРАВИЛА НАЦЕНКИ — удалить
+  // ------------------------------------------------------------
+  const handleDeleteRule = async (rule: MarkupRule) => {
+    if (!selectedSupplier) return;
+    if (!window.confirm('Удалить это правило наценки?')) return;
+
+    setDeletingRuleId(rule.id);
+    try {
+      const response = await fetch(`/api/suppliers/${selectedSupplier.id}/markup-rules/${rule.id}`, {
+        method: 'DELETE',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось удалить правило наценки');
+      }
+      await fetchMarkupRules(selectedSupplier.id);
+    } catch (error) {
+      setRulesError(error instanceof Error ? error.message : 'Ошибка сети при удалении правила');
+    } finally {
+      setDeletingRuleId(null);
     }
   };
 
@@ -846,11 +1045,94 @@ export default function SupplierMappingScreen() {
             </button>
           </form>
 
-          {/* ---- 4. Загрузка прайс-листа — только для уже созданного поставщика ---- */}
+          {/* ---- 5. Правила наценки по фильтру — только для уже созданного поставщика ---- */}
+          {!isCreateMode && (
+            <div className="mt-6 pt-5" style={{ borderTop: '1px dashed var(--line)' }}>
+              <div className="flex items-start justify-between gap-3 mb-1">
+                <p className="text-[11px] font-semibold tracking-wider" style={{ color: 'var(--ink-faint)' }}>
+                  5&nbsp;&nbsp;ПРАВИЛА НАЦЕНКИ ПО ФИЛЬТРУ
+                </p>
+                <button
+                  type="button"
+                  onClick={openNewRuleModal}
+                  className="text-xs px-3 py-1.5 rounded-md shrink-0"
+                  style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                >
+                  + Добавить правило
+                </button>
+              </div>
+              <p className="text-[11px] mb-3" style={{ color: 'var(--ink-faint)' }}>
+                Необязательно. Дополняет обычную наценку поставщика (пункт 4 выше) — если товар подходит
+                под условия правила (бренд/категория/цена поставщика), при загрузке прайса применяется
+                наценка и скидка ИЗ ЭТОГО правила вместо общей наценки. Проверяются по порядку сверху вниз,
+                берётся первое подошедшее.
+              </p>
+
+              {rulesError && (
+                <p className="text-xs mb-2" style={{ color: 'var(--bad)' }}>
+                  {rulesError}
+                </p>
+              )}
+
+              {loadingRules ? (
+                <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                  Загрузка правил...
+                </p>
+              ) : markupRules.length === 0 ? (
+                <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                  Правил пока нет — используется обычная наценка поставщика для всех товаров.
+                </p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {markupRules.map((rule) => (
+                    <li
+                      key={rule.id}
+                      className="flex items-center justify-between gap-3 p-2.5 rounded-md text-xs"
+                      style={{
+                        border: '1px solid var(--line)',
+                        background: 'var(--surface-2)',
+                        opacity: rule.isActive ? 1 : 0.5,
+                      }}
+                    >
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{describeRuleConditions(rule)}</p>
+                        <p style={{ color: 'var(--ink-faint)' }}>
+                          наценка {rule.markupPercent}%
+                          {rule.discountPercent > 0 ? ` · скидка ${rule.discountPercent}%` : ''}
+                          {!rule.isActive ? ' · выключено' : ''}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => openEditRuleModal(rule)}
+                          className="px-2 py-1 rounded"
+                          style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                        >
+                          Изменить
+                        </button>
+                        <button
+                          type="button"
+                          disabled={deletingRuleId === rule.id}
+                          onClick={() => handleDeleteRule(rule)}
+                          className="px-2 py-1 rounded disabled:opacity-50"
+                          style={{ border: '1px solid var(--line)', color: 'var(--bad)' }}
+                        >
+                          {deletingRuleId === rule.id ? '...' : 'Удалить'}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* ---- 6. Загрузка прайс-листа — только для уже созданного поставщика ---- */}
           {!isCreateMode && (
             <div className="mt-6 pt-5" style={{ borderTop: '1px dashed var(--line)' }}>
               <p className="text-[11px] font-semibold tracking-wider mb-3" style={{ color: 'var(--ink-faint)' }}>
-                5&nbsp;&nbsp;ЗАГРУЗКА ПРАЙСА
+                6&nbsp;&nbsp;ЗАГРУЗКА ПРАЙСА
               </p>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -1001,6 +1283,164 @@ export default function SupplierMappingScreen() {
           )}
         </section>
       </div>
+
+      {/* ==================== МОДАЛКА ПРАВИЛА НАЦЕНКИ ==================== */}
+      {ruleModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={() => setRuleModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md p-5 rounded-lg"
+            style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold mb-4">
+              {editingRuleId ? 'Редактирование правила' : 'Новое правило наценки'}
+            </h2>
+
+            <form onSubmit={handleSaveRule} className="flex flex-col gap-3.5">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                  Производитель
+                </label>
+                <input
+                  type="text"
+                  placeholder="напр. BOSCH — пусто означает любой бренд"
+                  className="w-full px-3 py-2 text-sm rounded-md uppercase"
+                  style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                  value={ruleForm.brand}
+                  onChange={(e) => setRuleForm({ ...ruleForm, brand: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                  Категория
+                </label>
+                <select
+                  className="w-full px-3 py-2 text-sm rounded-md"
+                  style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                  value={ruleForm.categorySlug}
+                  onChange={(e) => setRuleForm({ ...ruleForm, categorySlug: e.target.value })}
+                >
+                  <option value="">Любая категория</option>
+                  {CATEGORIES.map((c) => (
+                    <option key={c.slug} value={c.slug}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                    Цена от
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                    value={ruleForm.priceFrom}
+                    onChange={(e) => setRuleForm({ ...ruleForm, priceFrom: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                    Цена до
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                    value={ruleForm.priceTo}
+                    onChange={(e) => setRuleForm({ ...ruleForm, priceTo: e.target.value })}
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] -mt-2" style={{ color: 'var(--ink-faint)' }}>
+                Цена поставщика (опт, уже в гривнах), а не готовая розничная цена.
+              </p>
+
+              <div className="grid grid-cols-2 gap-3.5">
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                    Скидка, %
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.5}
+                    className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                    value={ruleForm.discountPercent}
+                    onChange={(e) => setRuleForm({ ...ruleForm, discountPercent: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                    Наценка, %
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.5}
+                    className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                    value={ruleForm.markupPercent}
+                    onChange={(e) => setRuleForm({ ...ruleForm, markupPercent: e.target.value })}
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] -mt-2" style={{ color: 'var(--ink-faint)' }}>
+                Розничная цена = (цена поставщика × (1 + наценка / 100)) × (1 − скидка / 100). Скидка — это
+                то, что видит покупатель поверх уже готовой цены.
+              </p>
+
+              <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--ink-muted)' }}>
+                <input
+                  type="checkbox"
+                  checked={ruleForm.isActive}
+                  onChange={(e) => setRuleForm({ ...ruleForm, isActive: e.target.checked })}
+                />
+                Применять правило
+              </label>
+
+              {ruleFormError && (
+                <p className="text-xs" style={{ color: 'var(--bad)' }}>
+                  {ruleFormError}
+                </p>
+              )}
+
+              <div className="flex items-center gap-3 mt-1">
+                <button
+                  type="submit"
+                  disabled={savingRule}
+                  className="flex-1 py-2.5 rounded-md text-sm font-medium disabled:opacity-50"
+                  style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                >
+                  {savingRule ? 'Сохранение...' : 'Сохранить'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setRuleModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-md text-sm font-medium"
+                  style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                >
+                  Отмена
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

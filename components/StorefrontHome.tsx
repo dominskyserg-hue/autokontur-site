@@ -76,6 +76,10 @@ interface Product {
   // ещё не добавили — тогда показываем заглушку
   imageUrl: string | null;
   retailPrice: number;
+  // Скидка (%) от правила наценки поставщика — ЧИСТО для отображения
+  // (retailPrice уже посчитана со скидкой), см. app/api/products/route.ts.
+  // 0 — скидки нет
+  discountPercent: number;
   stock: number;
   // Термін поставки під замовлення постачальника цього товару —
   // показуємо ЛИШЕ якщо stock === 0 (див. app/api/products/route.ts)
@@ -2068,14 +2072,28 @@ export default function StorefrontHome() {
                               {product.stock > 0 ? 'сьогодні' : product.deliveryTime || '—'}
                             </div>
 
-                            <div
-                              className="whitespace-nowrap text-right"
-                              style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 17, color: '#fff', fontVariantNumeric: 'tabular-nums' }}
-                            >
-                              {formatMoney(product.retailPrice)}
-                              <span className="ml-1 text-xs font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
-                                ГРН
-                              </span>
+                            <div className="whitespace-nowrap text-right">
+                              <div
+                                style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 17, color: '#fff', fontVariantNumeric: 'tabular-nums' }}
+                              >
+                                {formatMoney(product.retailPrice)}
+                                <span className="ml-1 text-xs font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                                  ГРН
+                                </span>
+                              </div>
+                              {product.discountPercent > 0 && (
+                                <div className="flex items-center justify-end gap-1.5 mt-0.5">
+                                  <span className="text-xs line-through" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                                    {formatMoney(product.retailPrice / (1 - product.discountPercent / 100))}
+                                  </span>
+                                  <span
+                                    className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
+                                    style={{ fontFamily: SANS_TECH, background: TECH_HEAT_SOFT, color: TECH_HEAT }}
+                                  >
+                                    −{product.discountPercent}%
+                                  </span>
+                                </div>
+                              )}
                             </div>
 
                             <button
@@ -2163,14 +2181,28 @@ export default function StorefrontHome() {
                                 Під замовлення
                               </span>
                             )}
-                            <span
-                              className="whitespace-nowrap"
-                              style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 18, color: '#fff', fontVariantNumeric: 'tabular-nums' }}
-                            >
-                              {formatMoney(product.retailPrice)}
-                              <span className="ml-1 text-[11px] font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
-                                ГРН
+                            <span className="whitespace-nowrap text-right">
+                              <span
+                                style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 18, color: '#fff', fontVariantNumeric: 'tabular-nums' }}
+                              >
+                                {formatMoney(product.retailPrice)}
+                                <span className="ml-1 text-[11px] font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                                  ГРН
+                                </span>
                               </span>
+                              {product.discountPercent > 0 && (
+                                <span className="flex items-center justify-end gap-1.5 mt-0.5">
+                                  <span className="text-xs line-through" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                                    {formatMoney(product.retailPrice / (1 - product.discountPercent / 100))}
+                                  </span>
+                                  <span
+                                    className="text-[11px] font-semibold px-1.5 py-0.5 rounded"
+                                    style={{ fontFamily: SANS_TECH, background: TECH_HEAT_SOFT, color: TECH_HEAT }}
+                                  >
+                                    −{product.discountPercent}%
+                                  </span>
+                                </span>
+                              )}
                             </span>
                           </div>
 

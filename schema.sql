@@ -216,6 +216,64 @@ ALTER TABLE supplier_excel_mappings ADD COLUMN IF NOT EXISTS image_column TEXT;
 
 
 -- ============================================================
+-- 3.1 ТАБЛИЦА supplier_markup_rules — правила наценки/скидки
+--     по фильтру (бренд / категория / диапазон цены поставщика)
+-- ============================================================
+-- Раньше у поставщика была ровно ОДНА наценка на ВСЕ его товары
+-- (supplier_excel_mappings.markup_percent выше). Этого не хватает,
+-- когда нужно, например, поставить на дорогие детали Bosch наценку
+-- поменьше, а на дешёвый неоригинал — побольше. Здесь у поставщика
+-- может быть НЕСКОЛЬКО таких правил — при загрузке прайса каждый
+-- товар проверяется по ним ПО ПОРЯДКУ СОЗДАНИЯ (created_at), и
+-- применяется markup_percent/discount_percent ПЕРВОГО подошедшего
+-- правила. Если ни одно правило не подошло (или правил нет вовсе) —
+-- используется обычная наценка поставщика, как и раньше (см.
+-- app/api/suppliers/parse-excel/route.ts)
+CREATE TABLE IF NOT EXISTS supplier_markup_rules (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Поставщик, которому принадлежит правило. ON DELETE CASCADE — при
+  -- удалении поставщика все его правила наценки удаляются вместе с ним
+  supplier_id UUID NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+
+  -- Все условия ниже — НЕОБЯЗАТЕЛЬНЫЕ (NULL = "любой"). Правило без
+  -- ни одного условия подходит вообще всем товарам поставщика — это
+  -- осознанно допустимо (действует как обычная наценка, только со
+  -- скидкой в придачу)
+  brand TEXT,
+  category_slug TEXT,
+
+  -- Диапазон цены ПОСТАВЩИКА (products.cost_price, уже в местной
+  -- валюте после пересчёта по курсу) — НЕ розничной цены с наценкой:
+  -- иначе для расчёта наценки понадобилась бы уже посчитанная наценка,
+  -- получился бы замкнутый круг
+  price_from NUMERIC(12, 2),
+  price_to NUMERIC(12, 2),
+
+  -- Скидка для покупателя ПОВЕРХ уже готовой (с наценкой) цены —
+  -- см. products.discount_percent ниже. Например, наценка 20% и
+  -- скидка 8% на дорогие детали Bosch означают: розничная цена
+  -- считается с наценкой 20%, а затем покупателю показывается такая
+  -- цена со скидкой 8% (и старая цена — зачёркнутой)
+  discount_percent NUMERIC(6, 2) NOT NULL DEFAULT 0,
+  markup_percent NUMERIC(6, 2) NOT NULL DEFAULT 0,
+
+  -- Выключенное правило (is_active = false) сохраняется в списке, но
+  -- не применяется при загрузке прайса — так можно временно отключить
+  -- правило, не удаляя и не теряя его настройки
+  is_active BOOLEAN NOT NULL DEFAULT true,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Ускоряет "все правила этого поставщика, по порядку создания" —
+-- именно так их выбирает app/api/suppliers/parse-excel/route.ts
+CREATE INDEX IF NOT EXISTS idx_supplier_markup_rules_supplier
+  ON supplier_markup_rules (supplier_id, created_at);
+
+
+-- ============================================================
 -- 4. ТАБЛИЦА products — товары, загруженные из прайс-листов
 -- ============================================================
 CREATE TABLE IF NOT EXISTS products (
@@ -310,9 +368,17 @@ CREATE TABLE IF NOT EXISTS products (
   -- потому что FLOAT округляет и может незаметно "потерять" копейки
   cost_price NUMERIC(12, 2) NOT NULL DEFAULT 0,
 
-  -- Розничная цена — уже посчитанная (опт + наценка), та, что
-  -- увидит покупатель на сайте
+  -- Розничная цена — уже посчитанная (опт + наценка, а если по
+  -- товару сработало правило наценки со скидкой — то ещё и скидка
+  -- уже вычтена, см. supplier_markup_rules выше), та цена, которую
+  -- реально платит покупатель на сайте
   retail_price NUMERIC(12, 2) NOT NULL DEFAULT 0,
+
+  -- Скидка (%), применённая к этому товару правилом наценки
+  -- поставщика (supplier_markup_rules.discount_percent) — ЧИСТО ДЛЯ
+  -- ОТОБРАЖЕНИЯ на витрине (старая цена зачёркнута + "-8%"), в
+  -- retail_price выше скидка уже учтена. 0 — скидки нет, обычная цена
+  discount_percent NUMERIC(6, 2) NOT NULL DEFAULT 0,
 
   stock INTEGER NOT NULL DEFAULT 0,
 
@@ -340,6 +406,7 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_description TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_description_override BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_search_attempted_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(6, 2) NOT NULL DEFAULT 0;
 
 
 -- ============================================================

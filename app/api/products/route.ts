@@ -142,6 +142,10 @@ interface ProductResponse {
   imageUrl: string | null;
   costPrice: number;
   retailPrice: number;
+  // Скидка (%) от правила наценки поставщика — ЧИСТО для отображения
+  // (retailPrice уже посчитана со скидкой), см. schema.sql:
+  // supplier_markup_rules и products.discount_percent. 0 — скидки нет
+  discountPercent: number;
   stock: number;
   supplierId: string;
   supplierName: string;
@@ -461,6 +465,7 @@ export async function GET(request: NextRequest) {
         p.image_search_attempted_at,
         p.cost_price,
         p.retail_price,
+        p.discount_percent,
         p.stock,
         p.supplier_id,
         s.name AS supplier_name,
@@ -497,6 +502,7 @@ export async function GET(request: NextRequest) {
       // при преобразовании в float), поэтому явно переводим в число
       costPrice: parseFloat(row.cost_price),
       retailPrice: parseFloat(row.retail_price),
+      discountPercent: parseFloat(row.discount_percent),
       stock: row.stock,
       supplierId: row.supplier_id,
       supplierName: row.supplier_name,
