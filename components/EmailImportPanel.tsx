@@ -193,7 +193,7 @@ export default function EmailImportPanel() {
           Журнал пуст — проверок ещё не было, либо ни одно письмо ещё не попало в окно проверки.
         </p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2 overflow-y-auto pr-1" style={{ maxHeight: 260 }}>
           {entries.map((entry) => {
             const colors = STATUS_COLORS[entry.status];
             return (
