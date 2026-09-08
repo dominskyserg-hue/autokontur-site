@@ -58,6 +58,7 @@ interface Supplier {
   email: string | null;
   currency: string;
   isActive: boolean;
+  emailAutoImportEnabled: boolean;
   deliveryTime: string | null;
   createdAt: string;
   lastSyncedAt: string | null;
@@ -169,6 +170,11 @@ interface FormState {
   markup: string;
   currency: string;
   deliveryTime: string;
+  // Включена ли автозагрузка прайса этого поставщика из почты (см.
+  // components/EmailImportPanel.tsx и lib/emailPriceImport.ts) — имеет
+  // смысл, только если заполнен email, но сам переключатель доступен
+  // всегда, чтобы можно было заранее подготовить настройку
+  emailAutoImportEnabled: boolean;
 }
 
 const EMPTY_FORM: FormState = {
@@ -190,6 +196,7 @@ const EMPTY_FORM: FormState = {
   markup: '0',
   currency: LOCAL_CURRENCY,
   deliveryTime: '',
+  emailAutoImportEnabled: true,
 };
 
 // ------------------------------------------------------------
@@ -393,6 +400,7 @@ export default function SupplierMappingScreen() {
         markup: m ? String(m.markup) : '0',
         currency: selectedSupplier.currency,
         deliveryTime: selectedSupplier.deliveryTime || '',
+        emailAutoImportEnabled: selectedSupplier.emailAutoImportEnabled,
       });
     }
     setSelectedFile(null);
@@ -441,6 +449,7 @@ export default function SupplierMappingScreen() {
           email: form.email || undefined,
           currency: form.currency,
           deliveryTime: form.deliveryTime,
+          emailAutoImportEnabled: form.emailAutoImportEnabled,
           mapping: hasAnyMappingField
             ? {
                 article: form.article,
@@ -831,6 +840,15 @@ export default function SupplierMappingScreen() {
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
                   />
                 </div>
+                <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--ink-muted)' }}>
+                  <input
+                    type="checkbox"
+                    checked={form.emailAutoImportEnabled}
+                    onChange={(e) => setForm({ ...form, emailAutoImportEnabled: e.target.checked })}
+                  />
+                  Автозагрузка прайса из писем с этого email (см. панель «Автозагрузка прайсов по email»
+                  в Настройках)
+                </label>
               </div>
             </div>
 

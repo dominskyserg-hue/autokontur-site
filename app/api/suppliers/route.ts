@@ -124,6 +124,11 @@ interface CreateSupplierRequestBody {
   // списке поставщиков. Необязательное поле: если не передать —
   // при создании подставится true, при обновлении статус не изменится
   isActive?: boolean;
+  // Включена ли автозагрузка прайса ЭТОГО поставщика из почты (см.
+  // lib/emailPriceImport.ts) — переключатель в форме поставщика.
+  // Необязательное поле, та же логика "не передали — не трогаем",
+  // что и у isActive выше
+  emailAutoImportEnabled?: boolean;
   // Термін поставки під замовлення (свободный текст, напр. "2-3 дні") —
   // показывается на карточке товара на витрине, ЕСЛИ товара нет в
   // наличии (см. app/api/products/route.ts и components/StorefrontHome.tsx)
@@ -160,6 +165,7 @@ interface SupplierResponse {
   email: string | null;
   currency: string;
   isActive: boolean;
+  emailAutoImportEnabled: boolean;
   deliveryTime: string | null;
   createdAt: string;
   // Время последнего успешного импорта прайс-листа этого поставщика
@@ -367,18 +373,20 @@ export async function POST(request: NextRequest) {
     let supplierRow;
 
     if (isUpdate) {
-      // isActive не передан — значит статус менять не нужно, оставляем
-      // текущий (COALESCE подставит старое значение из самой строки).
-      // deliveryTime, наоборот, ЗАПИСЫВАЕМ как пришло (в т.ч. null,
-      // если поле очистили) — в отличие от isActive, тут нет отдельного
-      // "не трогай" состояния, форма всегда шлёт актуальное значение
+      // isActive и emailAutoImportEnabled не переданы — значит статус
+      // менять не нужно, оставляем текущий (COALESCE подставит старое
+      // значение из самой строки). deliveryTime, наоборот, ЗАПИСЫВАЕМ
+      // как пришло (в т.ч. null, если поле очистили) — в отличие от
+      // isActive, тут нет отдельного "не трогай" состояния, форма
+      // всегда шлёт актуальное значение
       const updateResult = await client.query(
         `
         UPDATE suppliers
         SET name = $2, contact_name = $3, phone = $4, email = $5, currency = $6,
-            is_active = COALESCE($7, is_active), delivery_time = $8
+            is_active = COALESCE($7, is_active), delivery_time = $8,
+            email_auto_import_enabled = COALESCE($9, email_auto_import_enabled)
         WHERE id = $1
-        RETURNING id, name, contact_name, phone, email, currency, is_active, delivery_time, created_at
+        RETURNING id, name, contact_name, phone, email, currency, is_active, email_auto_import_enabled, delivery_time, created_at
         `,
         [
           body.id,
@@ -389,6 +397,7 @@ export async function POST(request: NextRequest) {
           currency,
           body.isActive ?? null,
           deliveryTime,
+          body.emailAutoImportEnabled ?? null,
         ]
       );
 
@@ -402,14 +411,14 @@ export async function POST(request: NextRequest) {
 
       supplierRow = updateResult.rows[0];
     } else {
-      // Новый поставщик — если isActive не передан, по умолчанию true
-      // (использует DEFAULT true из schema.sql, поэтому здесь и не
-      // указываем колонку явно, если значение не пришло)
+      // Новый поставщик — если isActive/emailAutoImportEnabled не
+      // переданы, по умолчанию true (совпадает с DEFAULT true в
+      // schema.sql для обеих колонок)
       const insertResult = await client.query(
         `
-        INSERT INTO suppliers (name, contact_name, phone, email, currency, is_active, delivery_time)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        RETURNING id, name, contact_name, phone, email, currency, is_active, delivery_time, created_at
+        INSERT INTO suppliers (name, contact_name, phone, email, currency, is_active, delivery_time, email_auto_import_enabled)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING id, name, contact_name, phone, email, currency, is_active, email_auto_import_enabled, delivery_time, created_at
         `,
         [
           body.name.trim(),
@@ -419,6 +428,7 @@ export async function POST(request: NextRequest) {
           currency,
           body.isActive ?? true,
           deliveryTime,
+          body.emailAutoImportEnabled ?? true,
         ]
       );
       supplierRow = insertResult.rows[0];
@@ -441,6 +451,7 @@ export async function POST(request: NextRequest) {
       email: supplierRow.email,
       currency: supplierRow.currency,
       isActive: supplierRow.is_active,
+      emailAutoImportEnabled: supplierRow.email_auto_import_enabled,
       deliveryTime: supplierRow.delivery_time,
       createdAt: supplierRow.created_at,
       // Свежесозданный/только что отредактированный поставщик мог
@@ -487,6 +498,7 @@ export async function GET() {
         s.email,
         s.currency,
         s.is_active,
+        s.email_auto_import_enabled,
         s.delivery_time,
         s.created_at,
         m.article_column,
@@ -524,6 +536,7 @@ export async function GET() {
         email: row.email,
         currency: row.currency,
         isActive: row.is_active,
+        emailAutoImportEnabled: row.email_auto_import_enabled,
         deliveryTime: row.delivery_time,
         createdAt: row.created_at,
         lastSyncedAt: row.last_synced_at,

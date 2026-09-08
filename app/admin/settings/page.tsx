@@ -5,6 +5,7 @@
 // (components/AnnouncementsManager.tsx)
 import AdminLayout from '@/components/AdminLayout';
 import GlobalRatesWidget from '@/components/GlobalRatesWidget';
+import EmailImportPanel from '@/components/EmailImportPanel';
 import ContactSettingsForm from '@/components/ContactSettingsForm';
 import AnnouncementsManager from '@/components/AnnouncementsManager';
 import SitePagesManager from '@/components/SitePagesManager';
@@ -23,6 +24,7 @@ export default function SettingsPage() {
       </header>
 
       <GlobalRatesWidget />
+      <EmailImportPanel />
       <ContactSettingsForm />
       <SitePagesManager />
       <AnnouncementsManager />

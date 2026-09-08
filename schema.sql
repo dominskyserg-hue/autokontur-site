@@ -130,6 +130,17 @@ ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAUL
 -- постачальник ще не вказав термін
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS delivery_time TEXT;
 
+-- Включена ли автоматическая загрузка прайса ЭТОГО поставщика из
+-- почты (см. lib/emailPriceImport.ts и app/api/cron/import-supplier-emails).
+-- Письма сопоставляются с поставщиком по адресу отправителя = email
+-- поставщика (колонка выше), поэтому автозагрузка вообще имеет смысл,
+-- только если email заполнен И настроен маппинг колонок Excel. Можно
+-- выключить для конкретного поставщика, не трогая остальных — например,
+-- если он временно шлёт прайсы вручную по телефону, а не почтой.
+-- По умолчанию true — если email указан, автозагрузка сразу пробует
+-- работать, отдельно включать её не нужно
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS email_auto_import_enabled BOOLEAN NOT NULL DEFAULT true;
+
 -- А колонку exchange_rate, наоборот, теперь УДАЛЯЕМ: курс переехал
 -- из поставщика в отдельную таблицу global_exchange_rates (см. выше
 -- в этом же файле). DROP COLUMN IF EXISTS безопасен и для тех, у
@@ -1057,6 +1068,66 @@ CREATE TABLE IF NOT EXISTS tecdoc_related_categories (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tecdoc_related_from ON tecdoc_related_categories (from_category_name);
+
+
+-- ============================================================
+-- 18. ТАБЛИЦА email_import_log — журнал автозагрузки прайсов по email
+-- ============================================================
+-- Каждая строка — одно проверенное письмо во входящей почте (см.
+-- lib/emailPriceImport.ts). Журнал решает две задачи разом:
+--   1. Не даёт повторно обработать одно и то же письмо: cron
+--      (app/api/cron/import-supplier-emails) при каждом запуске
+--      пересматривает почту за последние несколько дней, и
+--      message_id уже обработанного письма просто пропускается.
+--   2. Показывает администратору в панели "Автозагрузка прайсов по
+--      email" (components/EmailImportPanel.tsx), что вообще
+--      происходило: чей прайс подхватился, а что не удалось
+--      сопоставить или разобрать — иначе автоматика была бы
+--      "чёрным ящиком", которому нельзя доверять
+CREATE TABLE IF NOT EXISTS email_import_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- Message-ID письма из его собственного заголовка — уникален у
+  -- каждого письма в мире (в отличие от IMAP UID, который зависит от
+  -- конкретного почтового ящика). Именно по нему определяем "это
+  -- письмо уже обрабатывали или нет"
+  message_id TEXT NOT NULL UNIQUE,
+
+  -- Поставщик, к которому отнесли письмо (по совпадению адреса
+  -- отправителя с suppliers.email). NULL — если отправитель не
+  -- совпал ни с одним поставщиком (status = 'unmatched'). ON DELETE
+  -- SET NULL — если поставщика потом удалят, старая запись журнала
+  -- не исчезнет, просто потеряет ссылку. supplier_name — "снимок"
+  -- названия на момент обработки (та же идея, что и в order_items
+  -- выше в этом файле) — чтобы строка журнала оставалась понятной,
+  -- даже если поставщика переименуют или удалят
+  supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
+  supplier_name TEXT,
+
+  from_address TEXT NOT NULL,
+  subject TEXT,
+
+  -- imported   — прайс из вложения успешно разобран и сохранён
+  -- error      — поставщик найден, но разбор/сохранение упали (см. error_message)
+  -- unmatched  — отправитель не совпал ни с одним поставщиком
+  -- skipped    — поставщик найден, но во вложениях нет Excel-файла
+  --              (это просто обычное письмо, не прайс-лист)
+  status TEXT NOT NULL CHECK (status IN ('imported', 'error', 'unmatched', 'skipped')),
+
+  added_count INTEGER NOT NULL DEFAULT 0,
+  updated_count INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+
+  -- Когда письмо реально пришло на почту (дата из заголовка письма) —
+  -- отдельно от processed_at (когда МЫ его обработали), это разные
+  -- моменты времени, если cron запускался не сразу после получения письма
+  received_at TIMESTAMPTZ,
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Ускоряет и "последние N писем для панели в админке" (ORDER BY
+-- processed_at DESC), и проверку "письмо с таким Message-ID уже есть?"
+CREATE INDEX IF NOT EXISTS idx_email_import_log_processed_at ON email_import_log (processed_at DESC);
 
 
 -- ============================================================
