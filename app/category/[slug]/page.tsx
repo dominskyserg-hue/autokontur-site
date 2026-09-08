@@ -409,7 +409,7 @@ export default async function CategoryPage({
             Інші категорії
           </h2>
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.filter((c) => c.slug !== slug).map((c) => (
+            {CATEGORIES.filter((c) => c.slug !== slug && !c.hideFromIndex).map((c) => (
               <Link
                 key={c.slug}
                 href={`/category/${c.slug}`}

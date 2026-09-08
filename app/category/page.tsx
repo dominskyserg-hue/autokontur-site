@@ -39,7 +39,7 @@ export default function CategoryIndexPage() {
         </h1>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {CATEGORIES.map((c) => (
+          {CATEGORIES.filter((c) => !c.hideFromIndex).map((c) => (
             <Link
               key={c.slug}
               href={`/category/${c.slug}`}
@@ -55,6 +55,33 @@ export default function CategoryIndexPage() {
             </Link>
           ))}
         </div>
+
+        {/* ==================== ШВИДКИЙ ПОШУК ЗА МОДЕЛЛЮ АВТО ==================== */}
+        {/* Вузькі пріоритетні SEO-сторінки (hideFromIndex: true в
+            lib/categories.ts) — навмисно окремим блоком, а не в сітці
+            вище: серед 14 широких категорій вони губились би, а тут це
+            посилання-"місток" для Google (щоб сторінку взагалі знайшли
+            і проіндексували — sitemap.xml у проєкті ще немає) без
+            захаращення основної навігації */}
+        {CATEGORIES.some((c) => c.hideFromIndex) && (
+          <div className="mt-10 pt-8" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
+            <h2 className="mb-3 text-sm font-semibold" style={{ color: TECH_FAINT }}>
+              Швидкий пошук за моделлю авто
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {CATEGORIES.filter((c) => c.hideFromIndex).map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/category/${c.slug}`}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+                  style={{ border: `1px solid ${TECH_BORDER}`, color: TECH_MUTED }}
+                >
+                  {c.name}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
