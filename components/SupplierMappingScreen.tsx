@@ -1055,8 +1055,8 @@ export default function SupplierMappingScreen() {
                 <button
                   type="button"
                   onClick={openNewRuleModal}
-                  className="text-xs px-3 py-1.5 rounded-md shrink-0"
-                  style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                  className="text-xs font-medium px-3 py-1.5 rounded-md shrink-0"
+                  style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
                 >
                   + Добавить правило
                 </button>
