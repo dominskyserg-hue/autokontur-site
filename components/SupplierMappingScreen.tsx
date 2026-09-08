@@ -43,6 +43,7 @@ interface MappingData {
   carModel: string | null;
   carYear: string | null;
   engineVolume: string | null;
+  image: string | null;
   startRow: number;
   markup: number;
   updatedAt: string;
@@ -99,6 +100,12 @@ interface FormState {
   carModel: string;
   carYear: string;
   engineVolume: string;
+  // Колонка со ссылкой на фото товара — необязательная, как и блок
+  // "для какого авто" выше. Если у поставщика в прайсе есть прямые
+  // ссылки на фото, они надёжнее автоматического поиска и подставятся
+  // в карточку товара при каждой загрузке прайса (см.
+  // app/api/suppliers/parse-excel/route.ts)
+  image: string;
   startRow: string;
   markup: string;
   currency: string;
@@ -119,6 +126,7 @@ const EMPTY_FORM: FormState = {
   carModel: '',
   carYear: '',
   engineVolume: '',
+  image: '',
   startRow: '1',
   markup: '0',
   currency: LOCAL_CURRENCY,
@@ -282,6 +290,7 @@ export default function SupplierMappingScreen() {
         carModel: m?.carModel || '',
         carYear: m?.carYear || '',
         engineVolume: m?.engineVolume || '',
+        image: m?.image || '',
         startRow: m ? String(m.startRow) : '1',
         markup: m ? String(m.markup) : '0',
         currency: selectedSupplier.currency,
@@ -345,6 +354,7 @@ export default function SupplierMappingScreen() {
                 carModel: form.carModel || undefined,
                 carYear: form.carYear || undefined,
                 engineVolume: form.engineVolume || undefined,
+                image: form.image || undefined,
                 startRow: parseInt(form.startRow, 10) || 1,
                 markup: parseFloat(form.markup) || 0,
               }
@@ -447,6 +457,7 @@ export default function SupplierMappingScreen() {
           carModel: form.carModel,
           carYear: form.carYear,
           engineVolume: form.engineVolume,
+          image: form.image,
           startRow: parseInt(form.startRow, 10) || 1,
           markup: parseFloat(form.markup) || 0,
         })
@@ -629,7 +640,7 @@ export default function SupplierMappingScreen() {
               <p className="text-[11px] font-semibold tracking-wider mb-3" style={{ color: 'var(--ink-faint)' }}>
                 2&nbsp;&nbsp;МАППИНГ КОЛОНОК EXCEL
               </p>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-3 mb-2">
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 mb-2">
                 {(
                   [
                     ['article', 'Артикул *'],
@@ -637,6 +648,7 @@ export default function SupplierMappingScreen() {
                     ['partName', 'Название'],
                     ['price', 'Цена *'],
                     ['stock', 'Остаток'],
+                    ['image', 'Фото'],
                   ] as const
                 ).map(([field, label]) => (
                   <div key={field}>
@@ -656,6 +668,9 @@ export default function SupplierMappingScreen() {
               </div>
               <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
                 Укажите букву колонки (A, B, C...) или её номер (1, 2, 3...) в файле поставщика.
+                Колонка «Фото» — необязательная: если поставщик присылает прямые ссылки на фото в
+                прайсе, они подставятся в карточку товара вместо автоматического поиска и будут
+                перекрывать его при каждой загрузке прайса; пустые ячейки уже найденное фото не сотрут.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 mt-3.5">

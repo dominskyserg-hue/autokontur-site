@@ -93,6 +93,10 @@ interface MappingInput {
   // "Підбір за автомобілем" на витрине. Тоже необязательные
   carYear?: string;
   engineVolume?: string;
+  // Колонка со ссылкой на фото товара — если поставщик присылает
+  // прямые ссылки на фото в прайсе. Необязательная: без неё фото
+  // по-прежнему ищется автоматически (см. app/api/suppliers/parse-excel/route.ts)
+  image?: string;
   startRow?: number;               // с какой строки начинаются данные (по умолчанию 1)
   markup?: number;                    // наценка в процентах (по умолчанию 0)
 }
@@ -140,6 +144,7 @@ interface MappingResponse {
   carModel: string | null;
   carYear: string | null;
   engineVolume: string | null;
+  image: string | null;
   startRow: number;
   markup: number;
   updatedAt: string;
@@ -259,9 +264,9 @@ async function upsertMapping(
   const result = await client.query(
     `
     INSERT INTO supplier_excel_mappings
-      (supplier_id, article_column, brand_column, name_column, price_column, stock_column, car_make_column, car_model_column, car_year_column, engine_volume_column, start_row, markup_percent)
+      (supplier_id, article_column, brand_column, name_column, price_column, stock_column, car_make_column, car_model_column, car_year_column, engine_volume_column, image_column, start_row, markup_percent)
     VALUES
-      ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     ON CONFLICT (supplier_id)
     DO UPDATE SET
       article_column = EXCLUDED.article_column,
@@ -273,10 +278,11 @@ async function upsertMapping(
       car_model_column = EXCLUDED.car_model_column,
       car_year_column = EXCLUDED.car_year_column,
       engine_volume_column = EXCLUDED.engine_volume_column,
+      image_column = EXCLUDED.image_column,
       start_row = EXCLUDED.start_row,
       markup_percent = EXCLUDED.markup_percent,
       updated_at = now()
-    RETURNING article_column, brand_column, name_column, price_column, stock_column, car_make_column, car_model_column, car_year_column, engine_volume_column, start_row, markup_percent, updated_at
+    RETURNING article_column, brand_column, name_column, price_column, stock_column, car_make_column, car_model_column, car_year_column, engine_volume_column, image_column, start_row, markup_percent, updated_at
     `,
     [
       supplierId,
@@ -289,6 +295,7 @@ async function upsertMapping(
       mapping.carModel?.trim().toUpperCase() || null,
       mapping.carYear?.trim().toUpperCase() || null,
       mapping.engineVolume?.trim().toUpperCase() || null,
+      mapping.image?.trim().toUpperCase() || null,
       mapping.startRow || 1,
       mapping.markup || 0,
     ]
@@ -305,6 +312,7 @@ async function upsertMapping(
     carModel: row.car_model_column,
     carYear: row.car_year_column,
     engineVolume: row.engine_volume_column,
+    image: row.image_column,
     startRow: row.start_row,
     // markup_percent — колонка типа NUMERIC, драйвер pg возвращает
     // такие значения строкой (чтобы случайно не потерять точность
@@ -490,6 +498,7 @@ export async function GET() {
         m.car_model_column,
         m.car_year_column,
         m.engine_volume_column,
+        m.image_column,
         m.start_row,
         m.markup_percent,
         m.updated_at AS mapping_updated_at,
@@ -529,6 +538,7 @@ export async function GET() {
               carModel: row.car_model_column,
               carYear: row.car_year_column,
               engineVolume: row.engine_volume_column,
+              image: row.image_column,
               startRow: row.start_row,
               markup: parseFloat(row.markup_percent),
               updatedAt: row.mapping_updated_at,

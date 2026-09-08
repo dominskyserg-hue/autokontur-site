@@ -183,6 +183,17 @@ CREATE TABLE IF NOT EXISTS supplier_excel_mappings (
   car_year_column TEXT,
   engine_volume_column TEXT,
 
+  -- Колонка со ссылкой на фото товара (например, "H") — если
+  -- поставщик присылает прямые ссылки на фотографии в своём
+  -- прайс-листе. Необязательная: не у каждого поставщика такая
+  -- колонка есть — тогда фото по-прежнему ищется автоматически (см.
+  -- lib/productImagePipeline.ts и app/api/cron/fetch-product-images/
+  -- route.ts). Если колонка указана, ссылка из неё считается более
+  -- надёжной, чем найденная автопоиском, и подставляется в
+  -- products.image_url при каждой загрузке прайса (см. upsertBatch
+  -- в app/api/suppliers/parse-excel/route.ts)
+  image_column TEXT,
+
   -- С какой строки файла начинаются данные (пропускаем строки-шапки)
   start_row INTEGER NOT NULL DEFAULT 1,
 
@@ -201,6 +212,7 @@ ALTER TABLE supplier_excel_mappings ADD COLUMN IF NOT EXISTS car_make_column TEX
 ALTER TABLE supplier_excel_mappings ADD COLUMN IF NOT EXISTS car_model_column TEXT;
 ALTER TABLE supplier_excel_mappings ADD COLUMN IF NOT EXISTS car_year_column TEXT;
 ALTER TABLE supplier_excel_mappings ADD COLUMN IF NOT EXISTS engine_volume_column TEXT;
+ALTER TABLE supplier_excel_mappings ADD COLUMN IF NOT EXISTS image_column TEXT;
 
 
 -- ============================================================

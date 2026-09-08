@@ -65,6 +65,13 @@ interface MappingSettings {
   // необязательны, нужны только для того же "Підбір за автомобілем"
   carYear?: string;
   engineVolume?: string;
+  // Колонка со ссылкой на фото товара — если поставщик присылает
+  // прямые ссылки на фото в прайсе. Необязательная: без неё фото
+  // по-прежнему ищется автоматически (см. lib/productImagePipeline.ts).
+  // Если колонка указана и в строке есть ссылка — она считается более
+  // надёжной, чем найденная автопоиском, и подставляется в
+  // products.image_url (см. upsertBatch ниже)
+  image?: string;
   startRow: number;           // с какой строки файла начинаются данные (1 = первая строка)
   markup: number;               // наценка в процентах, например 20 означает "+20%"
 }
@@ -77,6 +84,7 @@ interface ParsedProduct {
   carModel: string;
   carYear: string;
   engineVolume: string;
+  imageUrl: string;
   slug: string;
   metaTitle: string;
   metaDescription: string;
@@ -253,6 +261,7 @@ function parseExcelBuffer(buffer: Buffer, mapping: MappingSettings, exchangeRate
   const carModelIdx = mapping.carModel ? columnToIndex(mapping.carModel) : -1;
   const carYearIdx = mapping.carYear ? columnToIndex(mapping.carYear) : -1;
   const engineVolumeIdx = mapping.engineVolume ? columnToIndex(mapping.engineVolume) : -1;
+  const imageIdx = mapping.image ? columnToIndex(mapping.image) : -1;
 
   const startIndex = Math.max(0, (mapping.startRow || 1) - 1);
   const markup = mapping.markup || 0;
@@ -272,6 +281,7 @@ function parseExcelBuffer(buffer: Buffer, mapping: MappingSettings, exchangeRate
     const rawCarModel = carModelIdx >= 0 ? row[carModelIdx] : '';
     const rawCarYear = carYearIdx >= 0 ? row[carYearIdx] : '';
     const rawEngineVolume = engineVolumeIdx >= 0 ? row[engineVolumeIdx] : '';
+    const rawImage = imageIdx >= 0 ? row[imageIdx] : '';
 
     const article = cleanArticle(rawArticle);
     const brand = String(rawBrand ?? '').trim();
@@ -284,6 +294,7 @@ function parseExcelBuffer(buffer: Buffer, mapping: MappingSettings, exchangeRate
     // приводить их к числу здесь не нужно и даже вредно
     const carYear = String(rawCarYear ?? '').trim();
     const engineVolume = String(rawEngineVolume ?? '').trim();
+    const imageUrl = String(rawImage ?? '').trim();
     const priceInSupplierCurrency = parseCellNumber(rawPrice);
     // products.stock — колонка INTEGER (остаток считается целыми
     // штуками детали), а в реальных прайсах в колонке остатка
@@ -324,6 +335,7 @@ function parseExcelBuffer(buffer: Buffer, mapping: MappingSettings, exchangeRate
       carModel,
       carYear,
       engineVolume,
+      imageUrl,
       slug,
       metaTitle,
       metaDescription,
@@ -362,10 +374,10 @@ async function upsertBatch(
   const values: unknown[] = [];
   const rowsSql: string[] = [];
 
-  // 14 значений на строку: supplier_id, article, brand, name,
+  // 15 значений на строку: supplier_id, article, brand, name,
   // cost_price, retail_price, stock, car_make, car_model, car_year,
-  // engine_volume, slug, meta_title, meta_description
-  const COLUMNS_PER_ROW = 14;
+  // engine_volume, image_url, slug, meta_title, meta_description
+  const COLUMNS_PER_ROW = 15;
 
   batch.forEach((product, i) => {
     const base = i * COLUMNS_PER_ROW;
@@ -383,6 +395,7 @@ async function upsertBatch(
       product.carModel || null,
       product.carYear || null,
       product.engineVolume || null,
+      product.imageUrl || null,
       product.slug,
       product.metaTitle,
       product.metaDescription
@@ -397,10 +410,17 @@ async function upsertBatch(
   // строки) — иначе повторная загрузка прайса стирала бы ручную
   // SEO-правку. "products.meta_description" и
   // "products.meta_description_override" в CASE ниже — это значения
-  // из УЖЕ СУЩЕСТВУЮЩЕЙ строки (до обновления), а не из EXCLUDED
+  // из УЖЕ СУЩЕСТВУЮЩЕЙ строки (до обновления), а не из EXCLUDED.
+  // image_url — ЕЩЁ ОДНО исключение, но в обратную сторону: если в
+  // этой загрузке прайса колонка с фото не заполнена для строки
+  // (EXCLUDED.image_url = NULL), СОХРАНЯЕМ уже имеющееся фото
+  // товара (найденное ранее автопоиском или загруженное вручную), а
+  // не затираем его пустотой. Если же поставщик прислал ссылку —
+  // она подставляется как более надёжная, перекрывая и автонайденное,
+  // и ранее указанную ссылку
   const query = `
     INSERT INTO products
-      (supplier_id, article, brand, name, cost_price, retail_price, stock, car_make, car_model, car_year, engine_volume, slug, meta_title, meta_description)
+      (supplier_id, article, brand, name, cost_price, retail_price, stock, car_make, car_model, car_year, engine_volume, image_url, slug, meta_title, meta_description)
     VALUES
       ${rowsSql.join(', ')}
     ON CONFLICT (supplier_id, article)
@@ -414,6 +434,7 @@ async function upsertBatch(
       car_model = EXCLUDED.car_model,
       car_year = EXCLUDED.car_year,
       engine_volume = EXCLUDED.engine_volume,
+      image_url = COALESCE(EXCLUDED.image_url, products.image_url),
       slug = EXCLUDED.slug,
       meta_title = EXCLUDED.meta_title,
       meta_description = CASE
