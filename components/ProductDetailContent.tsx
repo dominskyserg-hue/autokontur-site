@@ -23,6 +23,7 @@ import type { CrossRefItem, ProductPageData, TecdocCompatibilityItem, TecdocCros
 import AddToCartButton from '@/components/AddToCartButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
+import ProductGallery, { type GalleryPhoto } from '@/components/ProductGallery';
 
 export const BG = '#0B0F17';
 export const PANEL_SOFT = '#1B2436';
@@ -69,8 +70,31 @@ function StockBadge({ stock }: { stock: number }) {
   );
 }
 
+// Формула alt з інструкції SEO-доробки: "БРЕНД АРТИКУЛ — що на фото".
+// Для головного фото "що на фото" — це назва товару (вона й так
+// найкраще описує загальний вигляд), для додаткових фото з галереї —
+// підпис, який ввів адмін (label), або запасний варіант за номером
+// фото, якщо підпис ще не заповнили — так alt ніколи не повторюється
+// на двох різних фото одного товару
+function buildGalleryPhotos(product: ProductPageData['product'], images: ProductPageData['images']): GalleryPhoto[] {
+  const brandArticle = [product.brand, product.article].filter(Boolean).join(' ');
+  const displayName = product.name?.trim() || brandArticle;
+  const prefix = brandArticle ? `${brandArticle} — ` : '';
+
+  const photos: GalleryPhoto[] = [];
+  if (product.imageUrl) {
+    photos.push({ url: product.imageUrl, alt: `${prefix}${displayName}` });
+  }
+  images.forEach((image, index) => {
+    photos.push({ url: image.url, alt: `${prefix}${image.label?.trim() || `додаткове фото ${index + 1}`}` });
+  });
+
+  return photos;
+}
+
 export default function ProductDetailContent({
   product,
+  images,
   otherOffers,
   crossRefs,
   tecdocCrosses,
@@ -78,6 +102,7 @@ export default function ProductDetailContent({
   breadcrumbItems,
 }: ProductPageData) {
   const displayName = product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ');
+  const galleryPhotos = buildGalleryPhotos(product, images);
 
   return (
     <>
@@ -119,28 +144,7 @@ export default function ProductDetailContent({
 
       <div className="mb-10 grid grid-cols-1 gap-8 md:grid-cols-[280px_1fr]">
         {/* ==================== ФОТО ==================== */}
-        <div
-          className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-2xl"
-          style={{
-            background: PANEL_SOFT,
-            backgroundImage: product.imageUrl
-              ? undefined
-              : 'linear-gradient(45deg, rgba(255,255,255,0.04) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.04) 25%, transparent 25%)',
-            backgroundSize: '12px 12px',
-            border: `1px solid ${BORDER_SOFT}`,
-          }}
-        >
-          {product.imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={product.imageUrl} alt={displayName} className="h-full w-full object-cover" />
-          ) : (
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={FAINT} strokeWidth="1.4">
-              <rect x="3" y="5" width="18" height="14" rx="2" />
-              <circle cx="8.5" cy="10" r="1.5" />
-              <path d="M21 16l-5-5-4 4-2-2-7 7" strokeLinejoin="round" />
-            </svg>
-          )}
-        </div>
+        <ProductGallery photos={galleryPhotos} />
 
         {/* ==================== ІНФОРМАЦІЯ ==================== */}
         <div>

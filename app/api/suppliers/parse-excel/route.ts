@@ -237,7 +237,8 @@ function buildSeoFields(
   carMake: string,
   carModel: string,
   carYear: string,
-  engineVolume: string
+  engineVolume: string,
+  stock: number
 ): SeoFields {
   const partTitle = name || article;
   // Год и объём двигателя добавляются в СКОБКАХ после марки/модели —
@@ -257,12 +258,22 @@ function buildSeoFields(
   );
   const metaTitle = metaTitleParts.join(' — ');
 
-  const metaDescriptionParts = [
-    `${partTitle}${carSuffix ? ` для ${carSuffix}` : ''}`,
-    brand ? `бренд ${brand}` : '',
-    `артикул ${article}`,
-  ].filter(Boolean);
-  const metaDescription = metaDescriptionParts.join(', ') + '. Купить с доставкой.';
+  // meta_description — та сама формула, що і в резервному шаблоні
+  // app/p/[id]/[[...slug]]/page.tsx (generateMetadata): "БРЕНД
+  // АРТИКУЛ — назва[ для моделі авто]. Наявність, доставка по
+  // Україні, оплата при отриманні." Раніше тут був окремий, слабший
+  // шаблон ("назва, бренд Х, артикул Y. Купить с доставкой.") — САМЕ
+  // ВІН і потрапляв на бойові картки товару (це поле генерується під
+  // час КОЖНОЇ завантаженні прайсу і перезаписує meta_description,
+  // якщо адмін не проставив meta_description_override вручну), тому
+  // виправляти шаблон потрібно було саме тут, а не лише в резервному
+  // варіанті на сторінці — інакше покращення жодного разу не
+  // з'являлось б на реальних картках
+  const brandArticle = [brand, article].filter(Boolean).join(' ');
+  const stockPart = stock > 0 ? 'В наявності' : 'Під замовлення';
+  const metaDescription = `${brandArticle}${partTitle !== article ? ' — ' + partTitle : ''}${
+    carSuffix ? ` для ${carSuffix}` : ''
+  }. ${stockPart}, доставка по Україні, оплата при отриманні.`;
 
   return { slug, metaTitle, metaDescription };
 }
@@ -392,7 +403,8 @@ function parseExcelBuffer(
       carMake,
       carModel,
       carYear,
-      engineVolume
+      engineVolume,
+      stock
     );
 
     products.push({

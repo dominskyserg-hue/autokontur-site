@@ -47,6 +47,18 @@ interface Product {
   updatedAt: string;
 }
 
+// Одне ДОДАТКОВЕ фото галереї товару (products.image_url — головне
+// фото — сюди не входить, воно і так лежить окремо в Product.imageUrl
+// вище). label — короткий підпис "що на фото" (напр. "упаковка",
+// "маркування") — саме з нього і бренду/артикула товару збирається
+// унікальний alt для цього фото на публічній картці (див.
+// components/ProductGallery.tsx)
+interface ProductImage {
+  id: string;
+  imageUrl: string;
+  label: string | null;
+}
+
 interface Pagination {
   page: number;
   pageSize: number;
@@ -112,6 +124,15 @@ export default function ProductsScreen() {
   // ---- загрузка файла с компьютера ----
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadFileError, setUploadFileError] = useState<string | null>(null);
+
+  // ---- галерея: дополнительные фото товара (кроме главного выше) ----
+  const [galleryImages, setGalleryImages] = useState<ProductImage[]>([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryError, setGalleryError] = useState<string | null>(null);
+  const [newGalleryUrl, setNewGalleryUrl] = useState('');
+  const [newGalleryLabel, setNewGalleryLabel] = useState('');
+  const [addingGalleryPhoto, setAddingGalleryPhoto] = useState(false);
+  const [uploadingGalleryFile, setUploadingGalleryFile] = useState(false);
 
   // ------------------------------------------------------------
   // СПИСОК ПОСТАВЩИКОВ ДЛЯ ФИЛЬТРА (загружается один раз)
@@ -191,11 +212,131 @@ export default function ProductsScreen() {
     setEditImageUrl(product.imageUrl || '');
     setEditError(null);
     setUploadFileError(null);
+
+    setGalleryImages([]);
+    setGalleryError(null);
+    setNewGalleryUrl('');
+    setNewGalleryLabel('');
+    fetchGalleryImages(product.id);
   };
 
   const closeEditModal = () => {
     setEditingProduct(null);
     setEditError(null);
+  };
+
+  // ------------------------------------------------------------
+  // ГАЛЕРЕЯ: дополнительные фото товара — отдельный ресурс
+  // (/api/products/[id]/images), сохраняются сразу при добавлении/
+  // удалении/правке подписи, а не одной кнопкой "Сохранить" вместе
+  // с ценой и остатком — так проще не потерять правку, если админ
+  // просто закроет окно после добавления фото
+  // ------------------------------------------------------------
+  const fetchGalleryImages = async (productId: string) => {
+    setGalleryLoading(true);
+    setGalleryError(null);
+    try {
+      const response = await fetch(`/api/products/${productId}/images`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось загрузить галерею фото');
+      }
+      setGalleryImages(data.images as ProductImage[]);
+    } catch (error) {
+      setGalleryError(error instanceof Error ? error.message : 'Ошибка сети при загрузке галереи');
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+
+  const handleGalleryFileUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setGalleryError(null);
+
+    if (!file.type.startsWith('image/')) {
+      setGalleryError('Выберите файл изображения (JPG, PNG, WEBP...)');
+      return;
+    }
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setGalleryError('Файл слишком большой — максимум 1.5 МБ');
+      return;
+    }
+
+    setUploadingGalleryFile(true);
+    const reader = new FileReader();
+    reader.onload = () => {
+      setNewGalleryUrl(String(reader.result));
+      setUploadingGalleryFile(false);
+    };
+    reader.onerror = () => {
+      setGalleryError('Не удалось прочитать файл');
+      setUploadingGalleryFile(false);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAddGalleryPhoto = async () => {
+    if (!editingProduct) return;
+    if (!newGalleryUrl.trim()) {
+      setGalleryError('Вставьте ссылку на фото или загрузите файл');
+      return;
+    }
+
+    setAddingGalleryPhoto(true);
+    setGalleryError(null);
+    try {
+      const response = await fetch(`/api/products/${editingProduct.id}/images`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: newGalleryUrl, label: newGalleryLabel }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось добавить фото');
+      }
+      setGalleryImages((prev) => [...prev, data.image as ProductImage]);
+      setNewGalleryUrl('');
+      setNewGalleryLabel('');
+    } catch (error) {
+      setGalleryError(error instanceof Error ? error.message : 'Ошибка сети при добавлении фото');
+    } finally {
+      setAddingGalleryPhoto(false);
+    }
+  };
+
+  const handleUpdateGalleryLabel = async (imageId: string, label: string) => {
+    if (!editingProduct) return;
+    try {
+      const response = await fetch(`/api/products/${editingProduct.id}/images/${imageId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось сохранить подпись');
+      }
+      setGalleryImages((prev) => prev.map((img) => (img.id === imageId ? (data.image as ProductImage) : img)));
+    } catch (error) {
+      setGalleryError(error instanceof Error ? error.message : 'Ошибка сети при сохранении подписи');
+    }
+  };
+
+  const handleDeleteGalleryPhoto = async (imageId: string) => {
+    if (!editingProduct) return;
+    try {
+      const response = await fetch(`/api/products/${editingProduct.id}/images/${imageId}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось удалить фото');
+      }
+      setGalleryImages((prev) => prev.filter((img) => img.id !== imageId));
+    } catch (error) {
+      setGalleryError(error instanceof Error ? error.message : 'Ошибка сети при удалении фото');
+    }
   };
 
   // ------------------------------------------------------------
@@ -576,6 +717,126 @@ export default function ProductsScreen() {
                 {uploadFileError && (
                   <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
                     {uploadFileError}
+                  </p>
+                )}
+              </div>
+
+              {/* ==================== ГАЛЕРЕЯ: ДОПОЛНИТЕЛЬНЫЕ ФОТО ==================== */}
+              <div className="pt-2 flex flex-col gap-2.5" style={{ borderTop: '1px dashed var(--line)' }}>
+                <label className="block text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
+                  Додаткові фото галереї
+                </label>
+                <p className="text-[11px] -mt-1" style={{ color: 'var(--ink-faint)' }}>
+                  Підпис ("упаковка", "загальний вигляд", "маркування"...) — з нього і бренду/артикулу товару
+                  збирається унікальний alt-текст для кожного фото на сайті.
+                </p>
+
+                {galleryLoading && (
+                  <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                    Завантаження...
+                  </p>
+                )}
+
+                {galleryImages.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    {galleryImages.map((image) => (
+                      <div key={image.id} className="flex items-center gap-2">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={image.imageUrl}
+                          alt=""
+                          className="w-12 h-12 rounded object-cover shrink-0"
+                          style={{ border: '1px solid var(--line)' }}
+                        />
+                        <input
+                          type="text"
+                          placeholder="Підпис: напр. упаковка, маркування..."
+                          className="flex-1 px-2.5 py-1.5 text-xs rounded-md"
+                          style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                          defaultValue={image.label || ''}
+                          onBlur={(e) => {
+                            if (e.target.value !== (image.label || '')) {
+                              handleUpdateGalleryLabel(image.id, e.target.value);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteGalleryPhoto(image.id)}
+                          className="text-[11px] px-2 py-1 rounded shrink-0"
+                          style={{ color: 'var(--bad)' }}
+                        >
+                          Видалити
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-2 pt-1">
+                  {newGalleryUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={newGalleryUrl}
+                      alt=""
+                      className="w-12 h-12 rounded object-cover shrink-0"
+                      style={{ border: '1px solid var(--line)' }}
+                    />
+                  ) : (
+                    <div
+                      className="w-12 h-12 rounded flex items-center justify-center text-[9px] shrink-0 text-center"
+                      style={{ background: 'var(--surface-2)', color: 'var(--ink-faint)' }}
+                    >
+                      нове фото
+                    </div>
+                  )}
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Посилання на нове фото"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                      value={newGalleryUrl.startsWith('data:') ? '' : newGalleryUrl}
+                      onChange={(e) => setNewGalleryUrl(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Підпис (необов'язково)"
+                      className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                      value={newGalleryLabel}
+                      onChange={(e) => setNewGalleryLabel(e.target.value)}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <label
+                        className="text-[11px] px-2.5 py-1 rounded-md cursor-pointer"
+                        style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                      >
+                        {uploadingGalleryFile ? 'Завантаження...' : 'Завантажити файл'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleGalleryFileUpload}
+                          disabled={uploadingGalleryFile}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleAddGalleryPhoto}
+                        disabled={addingGalleryPhoto || !newGalleryUrl.trim()}
+                        className="text-[11px] px-2.5 py-1 rounded-md disabled:opacity-50"
+                        style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                      >
+                        {addingGalleryPhoto ? 'Додавання...' : '+ Додати фото'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {galleryError && (
+                  <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
+                    {galleryError}
                   </p>
                 )}
               </div>

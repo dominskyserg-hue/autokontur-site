@@ -52,14 +52,19 @@ export async function generateMetadata({
 
   const canonicalUrl = `${SITE_URL}${buildProductPath(id, product)}`;
   const displayName = product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ');
-  const title = `${[product.brand, product.article].filter(Boolean).join(' ')}${
-    product.name ? ' — ' + product.name : ''
-  } купити | DominatorParts`;
+  const brandArticle = [product.brand, product.article].filter(Boolean).join(' ');
+  const title = `${brandArticle}${product.name ? ' — ' + product.name : ''} купити | DominatorParts`;
+  // Модель авто додаємо в опис ЛИШЕ якщо вона реально є в товару в базі
+  // (car_make/car_model заповнюються з Excel-прайса постачальника) —
+  // ніколи не вигадуємо сумісність, якої в базі немає
+  const carSuffix = product.carMake
+    ? ` для ${[product.carMake, product.carModel].filter(Boolean).join(' ')}`
+    : '';
+  const stockPart =
+    product.stock > 0 ? 'В наявності' : `Під замовлення${product.deliveryTime ? ', ' + product.deliveryTime : ''}`;
   const description =
     product.metaDescription?.trim() ||
-    `${displayName} — купити з доставкою по Україні. Артикул ${product.article}${
-      product.brand ? `, бренд ${product.brand}` : ''
-    }. ${product.stock > 0 ? 'В наявності' : `Під замовлення${product.deliveryTime ? ', ' + product.deliveryTime : ''}`}.`;
+    `${brandArticle}${product.name ? ' — ' + product.name : ''}${carSuffix}. ${stockPart}, доставка по Україні, оплата при отриманні.`;
 
   return {
     title,

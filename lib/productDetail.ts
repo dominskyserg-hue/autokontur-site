@@ -47,9 +47,27 @@ export interface ProductDetail {
   imageUrl: string | null;
   metaDescription: string | null;
   carMake: string | null;
+  // Модель авто (напр. "Camry" при carMake "Toyota") — заповнюється з
+  // Excel-прайса постачальника так само, як carMake (див.
+  // app/api/suppliers/parse-excel/route.ts). Використовується лише
+  // для доповнення meta description реальними даними з бази — САМІ
+  // МОДЕЛІ ТУТ НІКОЛИ НЕ ВИГАДУЮТЬСЯ, лише те, що реально є в товару
+  carModel: string | null;
   supplierName: string;
   deliveryTime: string | null;
   updatedAt: string;
+}
+
+// Одне ДОДАТКОВЕ фото галереї товару (не плутати з product.imageUrl —
+// це головне фото, воно і далі лежить окремо в products.image_url,
+// див. schema.sql, таблиця product_images)
+export interface ProductImage {
+  id: string;
+  url: string;
+  // Короткий підпис "що на фото" (напр. "упаковка", "маркування") —
+  // з нього і бренду/артикула товару збирається унікальний alt для
+  // цього конкретного фото (див. components/ProductGallery.tsx)
+  label: string | null;
 }
 
 // Той самий товар, знайдений в іншого постачальника (буквально той
@@ -75,7 +93,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
   const result = await pool.query(
     `
     SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, p.image_url,
-           p.meta_description, p.car_make, p.updated_at,
+           p.meta_description, p.car_make, p.car_model, p.updated_at,
            s.name AS supplier_name, s.delivery_time
     FROM products p
     JOIN suppliers s ON s.id = p.supplier_id
@@ -97,10 +115,26 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     imageUrl: row.image_url,
     metaDescription: row.meta_description,
     carMake: row.car_make,
+    carModel: row.car_model,
     supplierName: row.supplier_name,
     deliveryTime: row.delivery_time,
     updatedAt: row.updated_at,
   };
+});
+
+// Додаткові фото галереї товару (products.image_url — головне фото —
+// сюди НЕ входить, воно і так завжди є в product.imageUrl)
+const loadProductImages = cache(async function loadProductImages(productId: string): Promise<ProductImage[]> {
+  const result = await pool.query(
+    `SELECT id, image_url, label FROM product_images WHERE product_id = $1 ORDER BY sort_order, created_at`,
+    [productId]
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    url: row.image_url,
+    label: row.label,
+  }));
 });
 
 const loadOtherOffers = cache(async function loadOtherOffers(
@@ -324,6 +358,7 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
 
 export interface ProductPageData {
   product: ProductDetail;
+  images: ProductImage[];
   otherOffers: OtherOffer[];
   crossRefs: { oem: CrossRefItem[]; aftermarket: CrossRefItem[] };
   tecdocCrosses: TecdocCrossItem[];
@@ -355,7 +390,8 @@ export async function loadProductPageData(
     permanentRedirect(buildProductPath(id, product));
   }
 
-  const [otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility] = await Promise.all([
+  const [images, otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility] = await Promise.all([
+    loadProductImages(id),
     loadOtherOffers(product),
     loadCrossReferences(product),
     loadTecdocCrosses(product.article),
@@ -372,5 +408,5 @@ export async function loadProductPageData(
     },
   ];
 
-  return { product, otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility, breadcrumbItems };
+  return { product, images, otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility, breadcrumbItems };
 }
