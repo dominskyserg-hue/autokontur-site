@@ -177,6 +177,10 @@ export async function GET(request: NextRequest) {
 
     // ---- разбор фильтров ----
     const search = (searchParams.get('search') || '').trim();
+    // featured=true — витрина головної сторінки (components/StorefrontHome.tsx,
+    // блок "Популярні товари"): короткий добір товарів з фото замість
+    // звичайного алфавітного перегляду каталогу (див. orderBySql нижче)
+    const featured = searchParams.get('featured') === 'true';
     const supplierId = (searchParams.get('supplierId') || '').trim();
     const carMake = (searchParams.get('carMake') || '').trim();
     const carModel = (searchParams.get('carModel') || '').trim();
@@ -435,9 +439,15 @@ export async function GET(request: NextRequest) {
     // більшої до меншої. Без пошуку (звичайний перегляд каталогу,
     // напр. в адмінці) лишаємо алфавітний порядок за артикулом —
     // його там очікують бачити стабільним при гортанні сторінок
+    // featured — блок "Популярні товари" на головній: товари з фото, в
+    // наявності, найсвіжіші за оновленням (щойно завантажений/оновлений
+    // прайс) — той самий принцип "фото насамперед", що і в пошуку/
+    // категоріях/сторінках марок вище
     const orderBySql = search
       ? 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.retail_price DESC'
-      : 'ORDER BY p.article ASC';
+      : featured
+        ? 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.updated_at DESC'
+        : 'ORDER BY p.article ASC';
 
     // ---- сам запрос ----
     // COUNT(*) OVER() — считает общее количество подходящих строк
