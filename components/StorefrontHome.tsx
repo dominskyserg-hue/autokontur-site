@@ -2273,55 +2273,6 @@ export default function StorefrontHome() {
             </div>
           </div>
 
-          {/* ==================== РОЗДІЛИ АВТО ==================== */}
-          {/* Преміальна сітка розділів з підбором авто через модалку —
-              components/CategoryGridSection.tsx (+ VehicleFilterModal.tsx).
-              Клік по картці більше не веде миттєво на сторінку: спершу
-              пропонує уточнити марку/модель/рік/двигун (необов'язково),
-              і лише після цього — або після "Пропустити" — веде далі в
-              каталог. Логіка переходів (у т.ч. фолбек у підбір за VIN
-              для розділів без жодної категорії товару) — у самому
-              компоненті, resolveDestination() */}
-          <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10" style={{ borderTop: `1px solid ${TECH_BORDER}`, paddingTop: 40 }}>
-            <CategoryGridSection
-              onOpenVinRequest={(category, selection) => {
-                setVinModalOpen(true);
-
-                const carLabel = selection
-                  ? [selection.make, selection.model, selection.year, selection.engine].filter(Boolean).join(', ')
-                  : '';
-                const parts = [`Категорія: ${category}.`];
-                if (carLabel) parts.push(`Авто: ${carLabel}.`);
-                setVinDescription(parts.join(' '));
-              }}
-            />
-          </div>
-
-          {/* ==================== КАТЕГОРІЇ ДЕТАЛЕЙ ==================== */}
-          {/* Список посилань на SEO-сторінки категорій (app/category/[slug]) —
-              і зручність для покупця, і сигнал для Google приходити сюди
-              за новими сторінками */}
-          <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
-              Швидкий перехід
-            </p>
-            <h2 className="mb-4 text-xl" style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff' }}>
-              Популярні категорії
-            </h2>
-            <div className="flex flex-wrap gap-2.5">
-              {CATEGORIES.map((c) => (
-                <Link
-                  key={c.slug}
-                  href={`/category/${c.slug}`}
-                  className="rounded-full px-4 py-2 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
-                  style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_BORDER}`, color: TECH_MUTED }}
-                >
-                  {c.name}
-                </Link>
-              ))}
-            </div>
-          </div>
-
           {/* ==================== ПОПУЛЯРНІ ТОВАРИ ==================== */}
           {/* Короткий добір товарів з фото для головної — без нього
               покупець після Hero одразу бачив лише логотипи категорій/
@@ -2331,7 +2282,10 @@ export default function StorefrontHome() {
               сторінки (див. useEffect вище). Секція просто не рендериться,
               поки список порожній (ще вантажиться або не вдалося
               завантажити) — це необов'язковий блок, а не критична частина
-              сторінки */}
+              сторінки.
+              Навмисно ПЕРЕД "Розділи"/"Популярні категорії" — реальне
+              фото товару одразу після Hero краще переконує нового
+              відвідувача, ніж хмара категорій/іконок розділів */}
           {popularProducts.length > 0 && (
             <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
               <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
@@ -2397,6 +2351,55 @@ export default function StorefrontHome() {
               </div>
             </div>
           )}
+
+          {/* ==================== РОЗДІЛИ АВТО ==================== */}
+          {/* Преміальна сітка розділів з підбором авто через модалку —
+              components/CategoryGridSection.tsx (+ VehicleFilterModal.tsx).
+              Клік по картці більше не веде миттєво на сторінку: спершу
+              пропонує уточнити марку/модель/рік/двигун (необов'язково),
+              і лише після цього — або після "Пропустити" — веде далі в
+              каталог. Логіка переходів (у т.ч. фолбек у підбір за VIN
+              для розділів без жодної категорії товару) — у самому
+              компоненті, resolveDestination() */}
+          <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10" style={{ borderTop: `1px solid ${TECH_BORDER}`, paddingTop: 40 }}>
+            <CategoryGridSection
+              onOpenVinRequest={(category, selection) => {
+                setVinModalOpen(true);
+
+                const carLabel = selection
+                  ? [selection.make, selection.model, selection.year, selection.engine].filter(Boolean).join(', ')
+                  : '';
+                const parts = [`Категорія: ${category}.`];
+                if (carLabel) parts.push(`Авто: ${carLabel}.`);
+                setVinDescription(parts.join(' '));
+              }}
+            />
+          </div>
+
+          {/* ==================== КАТЕГОРІЇ ДЕТАЛЕЙ ==================== */}
+          {/* Список посилань на SEO-сторінки категорій (app/category/[slug]) —
+              і зручність для покупця, і сигнал для Google приходити сюди
+              за новими сторінками */}
+          <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+              Швидкий перехід
+            </p>
+            <h2 className="mb-4 text-xl" style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff' }}>
+              Популярні категорії
+            </h2>
+            <div className="flex flex-wrap gap-2.5">
+              {CATEGORIES.map((c) => (
+                <Link
+                  key={c.slug}
+                  href={`/category/${c.slug}`}
+                  className="rounded-full px-4 py-2 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+                  style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_BORDER}`, color: TECH_MUTED }}
+                >
+                  {c.name}
+                </Link>
+              ))}
+            </div>
+          </div>
 
           {/* ==================== МАРКИ АВТО ==================== */}
           {/* Те саме, що й блок категорій вище, але для сторінок
