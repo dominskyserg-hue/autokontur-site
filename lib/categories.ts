@@ -404,6 +404,107 @@ export const CATEGORIES: CategoryDef[] = [
     matchGroups: [['рейк'], ['керм'], ['golf 4', 'golf iv', 'гольф 4']],
     hideFromIndex: true,
   },
+
+  // ---- Волна 3: Toyota Corolla / Suzuki SX4 / Honda Accord VII ----
+  // (підтверджено прямим запитом до бойової бази — див. сесію SEO
+  // волни 3; частина запитаних зв'язок НЕ увійшла сюди, бо на момент
+  // перевірки товару в наявності не було: Corolla E120/E150 повітряний
+  // і оливний фільтр, SX4 паливний фільтр, Accord VII задні колодки)
+  {
+    slug: 'corolla-povitrianyi-filtr',
+    name: 'Повітряний фільтр Toyota Corolla',
+    h1: 'Повітряний фільтр Toyota Corolla',
+    metaTitle: 'Повітряний фільтр Corolla від 99 грн | DominatorParts',
+    metaDescription:
+      'Повітряний фільтр Toyota Corolla (всі покоління) в наявності від 99 грн. Оригінал і аналоги, доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Повітряний фільтр міняють при кожному ТО — забитий фільтр збільшує витрату палива і знижує тягу двигуна. У наявності варіанти під різні покоління Toyota Corolla.',
+    matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['corolla']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'corolla-e150-dysky-halmivni-zadni',
+    name: 'Гальмівні диски задні Toyota Corolla E150',
+    h1: 'Гальмівні диски задні Toyota Corolla E150',
+    metaTitle: 'Диск задній Corolla E150 від 726 грн | DominatorParts',
+    metaDescription:
+      'Гальмівний диск задній Toyota Corolla E150 (2007-2013) в наявності від 726 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Задні гальмівні диски для Toyota Corolla покоління E150 (2007-2013 р.) — в наявності декілька варіантів.',
+    // Явного тега "E150" в назвах товарів постачальники не пишуть —
+    // покоління визначається за роками випуску/маркуванням кузова, які
+    // реально зустрічаються в базі (перевірено вручну, не лише за
+    // ключовими словами — див. сесію волни 3)
+    matchGroups: [
+      ['диск'],
+      ['гальм', 'тормоз'],
+      ['зад'],
+      ['corolla 2.2d 07-', '1.33-1.8vvti 01.07-', 'corolla sedan 1.4,1.6 06.11-'],
+    ],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'corolla-e120-kolodky-halmivni-zadni',
+    name: 'Гальмівні колодки задні Toyota Corolla E120',
+    h1: 'Гальмівні колодки задні Toyota Corolla E120',
+    metaTitle: 'Колодки задні Corolla E120 від 428 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки дискові задні Toyota Corolla E120 (2002-2007) в наявності від 428 грн (DENCKERMANN). Доставка по Україні.',
+    intro: 'Задні гальмівні колодки для Toyota Corolla покоління E120 (2002-2007 р.) — в наявності.',
+    matchGroups: [['колодк'], ['зад'], ['corolla 02-07', 'corolla 02-']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'sx4-povitrianyi-filtr',
+    name: 'Повітряний фільтр Suzuki SX4',
+    h1: 'Повітряний фільтр Suzuki SX4',
+    metaTitle: 'Повітряний фільтр SX4 від 118 грн | DominatorParts',
+    metaDescription:
+      'Повітряний фільтр Suzuki SX4 в наявності від 118 грн. Декілька варіантів різних виробників, доставка по всій Україні, оплата при отриманні.',
+    intro: 'Повітряний фільтр для Suzuki SX4 — недорога деталь планового ТО, в наявності одразу декілька виробників.',
+    matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['sx4', 'sx-4']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'sx4-halmivni-kolodky',
+    name: 'Гальмівні колодки Suzuki SX4',
+    h1: 'Гальмівні колодки Suzuki SX4',
+    metaTitle: 'Гальмівні колодки SX4 від 353 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки задні Suzuki SX4 в наявності від 353 грн (RAISO). Оригінал і аналоги, доставка по всій Україні, оплата при отриманні.',
+    intro: 'Гальмівні колодки для Suzuki SX4 — в наявності, підходять і для Suzuki Swift з тією ж платформою.',
+    matchGroups: [['колодк'], ['sx4', 'sx-4']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'accord-7-kolodky-peredni',
+    name: 'Гальмівні колодки передні Honda Accord VII',
+    h1: 'Гальмівні колодки передні Honda Accord VII',
+    metaTitle: 'Колодки передні Accord VII від 657 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки дискові передні Honda Accord VII (2003-2008) в наявності від 657 грн (STELLOX). Доставка по всій Україні.',
+    intro: 'Передні гальмівні колодки для Honda Accord 7-го покоління (CL/CM, 2003-2008 р.) — в наявності.',
+    // "accord vii" свідомо НЕ додано як запасний варіант — це підрядок
+    // "accord viii" (восьме покоління, інший ринок), матч по ньому б
+    // підтягнув чужі товари (перевірено на практиці — саме так сталося
+    // з попереднім варіантом сторінки повітряного фільтра нижче)
+    matchGroups: [['колодк'], ['перед'], ['cl_, cm_']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'accord-7-povitrianyi-filtr',
+    name: 'Повітряний фільтр Honda Accord VII',
+    h1: 'Повітряний фільтр Honda Accord VII',
+    metaTitle: 'Фільтр повітряний Accord VII від 183 грн | DominatorParts',
+    metaDescription:
+      'Повітряний фільтр Honda Accord VII (2002-2008), в т.ч. дизель 2.2 CTDi, в наявності від 183 грн. Доставка по Україні.',
+    intro: 'Повітряний фільтр для Honda Accord 7-го покоління (2002-2008 р.), включно з дизельним двигуном 2.2 CTDi.',
+    // "accord vii" НЕ додано — це підрядок "accord viii" (восьме
+    // покоління/американський ринок, зовсім інша деталь), і саме через
+    // це в чернетці сюди підтягнувся чужий товар (SHAFER SX49041,
+    // Accord VIII USA 08-15) — побачили на живій перевірці й прибрали
+    matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['2.2i-ctdi 02.10-']],
+    hideFromIndex: true,
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
