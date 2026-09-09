@@ -25,6 +25,7 @@
 
 import { ImapFlow, type FetchMessageObject } from 'imapflow';
 import { simpleParser } from 'mailparser';
+import AdmZip from 'adm-zip';
 import { Pool } from 'pg';
 import { importPriceListForSupplier, type MappingSettings } from '@/lib/priceListImport';
 
@@ -191,11 +192,49 @@ async function writeLogEntry(pool: Pool, entry: EmailImportLogEntry): Promise<vo
 // ПОИСК EXCEL-ВЛОЖЕНИЯ В ПИСЬМЕ
 // ------------------------------------------------------------
 const EXCEL_EXTENSION_PATTERN = /\.(xlsx|xls)$/i;
+const ZIP_EXTENSION_PATTERN = /\.zip$/i;
+
+// Достаёт первый файл .xlsx/.xls из ZIP-архива — некоторые поставщики
+// (например, CARDON) присылают прайс не отдельным Excel-файлом, а
+// запакованным в .zip. AdmZip.getEntries() читает архив ЦЕЛИКОМ ИЗ
+// ПАМЯТИ (буфер вложения), а entry.getData() достаёт содержимое
+// конкретного файла — тоже в памяти, на диск ничего не пишется. Это
+// важно: у adm-zip есть известная уязвимость именно в методах
+// извлечения НА ДИСК (extractAllTo/extractEntryTo, следуют symlink
+// в целевой папке) — здесь эти методы вообще не используются
+function extractExcelFromZip(zipBuffer: Buffer): Buffer | null {
+  let zip: AdmZip;
+  try {
+    zip = new AdmZip(zipBuffer);
+  } catch {
+    // Файл с расширением .zip, но битый/не архив вовсе — не поднимаем
+    // ошибку выше, просто считаем, что Excel-файла тут нет
+    return null;
+  }
+
+  const entry = zip
+    .getEntries()
+    .find((item) => !item.isDirectory && EXCEL_EXTENSION_PATTERN.test(item.entryName));
+
+  return entry ? entry.getData() : null;
+}
 
 async function extractExcelAttachment(rawMessage: Buffer): Promise<Buffer | null> {
   const parsed = await simpleParser(rawMessage);
-  const attachment = parsed.attachments.find((item) => EXCEL_EXTENSION_PATTERN.test(item.filename || ''));
-  return attachment ? attachment.content : null;
+
+  const directAttachment = parsed.attachments.find((item) => EXCEL_EXTENSION_PATTERN.test(item.filename || ''));
+  if (directAttachment) return directAttachment.content;
+
+  // Прямого .xlsx/.xls нет — ищем среди .zip-вложений (проверяем ВСЕ,
+  // не только первое: в письме может быть несколько архивов, и не
+  // в каждом обязательно есть Excel-файл)
+  const zipAttachments = parsed.attachments.filter((item) => ZIP_EXTENSION_PATTERN.test(item.filename || ''));
+  for (const zipAttachment of zipAttachments) {
+    const excelBuffer = extractExcelFromZip(zipAttachment.content);
+    if (excelBuffer) return excelBuffer;
+  }
+
+  return null;
 }
 
 // ------------------------------------------------------------
