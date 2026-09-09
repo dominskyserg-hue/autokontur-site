@@ -22,6 +22,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CATEGORIES, getCategoryBySlug } from '@/lib/categories';
+import CategoryCrossLinks from '@/components/CategoryCrossLinks';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
@@ -402,6 +403,18 @@ export default async function CategoryPage({
             )}
           </>
         )}
+
+        {/* ==================== КРОС-ЛІНКИ (модель ↔ категорія) ==================== */}
+        {/* Два різні напрямки — components/CategoryCrossLinks.tsx сам
+            вирішує, чи є що показувати (повертає null, якщо порожньо).
+            "model" — на вузькій сторінці ("Pajero II кульові опори")
+            показує сусідні деталі під ТУ Ж машину; "variants" — на
+            широкій ("Гальмівні колодки") показує вузькі варіанти під
+            конкретні моделі. marka=... тут не враховуємо навмисно —
+            і modelGroup/parentCategorySlug стосуються лише "чистого"
+            slug категорії, не фільтра по марці в query-рядку */}
+        {!make && <CategoryCrossLinks category={category} kind="model" />}
+        {!make && <CategoryCrossLinks category={category} kind="variants" />}
 
         {/* ==================== ІНШІ КАТЕГОРІЇ (внутрішні посилання) ==================== */}
         <div className="pt-6" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>

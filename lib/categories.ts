@@ -38,6 +38,24 @@ export interface CategoryDef {
   // посилання на неї винесено в окремий блок "Швидкий пошук за моделлю
   // авто" внизу /category (див. app/category/page.tsx), а не в основну сітку
   hideFromIndex?: boolean;
+
+  // ---- Поля для крос-лінків між сторінками (components/CategoryCrossLinks.tsx) ----
+  // modelGroup/modelLabel — вузькі сторінки під ОДНУ Й ТУ Ж машину
+  // (напр. "Pajero II кульові опори" і "Pajero II амортизатори")
+  // об'єднані однаковим modelGroup — це дає блок "Інші запчастини
+  // для {modelLabel}" на сторінці. Широкі категорії це поле не
+  // заповнюють — у них немає "своєї" машини
+  modelGroup?: string;
+  modelLabel?: string;
+  // parentCategorySlug — slug ШИРОКОЇ категорії, чиїм вузьким
+  // варіантом (по типу деталі, а не по машині) є ця сторінка —
+  // напр. у "halmivni-kolodky-peredni" це "halmivni-kolodky". Дає
+  // зворотній блок "Популярні моделі" на сторінці широкої категорії.
+  // Не в усіх вузьких сторінок є такий батько — деякі націлені на
+  // деталь, для якої ще немає своєї широкої категорії (напр.
+  // "Решітка бампера" чи "Кільця поршневі") — тоді поле просто не
+  // заповнюється, це нормально
+  parentCategorySlug?: string;
 }
 
 export const CATEGORIES: CategoryDef[] = [
@@ -238,6 +256,7 @@ export const CATEGORIES: CategoryDef[] = [
       'Передні гальмівні колодки зношуються швидше задніх — саме передня вісь бере на себе основне гальмівне навантаження при гальмуванні. У наявності колодки під популярні моделі Toyota, Ford, Daewoo та автомобілів групи VAG.',
     matchGroups: [['колодк'], ['перед']],
     hideFromIndex: true,
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'halmivni-kolodky-zadni',
@@ -250,6 +269,7 @@ export const CATEGORIES: CategoryDef[] = [
       'Задні гальмівні колодки — дискові або барабанні, залежно від моделі авто. Підберіть потрібні за артикулом або маркою автомобіля.',
     matchGroups: [['колодк'], ['зад']],
     hideFromIndex: true,
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'halmivna-ridyna',
@@ -281,6 +301,7 @@ export const CATEGORIES: CategoryDef[] = [
       ['dot4', 'dot 4', 'dot-4'],
     ],
     hideFromIndex: true,
+    parentCategorySlug: 'halmivna-ridyna',
   },
 
   // ---- Daewoo Lanos (підтверджено в наявності) ----
@@ -295,6 +316,9 @@ export const CATEGORIES: CategoryDef[] = [
       'Передні гальмівні колодки для Daewoo Lanos (і Matiz з тим самим кріпленням) — в наявності декілька варіантів різних виробників, від бюджетних до преміальних.',
     matchGroups: [['колодк'], ['перед'], ['lanos', 'ланос']],
     hideFromIndex: true,
+    modelGroup: 'daewoo-lanos',
+    modelLabel: 'Daewoo Lanos',
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'lanos-amortyzatory-peredni',
@@ -306,6 +330,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Передній амортизатор для Daewoo Lanos — газо-масляний, підходить і для Nexia з тією ж платформою.',
     matchGroups: [['амортизатор'], ['перед'], ['lanos', 'ланос']],
     hideFromIndex: true,
+    modelGroup: 'daewoo-lanos',
+    modelLabel: 'Daewoo Lanos',
+    parentCategorySlug: 'amortyzatory',
   },
   {
     slug: 'lanos-amortyzatory-zadni',
@@ -317,6 +344,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Задній амортизатор для Daewoo Lanos — газовий, в наявності декілька виробників на вибір.',
     matchGroups: [['амортизатор'], ['зад'], ['lanos', 'ланос']],
     hideFromIndex: true,
+    modelGroup: 'daewoo-lanos',
+    modelLabel: 'Daewoo Lanos',
+    parentCategorySlug: 'amortyzatory',
   },
   {
     slug: 'lanos-vtulky-stabilizatora',
@@ -329,6 +359,9 @@ export const CATEGORIES: CategoryDef[] = [
       'Недорога, але часто зношувана деталь — стук і "гуляння" керма на нерівностях зазвичай означає, що втулки стабілізатора Lanos пора міняти.',
     matchGroups: [['втулк'], ['стабіліз', 'стабилиз'], ['lanos', 'ланос']],
     hideFromIndex: true,
+    modelGroup: 'daewoo-lanos',
+    modelLabel: 'Daewoo Lanos',
+    parentCategorySlug: 'vtulky-stabilizatora',
   },
   {
     slug: 'lanos-komplekt-grm',
@@ -340,6 +373,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Комплект ГРМ для Daewoo Lanos — ремінь і ролики одразу, за регламентом виробника міняються разом.',
     matchGroups: [['грм'], ['lanos', 'ланос']],
     hideFromIndex: true,
+    modelGroup: 'daewoo-lanos',
+    modelLabel: 'Daewoo Lanos',
+    parentCategorySlug: 'remeni-rolyky-grm',
   },
   {
     slug: 'lanos-stseplennia',
@@ -351,6 +387,8 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Повний комплект зчеплення для Daewoo Lanos 1.5 — диск, кошик і вижимний підшипник одним набором.',
     matchGroups: [['зчеплен'], ['lanos', 'ланос']],
     hideFromIndex: true,
+    modelGroup: 'daewoo-lanos',
+    modelLabel: 'Daewoo Lanos',
   },
 
   // ---- Toyota Camry (підтверджено в наявності) ----
@@ -364,6 +402,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Передні гальмівні колодки для Toyota Camry різних поколінь — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед'], ['camry', 'камрі', 'камри']],
     hideFromIndex: true,
+    modelGroup: 'toyota-camry',
+    modelLabel: 'Toyota Camry',
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'camry-povitrianyi-filtr',
@@ -379,6 +420,9 @@ export const CATEGORIES: CategoryDef[] = [
       ['camry', 'камрі', 'камри'],
     ],
     hideFromIndex: true,
+    modelGroup: 'toyota-camry',
+    modelLabel: 'Toyota Camry',
+    parentCategorySlug: 'povitryani-filtry',
   },
 
   // ---- VW Passat B5 / Golf 4 (підтверджено в наявності) ----
@@ -392,6 +436,8 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Решітка переднього бампера для VW Passat B5 (до 2000 р.) — права сторона, в наявності.',
     matchGroups: [['решітк'], ['бампер'], ['passat b5', 'пассат б5']],
     hideFromIndex: true,
+    modelGroup: 'vw-passat-b5',
+    modelLabel: 'VW Passat B5',
   },
   {
     slug: 'golf-4-reika-kermova',
@@ -403,6 +449,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Рульова (кермова) рейка в зборі з наконечниками для VW Golf 4 — в наявності від Kimiko.',
     matchGroups: [['рейк'], ['керм'], ['golf 4', 'golf iv', 'гольф 4']],
     hideFromIndex: true,
+    modelGroup: 'vw-golf-4',
+    modelLabel: 'VW Golf 4',
+    parentCategorySlug: 'kermove-upravlinnya',
   },
 
   // ---- Волна 3: Toyota Corolla / Suzuki SX4 / Honda Accord VII ----
@@ -421,6 +470,9 @@ export const CATEGORIES: CategoryDef[] = [
       'Повітряний фільтр міняють при кожному ТО — забитий фільтр збільшує витрату палива і знижує тягу двигуна. У наявності варіанти під різні покоління Toyota Corolla.',
     matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['corolla']],
     hideFromIndex: true,
+    modelGroup: 'toyota-corolla',
+    modelLabel: 'Toyota Corolla',
+    parentCategorySlug: 'povitryani-filtry',
   },
   {
     slug: 'corolla-e150-dysky-halmivni-zadni',
@@ -441,6 +493,9 @@ export const CATEGORIES: CategoryDef[] = [
       ['corolla 2.2d 07-', '1.33-1.8vvti 01.07-', 'corolla sedan 1.4,1.6 06.11-'],
     ],
     hideFromIndex: true,
+    modelGroup: 'toyota-corolla-e150',
+    modelLabel: 'Toyota Corolla E150',
+    parentCategorySlug: 'halmivni-dysky',
   },
   {
     slug: 'corolla-e120-kolodky-halmivni-zadni',
@@ -452,6 +507,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Задні гальмівні колодки для Toyota Corolla покоління E120 (2002-2007 р.) — в наявності.',
     matchGroups: [['колодк'], ['зад'], ['corolla 02-07', 'corolla 02-']],
     hideFromIndex: true,
+    modelGroup: 'toyota-corolla-e120',
+    modelLabel: 'Toyota Corolla E120',
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'sx4-povitrianyi-filtr',
@@ -463,6 +521,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Повітряний фільтр для Suzuki SX4 — недорога деталь планового ТО, в наявності одразу декілька виробників.',
     matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['sx4', 'sx-4']],
     hideFromIndex: true,
+    modelGroup: 'suzuki-sx4',
+    modelLabel: 'Suzuki SX4',
+    parentCategorySlug: 'povitryani-filtry',
   },
   {
     slug: 'sx4-halmivni-kolodky',
@@ -474,6 +535,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Гальмівні колодки для Suzuki SX4 — в наявності, підходять і для Suzuki Swift з тією ж платформою.',
     matchGroups: [['колодк'], ['sx4', 'sx-4']],
     hideFromIndex: true,
+    modelGroup: 'suzuki-sx4',
+    modelLabel: 'Suzuki SX4',
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'accord-7-kolodky-peredni',
@@ -489,6 +553,9 @@ export const CATEGORIES: CategoryDef[] = [
     // з попереднім варіантом сторінки повітряного фільтра нижче)
     matchGroups: [['колодк'], ['перед'], ['cl_, cm_']],
     hideFromIndex: true,
+    modelGroup: 'honda-accord-7',
+    modelLabel: 'Honda Accord VII',
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'accord-7-povitrianyi-filtr',
@@ -504,6 +571,9 @@ export const CATEGORIES: CategoryDef[] = [
     // Accord VIII USA 08-15) — побачили на живій перевірці й прибрали
     matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['2.2i-ctdi 02.10-']],
     hideFromIndex: true,
+    modelGroup: 'honda-accord-7',
+    modelLabel: 'Honda Accord VII',
+    parentCategorySlug: 'povitryani-filtry',
   },
 
   // ---- Волна 4: Pajero II / Mazda 6 GG / Prado 120 / Mazda CX-5 ----
@@ -524,6 +594,9 @@ export const CATEGORIES: CategoryDef[] = [
       'Кульові опори для рамного позашляховика Mitsubishi Pajero II — деталь, яка часто зношується через навантаження позашляхового ходу підвіски.',
     matchGroups: [['куль', 'шаров'], ['опор'], ['pajero ii ', 'pajero ii,']],
     hideFromIndex: true,
+    modelGroup: 'mitsubishi-pajero-2',
+    modelLabel: 'Mitsubishi Pajero II',
+    parentCategorySlug: 'kulovi-opory',
   },
   {
     slug: 'pajero-2-amortyzatory',
@@ -541,6 +614,9 @@ export const CATEGORIES: CategoryDef[] = [
     // назви товару
     matchGroups: [['амортизатор '], ['pajero ii ', 'pajero ii,']],
     hideFromIndex: true,
+    modelGroup: 'mitsubishi-pajero-2',
+    modelLabel: 'Mitsubishi Pajero II',
+    parentCategorySlug: 'amortyzatory',
   },
   {
     slug: 'mazda6-gg-halmivni-kolodky-peredni',
@@ -552,6 +628,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Передні гальмівні колодки для Mazda 6 першого поколінна (кузов GG, 2002-2007) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед'], ['mazda 6', 'mazda6'], ['02-07']],
     hideFromIndex: true,
+    modelGroup: 'mazda6-gg',
+    modelLabel: 'Mazda 6 (GG)',
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'mazda6-gg-amortyzatory',
@@ -565,6 +644,9 @@ export const CATEGORIES: CategoryDef[] = [
     // без пробілу підрядок збігається і з "опора стійки АМОРТИЗАТОРА"
     matchGroups: [['амортизатор '], ['mazda 6', 'mazda6'], ['02-07', 'gg, gy']],
     hideFromIndex: true,
+    modelGroup: 'mazda6-gg',
+    modelLabel: 'Mazda 6 (GG)',
+    parentCategorySlug: 'amortyzatory',
   },
   {
     slug: 'mazda6-gg-pruzhyny',
@@ -576,6 +658,8 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Пружини підвіски для Mazda 6 GG (2002-2007) — в наявності.',
     matchGroups: [['пружин'], ['mazda 6', 'mazda6'], ['02-07']],
     hideFromIndex: true,
+    modelGroup: 'mazda6-gg',
+    modelLabel: 'Mazda 6 (GG)',
   },
   {
     slug: 'prado-120-pruzhyny',
@@ -592,6 +676,8 @@ export const CATEGORIES: CategoryDef[] = [
     // слова "зад"/"передн", тому в підбірку не потрапляє
     matchGroups: [['пружин'], ['зад', 'передн'], ['prado 120', '(j120)']],
     hideFromIndex: true,
+    modelGroup: 'toyota-prado-120',
+    modelLabel: 'Toyota Land Cruiser Prado 120',
   },
   {
     slug: 'cx5-halmivni-kolodky-peredni',
@@ -603,6 +689,9 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Передні гальмівні колодки для Mazda CX-5 — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед'], ['cx-5', 'cx5', 'cx 5']],
     hideFromIndex: true,
+    modelGroup: 'mazda-cx5',
+    modelLabel: 'Mazda CX-5',
+    parentCategorySlug: 'halmivni-kolodky',
   },
   {
     slug: 'cx5-kilca-porshnevi',
@@ -614,6 +703,8 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Комплект поршневих кілець для двигуна Mazda CX-5 — стандартний та ремонтний розмір, в наявності.',
     matchGroups: [['кільц', 'кольц'], ['порш'], ['cx-5', 'cx5']],
     hideFromIndex: true,
+    modelGroup: 'mazda-cx5',
+    modelLabel: 'Mazda CX-5',
   },
   {
     slug: 'cx5-sailentbloky',
@@ -625,11 +716,33 @@ export const CATEGORIES: CategoryDef[] = [
     intro: 'Сайлентблоки переднього важеля підвіски для Mazda CX-5 — типова причина стуку в передній підвісці при зношуванні.',
     matchGroups: [['сайлентблок'], ['cx-5', 'cx5']],
     hideFromIndex: true,
+    modelGroup: 'mazda-cx5',
+    modelLabel: 'Mazda CX-5',
+    parentCategorySlug: 'sailentbloky-vazhelia',
   },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
   return CATEGORIES.find((c) => c.slug === slug);
+}
+
+// ------------------------------------------------------------
+// КРОС-ЛІНКИ МІЖ СТОРІНКАМИ (components/CategoryCrossLinks.tsx)
+// ------------------------------------------------------------
+// Інші вузькі сторінки під ТУ Ж САМУ машину (напр. з "Pajero II
+// кульові опори" — на "Pajero II амортизатори") — блок "Інші
+// запчастини для {modelLabel}". Порожній масив, якщо у категорії
+// немає modelGroup (широкі категорії) або вона єдина у своїй групі
+export function getRelatedByModel(category: CategoryDef): CategoryDef[] {
+  if (!category.modelGroup) return [];
+  return CATEGORIES.filter((c) => c.modelGroup === category.modelGroup && c.slug !== category.slug);
+}
+
+// Зворотній напрямок: усі вузькі варіанти ОДНОГО типу деталі (напр.
+// для "halmivni-kolodky" — усі "...кolodky..." під конкретні машини) —
+// блок "Популярні моделі" на сторінці широкої категорії
+export function getNarrowVariants(parentSlug: string): CategoryDef[] {
+  return CATEGORIES.filter((c) => c.parentCategorySlug === parentSlug);
 }
 
 // ------------------------------------------------------------
