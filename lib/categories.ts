@@ -505,6 +505,127 @@ export const CATEGORIES: CategoryDef[] = [
     matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['2.2i-ctdi 02.10-']],
     hideFromIndex: true,
   },
+
+  // ---- Волна 4: Pajero II / Mazda 6 GG / Prado 120 / Mazda CX-5 ----
+  // (Civic 4D і Lexus RX350 перевірені, але жодна категорія не набрала
+  // мінімум 3 шт у наявності — сторінок під них немає. "pajero ii "/
+  // "pajero ii," (з комою чи пробілом одразу після "II") — навмисно НЕ
+  // просто "pajero ii": підрядок "pajero ii" сам по собі входить у
+  // "pajero iii" (той самий "суфіксний" баг, що і з accord vii/viii
+  // вище) — з пробілом чи комою одразу після колізії з III/IV нема)
+  {
+    slug: 'pajero-2-kulovi-opory',
+    name: 'Кульові опори Mitsubishi Pajero II',
+    h1: 'Кульові опори Mitsubishi Pajero II',
+    metaTitle: 'Кульова опора Pajero II від 297 грн | DominatorParts',
+    metaDescription:
+      'Кульові опори передньої підвіски Mitsubishi Pajero II в наявності від 297 грн (DENCKERMANN). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Кульові опори для рамного позашляховика Mitsubishi Pajero II — деталь, яка часто зношується через навантаження позашляхового ходу підвіски.',
+    matchGroups: [['куль', 'шаров'], ['опор'], ['pajero ii ', 'pajero ii,']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'pajero-2-amortyzatory',
+    name: 'Амортизатори Mitsubishi Pajero II',
+    h1: 'Амортизатори Mitsubishi Pajero II',
+    metaTitle: 'Амортизатор Pajero II від 611 грн | DominatorParts',
+    metaDescription:
+      'Амортизатори передні та задні Mitsubishi Pajero II в наявності від 611 грн (RAISO). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Амортизатори для Mitsubishi Pajero II — в наявності передні та задні, газові.',
+    // "амортизатор " (з пробілом одразу після) — а не просто
+    // "амортизатор": без пробілу підрядок збігається і з "опора
+    // стійки АМОРТИЗАТОРА" (кріплення, а не сама стійка) — саме так
+    // на живій перевірці сюди підтягнувся MONROE MK358 для іншої
+    // моделі; з пробілом ловиться лише "Амортизатор ..." на початку
+    // назви товару
+    matchGroups: [['амортизатор '], ['pajero ii ', 'pajero ii,']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'mazda6-gg-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Mazda 6 GG',
+    h1: 'Гальмівні колодки передні Mazda 6 GG',
+    metaTitle: 'Колодки передні Mazda 6 GG від 468 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки дискові передні Mazda 6 (кузов GG, 2002-2007) в наявності від 468 грн (RAISO). Доставка по всій Україні.',
+    intro: 'Передні гальмівні колодки для Mazda 6 першого поколінна (кузов GG, 2002-2007) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед'], ['mazda 6', 'mazda6'], ['02-07']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'mazda6-gg-amortyzatory',
+    name: 'Амортизатори Mazda 6 GG',
+    h1: 'Амортизатори Mazda 6 GG',
+    metaTitle: 'Амортизатор Mazda 6 GG від 962 грн | DominatorParts',
+    metaDescription:
+      'Амортизатори передні та задні Mazda 6 (кузов GG, 2002-2007) в наявності від 962 грн (TASHIKO). Доставка по всій Україні.',
+    intro: 'Амортизатори для Mazda 6 першого поколінна (GG, 2002-2007) — передні та задні, в наявності.',
+    // "амортизатор " з пробілом — див. коментар біля Pajero II вище:
+    // без пробілу підрядок збігається і з "опора стійки АМОРТИЗАТОРА"
+    matchGroups: [['амортизатор '], ['mazda 6', 'mazda6'], ['02-07', 'gg, gy']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'mazda6-gg-pruzhyny',
+    name: 'Пружини підвіски Mazda 6 GG',
+    h1: 'Пружини підвіски Mazda 6 GG',
+    metaTitle: 'Пружина підвіски Mazda 6 GG від 673 грн | DominatorParts',
+    metaDescription:
+      'Пружини підвіски Mazda 6 (кузов GG, 2002-2007) в наявності від 673 грн (RAISO). Доставка по всій Україні.',
+    intro: 'Пружини підвіски для Mazda 6 GG (2002-2007) — в наявності.',
+    matchGroups: [['пружин'], ['mazda 6', 'mazda6'], ['02-07']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'prado-120-pruzhyny',
+    name: 'Пружини підвіски Toyota Land Cruiser Prado 120',
+    h1: 'Пружини підвіски Toyota Land Cruiser Prado 120',
+    metaTitle: 'Пружина підвіски Prado 120 від 919 грн | DominatorParts',
+    metaDescription:
+      'Пружини підвіски (передні та задні) Toyota Land Cruiser Prado 120 в наявності від 919 грн (RAISO). Доставка по всій Україні.',
+    intro: 'Пружини підвіски для Toyota Land Cruiser Prado 120 — передні та задні, в наявності.',
+    // ['зад','передн'] тут — не про покоління, а щоб відсікти зовсім
+    // іншу деталь з тим самим словом "пружина": пружину БАРАБАННОГО
+    // ГАЛЬМА (дрібна пружинка всередині гальмівного барабана, а не
+    // пружина підвіски) — вона теж згадує "Prado 120", але не містить
+    // слова "зад"/"передн", тому в підбірку не потрапляє
+    matchGroups: [['пружин'], ['зад', 'передн'], ['prado 120', '(j120)']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'cx5-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Mazda CX-5',
+    h1: 'Гальмівні колодки передні Mazda CX-5',
+    metaTitle: 'Колодки передні Mazda CX-5 від 614 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки дискові передні Mazda CX-5 в наявності від 614 грн (Q-TOP). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Передні гальмівні колодки для Mazda CX-5 — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед'], ['cx-5', 'cx5', 'cx 5']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'cx5-kilca-porshnevi',
+    name: 'Кільця поршневі Mazda CX-5',
+    h1: 'Кільця поршневі Mazda CX-5',
+    metaTitle: 'Кільця поршневі CX-5 від 817 грн | DominatorParts',
+    metaDescription:
+      'Кільця поршневі (комплект на мотор) Mazda CX-5 в наявності від 817 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Комплект поршневих кілець для двигуна Mazda CX-5 — стандартний та ремонтний розмір, в наявності.',
+    matchGroups: [['кільц', 'кольц'], ['порш'], ['cx-5', 'cx5']],
+    hideFromIndex: true,
+  },
+  {
+    slug: 'cx5-sailentbloky',
+    name: 'Сайлентблоки Mazda CX-5',
+    h1: 'Сайлентблоки Mazda CX-5',
+    metaTitle: 'Сайлентблок CX-5 від 321 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки переднього важеля Mazda CX-5 в наявності від 321 грн (APLUS). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Сайлентблоки переднього важеля підвіски для Mazda CX-5 — типова причина стуку в передній підвісці при зношуванні.',
+    matchGroups: [['сайлентблок'], ['cx-5', 'cx5']],
+    hideFromIndex: true,
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
