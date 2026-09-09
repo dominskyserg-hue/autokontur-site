@@ -26,6 +26,7 @@
 import { ImapFlow, type FetchMessageObject } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import AdmZip from 'adm-zip';
+import * as XLSX from 'xlsx';
 import { Pool } from 'pg';
 import { importPriceListForSupplier, type MappingSettings } from '@/lib/priceListImport';
 
@@ -219,6 +220,22 @@ function extractExcelFromZip(zipBuffer: Buffer): Buffer | null {
   return entry ? entry.getData() : null;
 }
 
+// Проверяет, действительно ли буфер читается как Excel-файл — не по
+// имени/расширению, а по факту (пробуем распарсить через ту же
+// библиотеку xlsx, что и в lib/priceListImport.ts). bookSheets: true —
+// облегчённый режим: читает только список листов, БЕЗ данных ячеек,
+// этого достаточно, чтобы понять "это вообще Excel или нет", не тратя
+// время на разбор всей книги (её всё равно разберём заново позже,
+// уже полноценно, в parseExcelBuffer)
+function isReadableAsExcel(buffer: Buffer): boolean {
+  try {
+    const workbook = XLSX.read(buffer, { type: 'buffer', bookSheets: true });
+    return workbook.SheetNames.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 async function extractExcelAttachment(rawMessage: Buffer): Promise<Buffer | null> {
   const parsed = await simpleParser(rawMessage);
 
@@ -231,6 +248,28 @@ async function extractExcelAttachment(rawMessage: Buffer): Promise<Buffer | null
   const zipAttachments = parsed.attachments.filter((item) => ZIP_EXTENSION_PATTERN.test(item.filename || ''));
   for (const zipAttachment of zipAttachments) {
     const excelBuffer = extractExcelFromZip(zipAttachment.content);
+    if (excelBuffer) return excelBuffer;
+  }
+
+  // Ни .xlsx/.xls, ни .zip по имени не нашлось — некоторые поставщики
+  // (например, STAREX-AUTO) присылают прайс вложением ВООБЩЕ БЕЗ ИМЕНИ
+  // И РАСШИРЕНИЯ (почтовый клиент подставляет случайный идентификатор
+  // вместо filename). Расширение тут ни при чём — проверяем содержимое
+  // напрямую: пробуем прочитать каждое "непонятное" вложение как Excel,
+  // а если не читается — как ZIP-архив с Excel внутри (на случай, если
+  // и архив тоже пришёл без расширения .zip). Картинки (например,
+  // логотип в подписи письма) заведомо пропускаем — Excel-файлом они
+  // быть не могут, а на XLSX.read их гонять незачем
+  const unknownAttachments = parsed.attachments.filter(
+    (item) =>
+      !EXCEL_EXTENSION_PATTERN.test(item.filename || '') &&
+      !ZIP_EXTENSION_PATTERN.test(item.filename || '') &&
+      !(item.contentType || '').toLowerCase().startsWith('image/')
+  );
+  for (const attachment of unknownAttachments) {
+    if (isReadableAsExcel(attachment.content)) return attachment.content;
+
+    const excelBuffer = extractExcelFromZip(attachment.content);
     if (excelBuffer) return excelBuffer;
   }
 
