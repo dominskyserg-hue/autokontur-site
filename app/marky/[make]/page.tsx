@@ -248,9 +248,13 @@ export default async function CarMakePage({
                 <Link
                   key={product.id}
                   href={buildProductPath(product.id, product)}
-                  className="flex gap-3 rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+                  className="flex items-start gap-3 rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                   style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                 >
+                  {/* items-start обов'язковий: без нього flex-рядок за
+                      замовчуванням розтягує квадратний бокс з фото до
+                      висоти текстового блоку поруч (align-items: stretch),
+                      через що фото ставало прямокутним замість квадрата */}
                   {/* Мініатюра — той самий фікс, що і в app/category/[slug]/
                       page.tsx: без неї фото товару вантажилось "з нуля"
                       лише в момент відкриття модального вікна картки.
