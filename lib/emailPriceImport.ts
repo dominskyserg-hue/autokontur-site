@@ -293,9 +293,37 @@ export interface EmailImportSummary {
 const EMPTY_SUMMARY_BASE = { checked: 0, imported: 0, skipped: 0, unmatched: 0, failed: 0, entries: [] };
 
 // ------------------------------------------------------------
+// ОЧИСТКА СТАРЫХ ЗАПИСЕЙ ЖУРНАЛА
+// ------------------------------------------------------------
+// email_import_log нужен для дедупликации писем (см. alreadyProcessed
+// выше) и для панели в админке — но не как вечный архив. Хранить
+// записи старше 15 дней смысла нет: письмо давно либо обработано,
+// либо не будет обработано никогда (окно повторного поиска — всего
+// LOOKBACK_DAYS дней, см. выше), а история за 2+ недели администратору
+// для проверки "что вообще происходит с автозагрузкой" не нужна.
+// Сам файл письма/вложения в базе и так никогда не хранился — здесь
+// чистится только эта короткая текстовая запись-отчёт о письме
+const LOG_RETENTION_DAYS = 15;
+
+async function cleanupOldLogEntries(pool: Pool): Promise<void> {
+  try {
+    await pool.query(
+      `DELETE FROM email_import_log WHERE processed_at < now() - $1::interval`,
+      [`${LOG_RETENTION_DAYS} days`]
+    );
+  } catch (error) {
+    // Проверку почты из-за сбоя очистки журнала прерывать не стоит —
+    // это вспомогательная уборка, а не часть самой автозагрузки
+    console.error('Ошибка при очистке старых записей журнала автозагрузки почты:', error);
+  }
+}
+
+// ------------------------------------------------------------
 // ГЛАВНАЯ ФУНКЦИЯ
 // ------------------------------------------------------------
 export async function runEmailPriceImport(pool: Pool): Promise<EmailImportSummary> {
+  await cleanupOldLogEntries(pool);
+
   const config = getImapConfig();
   if (!config) {
     return {
