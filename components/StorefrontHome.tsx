@@ -104,12 +104,38 @@ interface CartItem {
 
 const CART_STORAGE_KEY = 'autokontur-cart';
 const VIEW_MODE_STORAGE_KEY = 'autokontur-view-mode';
+// Кеш останніх завантажених контактів магазину — щоб при повторному
+// відкритті сайту в шапці одразу показувався РЕАЛЬНИЙ телефон, а не
+// заглушка DEFAULT_PHONE, поки не відповість /api/site-settings.
+// Без цього кешу покупець на кожному оновленні сторінки бачив
+// помітний "стрибок" номера: спочатку заглушка, за секунду-дві —
+// справжній телефон
+const SITE_SETTINGS_CACHE_KEY = 'autokontur-site-settings-cache';
 
 // Значения по умолчанию — показываются, пока /api/site-settings ещё
-// не ответил (или если админ ни разу не менял их через "Настройки")
+// не ответил (или если админ ни разу не менял их через "Настройки"),
+// и пока в SITE_SETTINGS_CACHE_KEY ещё нет ни одного сохранённого
+// значения (самый первый визит на сайт в этом браузере)
 const DEFAULT_SHOP_NAME = 'DominatorParts';
 const DEFAULT_PHONE = '+38 (050) 123-45-67';
 const DEFAULT_WORKING_HOURS = 'Щодня 9:00–19:00';
+
+interface CachedSiteSettings {
+  shopName?: string;
+  phone?: string;
+  workingHours?: string;
+}
+
+function readCachedSiteSettings(): CachedSiteSettings {
+  try {
+    const raw = window.localStorage.getItem(SITE_SETTINGS_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as CachedSiteSettings) : {};
+  } catch {
+    // localStorage недоступний або зіпсовані дані — просто лишаємось
+    // із заглушками до відповіді /api/site-settings
+    return {};
+  }
+}
 
 interface Announcement {
   id: string;
@@ -226,6 +252,16 @@ export default function StorefrontHome() {
   const [popularProducts, setPopularProducts] = useState<Product[]>([]);
 
   useEffect(() => {
+    // Спочатку — миттєво, без мережі: якщо ці контакти вже завантажувались
+    // раніше в цьому браузері, застосовуємо кешовані значення одразу при
+    // монтуванні. Це і прибирає "стрибок" номера телефону при оновленні
+    // сторінки — покупач бачить правильний номер відразу, а не заглушку
+    // DEFAULT_PHONE, поки триває запит до /api/site-settings
+    const cached = readCachedSiteSettings();
+    if (cached.shopName) setShopName(cached.shopName);
+    if (cached.phone) setPhone(cached.phone);
+    if (cached.workingHours) setWorkingHours(cached.workingHours);
+
     fetch('/api/site-settings')
       .then((response) => response.json())
       .then((data) => {
@@ -239,11 +275,26 @@ export default function StorefrontHome() {
           }
           if (data.settings.phone) setPhone(data.settings.phone);
           if (data.settings.workingHours) setWorkingHours(data.settings.workingHours);
+
+          // Оновлюємо кеш — щоб НАСТУПНЕ відкриття сайту вже одразу
+          // показало ці (можливо, змінені) значення, не чекаючи мережі
+          try {
+            window.localStorage.setItem(
+              SITE_SETTINGS_CACHE_KEY,
+              JSON.stringify({
+                shopName: data.settings.shopName || undefined,
+                phone: data.settings.phone || undefined,
+                workingHours: data.settings.workingHours || undefined,
+              })
+            );
+          } catch {
+            // localStorage недоступний — не критично, просто кеш не оновиться
+          }
         }
       })
       .catch(() => {
-        // Не получилось — просто остаёмся со значениями по умолчанию,
-        // это не критично для работы самой витрины
+        // Не получилось — просто остаёмся со значениями по умолчанию
+        // (или кешированными выше), это не критично для работы витрины
       });
 
     // activeOnly=1 — на витрине показываем только те объявления,
