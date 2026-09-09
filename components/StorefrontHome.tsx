@@ -2428,9 +2428,18 @@ export default function StorefrontHome() {
           </div>
 
           {/* ==================== КАТЕГОРІЇ ДЕТАЛЕЙ ==================== */}
-          {/* Список посилань на SEO-сторінки категорій (app/category/[slug]) —
-              і зручність для покупця, і сигнал для Google приходити сюди
-              за новими сторінками */}
+          {/* Тільки 14 широких категорій (!hideFromIndex) — той самий
+              фільтр, що і на /category (app/category/page.tsx). Раніше
+              тут рендерився CATEGORIES.map() БЕЗ фільтра — тобто разом
+              із широкими категоріями сюди потрапляли й усі вузькі
+              SEO-сторінки під конкретні моделі (Lanos, Camry, CX-5...),
+              і з кожною новою хвилею таких сторінок цей блок на Головній
+              перетворювався на нескінченну хмару чіпів. Вузькі сторінки
+              від цього фільтра НЕ втрачають видимість для Google: вони
+              і без цього блоку в sitemap-static.xml (без фільтра) і в
+              CategoryCrossLinks на самих сторінках категорій (Фаза 1
+              перелінковки) — тут прибирається лише дублювання на
+              Головній, а не єдиний шлях до сторінки */}
           <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10">
             <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
               Швидкий перехід
@@ -2439,7 +2448,7 @@ export default function StorefrontHome() {
               Популярні категорії
             </h2>
             <div className="flex flex-wrap gap-2.5">
-              {CATEGORIES.map((c) => (
+              {CATEGORIES.filter((c) => !c.hideFromIndex).map((c) => (
                 <Link
                   key={c.slug}
                   href={`/category/${c.slug}`}
@@ -2449,6 +2458,18 @@ export default function StorefrontHome() {
                   {c.name}
                 </Link>
               ))}
+              {/* Справжнє посилання (не JS-акордеон) — на /category вже є
+                  повний список: і широкі плиткою, і вузькі окремим блоком
+                  "Швидкий пошук за моделлю авто". Звичайний <a>/<Link>
+                  гарантує, що Google теж пройде за цим посиланням, а не
+                  тільки покупач побачить його при кліку */}
+              <Link
+                href="/category"
+                className="rounded-full px-4 py-2 text-xs font-semibold transition-colors hover:bg-[rgba(59,130,246,0.12)]"
+                style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_ACCENT_BRIGHT}`, color: TECH_ACCENT_BRIGHT }}
+              >
+                Показати всі категорії →
+              </Link>
             </div>
           </div>
 
