@@ -688,6 +688,7 @@ export const CATEGORIES: CategoryDef[] = [
     // "амортизатор " з пробілом — див. коментар біля Pajero II вище:
     // без пробілу підрядок збігається і з "опора стійки АМОРТИЗАТОРА"
     matchGroups: [['амортизатор '], ['mazda 6', 'mazda6'], ['02-07', 'gg, gy']],
+    tecdocVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
     hideFromIndex: true,
     modelGroup: 'mazda6-gg',
     modelLabel: 'Mazda 6 (GG)',
