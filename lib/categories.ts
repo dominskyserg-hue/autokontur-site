@@ -56,6 +56,22 @@ export interface CategoryDef {
   // "Решітка бампера" чи "Кільця поршневі") — тоді поле просто не
   // заповнюється, це нормально
   parentCategorySlug?: string;
+
+  // ---- Підбір авто через індекс сумісності TecDoc (замість тексту в назві) ----
+  // Хвилі 1-4 (Lanos/Camry/Corolla/Pajero/Mazda6...) фільтрували модель
+  // авто підрядком прямо в matchGroups (напр. ['pajero ii ']) — це
+  // працювало, бо ті постачальники самі писали модель у назві товару.
+  // Хвиля 6 (Autohelp/HLOD) — постачальник моделі в назві НЕ пише
+  // ("Колодки гальмівні дискові передні STELLOX ...", без слова
+  // "Passat" чи "Golf"), тому підрядком у назві такі товари підібрати
+  // неможливо. tecdocVehicle — альтернативний спосіб: товар підходить,
+  // якщо ЙОГО бренд+артикул є в tecdoc_compatibility для вказаних
+  // make+models (масив, бо одна "модель" з погляду покупця часто
+  // складається з кількох записів TecDoc — напр. Stufenheck+Variant).
+  // matchGroups при цьому лишається — він і далі визначає лише ТИП
+  // деталі (колодки/прокладки/...), а не марку авто. Обидва фільтри
+  // діють одночасно (І) — див. buildCategoryWhereClause нижче
+  tecdocVehicle?: { make: string; models: string[] };
 }
 
 export const CATEGORIES: CategoryDef[] = [
@@ -720,6 +736,308 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Mazda CX-5',
     parentCategorySlug: 'sailentbloky-vazhelia',
   },
+
+  // ============================================================
+  // ХВИЛЯ 6 — бэклог з хвилі 5: "Гальмівні колодки" і "Комплект
+  // прокладок двигуна" по моделях, де вже давно ≥3 шт у наявності,
+  // але сторінки не було. На відміну від хвиль 1-4, тут matchGroups
+  // визначає ЛИШЕ ТИП деталі ("колодк"/"прокладк") — модель авто НЕ
+  // шукається підрядком у назві (постачальники цих товарів модель у
+  // назві не пишуть, напр. "Колодки гальмівні дискові передні STELLOX"
+  // без слова "Passat"), а підбирається через tecdocVehicle — join по
+  // бренду+артикулу до tecdoc_compatibility (див. buildCategoryWhereClause
+  // в кінці цього файлу). Перелік товарів під кожною сторінкою
+  // перевірено вручну прямим запитом до бойової бази перед деплоєм.
+  // ============================================================
+
+  // ---- Гальмівні колодки (нові моделі) ----
+  {
+    slug: 'passat-b5-halmivni-kolodky',
+    name: 'Гальмівні колодки VW Passat B5',
+    h1: 'Гальмівні колодки VW Passat B5',
+    metaTitle: 'Колодки гальмівні Passat B5 від 621 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки VW Passat B5 в наявності від 621 грн (LPR). Оригінал і перевірені аналоги, доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Гальмівні колодки для VW Passat B5 — передні та задні варіанти різних виробників, підібрані за офіційним індексом сумісності запчастин TecDoc.',
+    matchGroups: [['колодк']],
+    tecdocVehicle: {
+      make: 'VW',
+      models: ['PASSAT Stufenheck (3B2)', 'PASSAT Stufenheck (3B3)', 'PASSAT Variant (3B5)', 'PASSAT Variant (3B6)'],
+    },
+    hideFromIndex: true,
+    modelGroup: 'vw-passat-b5',
+    modelLabel: 'VW Passat B5',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'golf-4-halmivni-kolodky',
+    name: 'Гальмівні колодки VW Golf 4',
+    h1: 'Гальмівні колодки VW Golf 4',
+    metaTitle: 'Колодки гальмівні Golf 4 від 621 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки VW Golf 4 в наявності від 621 грн (LPR). Оригінал і перевірені аналоги, доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Гальмівні колодки для VW Golf 4 — передні та задні варіанти різних виробників, підібрані за офіційним індексом сумісності запчастин TecDoc.',
+    matchGroups: [['колодк']],
+    tecdocVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-golf-4',
+    modelLabel: 'VW Golf 4',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'pajero-2-halmivni-kolodky',
+    name: 'Гальмівні колодки Mitsubishi Pajero II',
+    h1: 'Гальмівні колодки Mitsubishi Pajero II',
+    metaTitle: 'Колодки гальмівні Pajero II від 427 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки Mitsubishi Pajero II в наявності від 427 грн (STELLOX). Дискові та барабанні, доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Гальмівні колодки для Mitsubishi Pajero II — дискові (передні/задні) та барабанні варіанти, підібрані за офіційним індексом сумісності запчастин TecDoc.',
+    matchGroups: [['колодк']],
+    tecdocVehicle: {
+      make: 'MITSUBISHI',
+      models: ['SHOGUN II (V3_W, V2_W, V4_W)', 'SHOGUN II Geländewagen offen (V2_W, V4_W)', 'PAJERO/SHOGUN CLASSIC (V2_W)'],
+    },
+    hideFromIndex: true,
+    modelGroup: 'mitsubishi-pajero-2',
+    modelLabel: 'Mitsubishi Pajero II',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'civic-4d-halmivni-kolodky',
+    name: 'Гальмівні колодки Honda Civic 4D',
+    h1: 'Гальмівні колодки Honda Civic 4D',
+    metaTitle: 'Колодки гальмівні Civic 4D від 423 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки Honda Civic 4D (седан) в наявності від 423 грн (STELLOX). Дискові та барабанні, доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Гальмівні колодки для Honda Civic 4D (седан, кузов FD/FA) — дискові та барабанні варіанти, підібрані за офіційним індексом сумісності запчастин TecDoc.',
+    matchGroups: [['колодк']],
+    tecdocVehicle: { make: 'HONDA', models: ['BALLADE VIII Stufenheck (FD, FA)'] },
+    hideFromIndex: true,
+    modelGroup: 'honda-civic-4d',
+    modelLabel: 'Honda Civic 4D',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'rx350-halmivni-kolodky',
+    name: 'Гальмівні колодки Lexus RX350',
+    h1: 'Гальмівні колодки Lexus RX350',
+    metaTitle: 'Колодки гальмівні Lexus RX350 від 733 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки Lexus RX350 в наявності від 733 грн (STELLOX, BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Гальмівні колодки для Lexus RX350 — в наявності декілька виробників, підібрані за офіційним індексом сумісності запчастин TecDoc.',
+    matchGroups: [['колодк']],
+    tecdocVehicle: { make: 'LEXUS', models: ['RX (MHU3_, GSU3_, MCU3_)', 'RX (GYL1_, GGL15, AGL10)'] },
+    hideFromIndex: true,
+    modelGroup: 'lexus-rx350',
+    modelLabel: 'Lexus RX350',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+
+  // ---- Комплект прокладок двигуна (повністю нова категорія деталі) ----
+  {
+    slug: 'lanos-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Daewoo Lanos',
+    h1: 'Комплект прокладок двигуна Daewoo Lanos',
+    metaTitle: 'Прокладки двигуна Lanos від 67 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Daewoo Lanos в наявності від 67 грн (FA1): головки блоку, випускного колектора та інші. Доставка по всій Україні.',
+    intro:
+      'Прокладки двигуна для Daewoo Lanos — головки блоку циліндрів, випускного колектора та інших вузлів, в наявності декілька виробників.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
+    hideFromIndex: true,
+    modelGroup: 'daewoo-lanos',
+    modelLabel: 'Daewoo Lanos',
+  },
+  {
+    slug: 'camry-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Toyota Camry',
+    h1: 'Комплект прокладок двигуна Toyota Camry',
+    metaTitle: 'Прокладки двигуна Camry від 82 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Toyota Camry в наявності від 82 грн (FA1): впускного та випускного колектора, клапанної кришки. Доставка по Україні.',
+    intro:
+      'Прокладки двигуна для Toyota Camry — впускний і випускний колектор, клапанна кришка та інші вузли, в наявності декілька виробників.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: {
+      make: 'TOYOTA',
+      models: [
+        'CAMRY Stufenheck (AVV5_, XV5_)',
+        'CAMRY Stufenheck (MCV3_, ACV3_, _XV3_)',
+        'CAMRY Stufenheck (_CV2_, _XV2_)',
+        'CAMRY Stufenheck (_V1_)',
+        'CAMRY Stufenheck (_V2_)',
+        'CAMRY Stufenheck (_XV4_)',
+      ],
+    },
+    hideFromIndex: true,
+    modelGroup: 'toyota-camry',
+    modelLabel: 'Toyota Camry',
+  },
+  {
+    slug: 'passat-b5-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна VW Passat B5',
+    h1: 'Комплект прокладок двигуна VW Passat B5',
+    metaTitle: 'Прокладки двигуна Passat B5 від 34 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна VW Passat B5 в наявності від 34 грн (ELRING): головки блоку, колекторів, термостата. Доставка по всій Україні.',
+    intro:
+      'Прокладки двигуна для VW Passat B5 — головка блоку циліндрів, впускний/випускний колектор, термостат та інші вузли двигуна.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: {
+      make: 'VW',
+      models: ['PASSAT Stufenheck (3B2)', 'PASSAT Stufenheck (3B3)', 'PASSAT Variant (3B5)', 'PASSAT Variant (3B6)'],
+    },
+    hideFromIndex: true,
+    modelGroup: 'vw-passat-b5',
+    modelLabel: 'VW Passat B5',
+  },
+  {
+    slug: 'golf-4-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна VW Golf 4',
+    h1: 'Комплект прокладок двигуна VW Golf 4',
+    metaTitle: 'Прокладки двигуна Golf 4 від 34 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна VW Golf 4 в наявності від 34 грн (ELRING): головки блоку, колекторів, піддону картера. Доставка по всій Україні.',
+    intro:
+      'Прокладки двигуна для VW Golf 4 — головка блоку циліндрів, колектори, піддон картера та інші вузли двигуна.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-golf-4',
+    modelLabel: 'VW Golf 4',
+  },
+  {
+    slug: 'corolla-e120-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Toyota Corolla E120',
+    h1: 'Комплект прокладок двигуна Toyota Corolla E120',
+    metaTitle: 'Прокладки двигуна Corolla E120 від 86 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Toyota Corolla E120 (2001-2007) в наявності від 86 грн. Клапанної кришки, колекторів та інші. Доставка по Україні.',
+    intro:
+      'Прокладки двигуна для Toyota Corolla покоління E120 (2001-2007) — клапанна кришка, колектори та інші вузли, декілька виробників.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: { make: 'TOYOTA', models: ['AXIO/ALTIS Stufenheck (_E12J_, _E12T_)'] },
+    hideFromIndex: true,
+    modelGroup: 'toyota-corolla-e120',
+    modelLabel: 'Toyota Corolla E120',
+  },
+  {
+    slug: 'corolla-e150-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Toyota Corolla E150',
+    h1: 'Комплект прокладок двигуна Toyota Corolla E150',
+    metaTitle: 'Прокладки двигуна Corolla E150 від 120 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Toyota Corolla E150 (2006-2013) в наявності від 120 грн. Колекторів, клапанної кришки та інші. Доставка по Україні.',
+    intro:
+      'Прокладки двигуна для Toyota Corolla покоління E150 (2006-2013) — впускний/випускний колектор, клапанна кришка та інші вузли.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: { make: 'TOYOTA', models: ['ALTIS Stufenheck (E15_)'] },
+    hideFromIndex: true,
+    modelGroup: 'toyota-corolla-e150',
+    modelLabel: 'Toyota Corolla E150',
+  },
+  {
+    slug: 'sx4-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Suzuki SX4',
+    h1: 'Комплект прокладок двигуна Suzuki SX4',
+    metaTitle: 'Прокладки двигуна SX4 від 27 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Suzuki SX4 в наявності від 27 грн (ELRING): зливної пробки, впускного колектора, клапанної кришки. Доставка по Україні.',
+    intro: 'Прокладки двигуна для Suzuki SX4 — впускний колектор, клапанна кришка та інші вузли, декілька виробників.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: { make: 'SUZUKI', models: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'] },
+    hideFromIndex: true,
+    modelGroup: 'suzuki-sx4',
+    modelLabel: 'Suzuki SX4',
+  },
+  {
+    slug: 'accord-7-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Honda Accord VII',
+    h1: 'Комплект прокладок двигуна Honda Accord VII',
+    metaTitle: 'Прокладки двигуна Accord VII від 47 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Honda Accord VII в наявності від 47 грн (FA1): колекторів, клапанної кришки, вихлопної труби. Доставка по Україні.',
+    intro: 'Прокладки двигуна для Honda Accord 7-го покоління — колектори, клапанна кришка, вихлопна труба та інші вузли.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: {
+      make: 'HONDA',
+      models: [
+        'ACCORD Mk VII (CG, CK)',
+        'ACCORD Mk VII Coupe (CG)',
+        'ACCORD Mk VII Kombi (CF)',
+        'ACCORD Mk VII Schrägheck (CH)',
+        'ACCORD VII Tourer (CM)',
+      ],
+    },
+    hideFromIndex: true,
+    modelGroup: 'honda-accord-7',
+    modelLabel: 'Honda Accord VII',
+  },
+  {
+    slug: 'pajero-2-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Mitsubishi Pajero II',
+    h1: 'Комплект прокладок двигуна Mitsubishi Pajero II',
+    metaTitle: 'Прокладки двигуна Pajero II від 99 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Mitsubishi Pajero II в наявності від 99 грн (AJUSA): головки блоку, впускного колектора та інші. Доставка по Україні.',
+    intro: 'Прокладки двигуна для Mitsubishi Pajero II — головка блоку циліндрів, впускний колектор та інші вузли двигуна.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: {
+      make: 'MITSUBISHI',
+      models: ['SHOGUN II (V3_W, V2_W, V4_W)', 'SHOGUN II Geländewagen offen (V2_W, V4_W)', 'PAJERO/SHOGUN CLASSIC (V2_W)'],
+    },
+    hideFromIndex: true,
+    modelGroup: 'mitsubishi-pajero-2',
+    modelLabel: 'Mitsubishi Pajero II',
+  },
+  {
+    slug: 'mazda6-gg-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Mazda 6 GG',
+    h1: 'Комплект прокладок двигуна Mazda 6 GG',
+    metaTitle: 'Прокладки двигуна Mazda 6 GG від 194 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Mazda 6 (кузов GG) в наявності від 194 грн. Впускного колектора, клапанної кришки та інші. Доставка по Україні.',
+    intro: 'Прокладки двигуна для Mazda 6 першого покоління (GG, 2002-2007) — впускний колектор, клапанна кришка та інші вузли.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
+    hideFromIndex: true,
+    modelGroup: 'mazda6-gg',
+    modelLabel: 'Mazda 6 (GG)',
+  },
+  {
+    slug: 'civic-4d-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Honda Civic 4D',
+    h1: 'Комплект прокладок двигуна Honda Civic 4D',
+    metaTitle: 'Прокладки двигуна Civic 4D від 92 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Honda Civic 4D (седан) в наявності від 92 грн (FA1): головки блоку, колектора, клапанної кришки. Доставка по Україні.',
+    intro: 'Прокладки двигуна для Honda Civic 4D (седан, кузов FD/FA) — головка блоку, колектор, клапанна кришка та інші вузли.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: { make: 'HONDA', models: ['BALLADE VIII Stufenheck (FD, FA)'] },
+    hideFromIndex: true,
+    modelGroup: 'honda-civic-4d',
+    modelLabel: 'Honda Civic 4D',
+  },
+  {
+    slug: 'prado-120-komplekt-prokladok',
+    name: 'Комплект прокладок двигуна Toyota Land Cruiser Prado 120',
+    h1: 'Комплект прокладок двигуна Toyota Land Cruiser Prado 120',
+    metaTitle: 'Прокладки двигуна Prado 120 від 198 грн | DominatorParts',
+    metaDescription:
+      'Прокладки двигуна Toyota Land Cruiser Prado 120 в наявності від 198 грн (AJUSA): колекторів, клапанної кришки. Доставка по Україні.',
+    intro: 'Прокладки двигуна для Toyota Land Cruiser Prado 120 — випускний колектор, клапанна кришка та інші вузли двигуна.',
+    matchGroups: [['прокладк']],
+    tecdocVehicle: { make: 'TOYOTA', models: ['LAND CRUISER PRADO (KDJ12_, GRJ12_)'] },
+    hideFromIndex: true,
+    modelGroup: 'toyota-prado-120',
+    modelLabel: 'Toyota Land Cruiser Prado 120',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
@@ -779,15 +1097,44 @@ export function getToCategories(): CategoryDef[] {
 // виду "FROM products p" — саме тому з префіксом p., а не голим name
 // (щоб не було неоднозначності з products.name/suppliers.name, коли
 // сторінка ще й приєднує JOIN suppliers за delivery_time)
+//
+// Якщо в категорії задано tecdocVehicle — додається ЩЕ ОДНА умова
+// (через AND): товар має бути присутній у tecdoc_compatibility для
+// вказаних make+models (зіставлення по бренду+артикулу). Це і є
+// "підбір моделі через TecDoc" з коментаря біля поля tecdocVehicle
+// вище — на відміну від matchGroups (підрядок у назві), тут модель
+// авто визначається зі structured-довідника, а не з тексту назви
+// товару. params після цього — вже не суто string[][], а суміш
+// (string[] для ILIKE ANY, string і string[] для самого tecdocVehicle),
+// тому тип params розширено до unknown[]; кожен виклик, що далі робить
+// ...params у pool.query(...), як і раніше, просто розкладає їх по
+// порядку в позиційні $1, $2... — сумісність зі старими викликами не
+// ламається
 export function buildCategoryWhereClause(
   category: CategoryDef,
   startParamIndex: number
-): { clause: string; params: string[][] } {
-  const params: string[][] = [];
+): { clause: string; params: unknown[] } {
+  const params: unknown[] = [];
   const conditions = category.matchGroups.map((group, i) => {
     params.push(group.map((word) => `%${word}%`));
     return `p.name ILIKE ANY($${startParamIndex + i})`;
   });
+
+  if (category.tecdocVehicle) {
+    const makeParamIdx = startParamIndex + params.length;
+    params.push(category.tecdocVehicle.make);
+    const modelsParamIdx = startParamIndex + params.length;
+    params.push(category.tecdocVehicle.models);
+
+    conditions.push(`
+      EXISTS (
+        SELECT 1 FROM tecdoc_compatibility tc
+        WHERE UPPER(tc.brand) = UPPER(p.brand) AND tc.article = p.article
+          AND tc.make = $${makeParamIdx} AND tc.model = ANY($${modelsParamIdx}::text[])
+      )
+    `);
+  }
+
   return { clause: conditions.join(' AND '), params };
 }
 
