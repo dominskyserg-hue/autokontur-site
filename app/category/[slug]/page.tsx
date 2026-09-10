@@ -19,12 +19,14 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
-import { CATEGORIES, getCategoryBySlug } from '@/lib/categories';
+import { CATEGORIES, getCategoryBySlug, findNarrowPageForVehicle } from '@/lib/categories';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
+import CategoryVehicleFilter from '@/components/CategoryVehicleFilter';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
+import { buildVehicleWhereClause, hasVehicleFilter, type VehicleFilterParams } from '@/lib/vehicleFilter';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
@@ -95,13 +97,38 @@ interface CategoryProduct {
 const loadCategoryProducts = cache(async function loadCategoryProducts(
   slug: string,
   page: number,
-  makeSlug: string | null
+  makeSlug: string | null,
+  vehicle: VehicleFilterParams
 ): Promise<{ products: CategoryProduct[]; total: number }> {
   const category = getCategoryBySlug(slug);
   if (!category) return { products: [], total: 0 };
 
   const make = makeSlug ? getCarMakeBySlug(makeSlug) ?? null : null;
-  const { clause, params } = buildCategoryAndMakeWhereClause(category, make, 1);
+  const { clause: categoryClause, params: categoryParams } = buildCategoryAndMakeWhereClause(category, make, 1);
+
+  // Фільтр за моделлю/роком/двигуном (components/CategoryVehicleFilter.tsx)
+  // — окрема умова ПОВЕРХ категорії+марки, той самий tecdoc_compatibility-
+  // індекс, що й у вузьких SEO-сторінках і в основному пошуку
+  // (lib/vehicleFilter.ts). Умова додається ЛИШЕ якщо задано модель/рік/
+  // двигун — сам по собі ?marka= (без них) лишається старою, вже
+  // існуючою поведінкою (buildCategoryAndMakeWhereClause вище й так її
+  // враховує), без додаткової tecdoc-умови і без noindex нижче в
+  // generateMetadata. Марку передаємо СЮДИ ЩЕ РАЗ, коли умова таки
+  // будується (вона вже врахована окремо в categoryClause) — без
+  // цього гілка EXISTS(tecdoc_compatibility) шукала б задану модель
+  // серед УСІХ 600+ виробників у дампі TecDoc, а не лише в межах
+  // обраної марки (рідкісний, але можливий збіг назви моделі)
+  const hasModelYearEngineFilter = hasVehicleFilter({ model: vehicle.model, year: vehicle.year, engine: vehicle.engine });
+  const vehicleResult = hasModelYearEngineFilter
+    ? buildVehicleWhereClause(
+        { make: make?.name, model: vehicle.model, year: vehicle.year, engine: vehicle.engine },
+        categoryParams.length + 1
+      )
+    : null;
+
+  const clause = vehicleResult ? `${categoryClause} AND ${vehicleResult.clause}` : categoryClause;
+  const params = vehicleResult ? [...categoryParams, ...vehicleResult.params] : categoryParams;
+
   const offset = (page - 1) * PAGE_SIZE;
 
   const [productsResult, countResult] = await Promise.all([
@@ -136,7 +163,9 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
 
 // Next.js 15: params і searchParams — Promise
 type PageParams = { slug: string };
-type PageSearchParams = { page?: string; marka?: string };
+// model/year/engine — новий фільтр (components/CategoryVehicleFilter.tsx),
+// marka лишається як і була (курований slug марки, окремий від них)
+type PageSearchParams = { page?: string; marka?: string; model?: string; year?: string; engine?: string };
 
 export async function generateMetadata({
   params,
@@ -146,12 +175,13 @@ export async function generateMetadata({
   searchParams: Promise<PageSearchParams>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const { marka } = await searchParams;
+  const { marka, model, year, engine } = await searchParams;
   const category = getCategoryBySlug(slug);
   if (!category) return {};
 
   const make = marka ? getCarMakeBySlug(marka) : undefined;
-  const { total } = await loadCategoryProducts(slug, 1, marka ?? null);
+  const hasModelYearEngineFilter = hasVehicleFilter({ model, year, engine });
+  const { total } = await loadCategoryProducts(slug, 1, marka ?? null, { model, year, engine });
 
   return {
     title: make ? `${category.name} ${make.name} купити — DominatorParts` : category.metaTitle,
@@ -162,8 +192,20 @@ export async function generateMetadata({
     // каталозі) навмисно не індексується — сторінка без товарів
     // виглядає для Google як "тонкий" неякісний контент і може
     // зашкодити довірі до решти сайту. Як тільки товари з'являться,
-    // noindex зникне сам собою при наступному обході
-    robots: total === 0 ? { index: false, follow: true } : undefined,
+    // noindex зникне сам собою при наступному обході.
+    //
+    // Фільтр за моделлю/роком/двигуном (hasModelYearEngineFilter) —
+    // ОКРЕМА причина для noindex, незалежна від total: навіть якщо
+    // товари є, кожна комбінація марка+модель+рік+двигун — це, по суті,
+    // той самий список товарів категорії, лише вужче відфільтрований,
+    // без власного унікального тексту. Плодити в індексі Google тисячі
+    // таких слабких комбінацій — пряма шкода для SEO (canonical нижче
+    // веде назад на "чисту" сторінку категорії, тому весь "вес" з
+    // посилань на цю сторінку однаково дістається їй). Голий ?marka=
+    // (без моделі/року/двигуна) під цю умову НЕ підпадає — то давніша,
+    // уже проіндексована поведінка, яку свідомо не чіпаємо
+    robots: total === 0 || hasModelYearEngineFilter ? { index: false, follow: true } : undefined,
+    alternates: hasModelYearEngineFilter ? { canonical: `${SITE_URL}/category/${slug}` } : undefined,
   };
 }
 
@@ -197,20 +239,46 @@ export default async function CategoryPage({
   searchParams: Promise<PageSearchParams>;
 }) {
   const { slug } = await params;
-  const { page: pageParam, marka } = await searchParams;
+  const { page: pageParam, marka, model, year, engine } = await searchParams;
 
   const category = getCategoryBySlug(slug);
   if (!category) notFound();
 
   const make = marka ? getCarMakeBySlug(marka) : undefined;
+
+  // ==================== ДЕДУПЛІКАЦІЯ: РЕДИРЕКТ НА ГОТОВУ ВУЗЬКУ СТОРІНКУ ====================
+  // Якщо для обраної в фільтрі комбінації марка+модель уже існує окрема
+  // SEO-сторінка під ЦЮ Ж широку категорію (lib/categories.ts,
+  // findNarrowPageForVehicle) — ведемо туди постійним редиректом, а не
+  // показуємо ті самі товари вдруге за адресою з query-параметрами.
+  // Перевіряється тільки за марка+модель (рік/двигун на дедуплікацію
+  // не впливають — вузькі сторінки їх і так не враховують)
+  if (make && model) {
+    const narrowPage = findNarrowPageForVehicle(slug, make.name, model);
+    if (narrowPage) {
+      permanentRedirect(`/category/${narrowPage.slug}`);
+    }
+  }
+
   const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
-  const { products, total } = await loadCategoryProducts(slug, page, marka ?? null);
+  const { products, total } = await loadCategoryProducts(slug, page, marka ?? null, { model, year, engine });
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // Пагінація має зберігати ?marka= при переході між сторінками —
-  // інакше фільтр по марці скидався б на другій сторінці результатів
-  const pageHref = (targetPage: number) =>
-    `/category/${slug}?page=${targetPage}${make ? `&marka=${make.slug}` : ''}`;
+  const hasModelYearEngineFilter = hasVehicleFilter({ model, year, engine });
+
+  // Пагінація має зберігати весь поточний фільтр (marka/model/year/
+  // engine) при переході між сторінками — інакше він скидався б на
+  // другій сторінці результатів
+  const filterQuery = new URLSearchParams();
+  if (make) filterQuery.set('marka', make.slug);
+  if (model) filterQuery.set('model', model);
+  if (year) filterQuery.set('year', year);
+  if (engine) filterQuery.set('engine', engine);
+  const pageHref = (targetPage: number) => {
+    const q = new URLSearchParams(filterQuery);
+    q.set('page', String(targetPage));
+    return `/category/${slug}?${q.toString()}`;
+  };
 
   // ==================== SCHEMA.ORG (JSON-LD) ====================
   // Порядок хлібних крихт ТОЧНО повторює видиму <nav> нижче — Google
@@ -279,15 +347,20 @@ export default async function CategoryPage({
           )}
         </header>
 
+        {/* ==================== ФІЛЬТР ЗА АВТОМОБІЛЕМ ==================== */}
+        <CategoryVehicleFilter value={{ makeSlug: marka ?? '', model: model ?? '', year: year ?? '', engine: engine ?? '' }} />
+
         {/* ==================== СПИСОК ТОВАРІВ ==================== */}
         {products.length === 0 ? (
           <div
             className="rounded-2xl p-6 text-sm"
             style={{ background: TECH_SURFACE, border: `1px dashed ${TECH_BORDER}`, color: TECH_MUTED }}
           >
-            {make
-              ? `Зараз немає товарів "${category.name}" для ${make.name} у наявності. `
-              : 'Зараз у цій категорії немає товарів у наявності. '}
+            {hasModelYearEngineFilter
+              ? `Немає в наявності для цієї моделі${make ? ` (${make.name}${model ? ` ${model}` : ''})` : ''}. Спробуйте прибрати рік або об'єм двигуна у фільтрі вище — можливо, вони обрані занадто вузько. `
+              : make
+                ? `Зараз немає товарів "${category.name}" для ${make.name} у наявності. `
+                : 'Зараз у цій категорії немає товарів у наявності. '}
             Скористайтесь пошуком за артикулом або підбором за VIN на{' '}
             <Link href="/" className="font-medium underline" style={{ color: TECH_ACCENT_BRIGHT }}>
               Головній сторінці

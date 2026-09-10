@@ -609,6 +609,17 @@ export const CATEGORIES: CategoryDef[] = [
     intro:
       'Кульові опори для рамного позашляховика Mitsubishi Pajero II — деталь, яка часто зношується через навантаження позашляхового ходу підвіски.',
     matchGroups: [['куль', 'шаров'], ['опор'], ['pajero ii ', 'pajero ii,']],
+    // tecdocVehicle тут НЕ впливає на добір товарів (сторінка й далі
+    // працює через matchGroups вище, це підтверджено робочим рішенням) —
+    // додано ЛИШЕ як ідентифікатор для дедуплікації фільтра марка/
+    // модель/рік/двигун на широких сторінках категорій (findNarrowPageForVehicle
+    // нижче): якщо покупець на /category/kulovi-opory обере Mitsubishi +
+    // цю саму модель у фільтрі, його переспрямує сюди, а не покаже ті ж
+    // товари вдруге за іншою адресою
+    tecdocVehicle: {
+      make: 'MITSUBISHI',
+      models: ['SHOGUN II (V3_W, V2_W, V4_W)', 'SHOGUN II Geländewagen offen (V2_W, V4_W)', 'PAJERO/SHOGUN CLASSIC (V2_W)'],
+    },
     hideFromIndex: true,
     modelGroup: 'mitsubishi-pajero-2',
     modelLabel: 'Mitsubishi Pajero II',
@@ -1061,6 +1072,36 @@ export function getRelatedByModel(category: CategoryDef): CategoryDef[] {
 // блок "Популярні моделі" на сторінці широкої категорії
 export function getNarrowVariants(parentSlug: string): CategoryDef[] {
   return CATEGORIES.filter((c) => c.parentCategorySlug === parentSlug);
+}
+
+// ------------------------------------------------------------
+// ДЕДУПЛІКАЦІЯ ФІЛЬТРА МАРКА/МОДЕЛЬ/РІК/ДВИГУН (components/CategoryVehicleFilter.tsx)
+// ------------------------------------------------------------
+// Якщо покупець на широкій сторінці ("Кульові опори") обирає у фільтрі
+// марку+модель, під яку вже ІСНУЄ готова вузька SEO-сторінка ("Кульові
+// опори Mitsubishi Pajero II") — показувати ті самі товари ще раз за
+// іншою адресою (/category/kulovi-opory?marka=...&model=...) означало
+// б дублювати контент для Google. Замість цього сторінка категорії
+// (app/category/[slug]/page.tsx) робить permanentRedirect() на готову
+// вузьку сторінку. Зіставлення йде ЛИШЕ по tecdocVehicle (make + точне
+// значення model з tecdoc_compatibility — те саме, що повертає
+// /api/products/car-options?field=model, яким заповнюється й сам
+// випадаючий список фільтра) — старі вузькі сторінки хвиль 1-4 без
+// tecdocVehicle у дедуплікації участі не беруть (для них це поле
+// просто не заповнене й не обов'язкове)
+export function findNarrowPageForVehicle(
+  parentSlug: string,
+  make: string,
+  model: string
+): CategoryDef | undefined {
+  const makeUpper = make.trim().toUpperCase();
+  return CATEGORIES.find(
+    (c) =>
+      c.parentCategorySlug === parentSlug &&
+      c.tecdocVehicle !== undefined &&
+      c.tecdocVehicle.make.toUpperCase() === makeUpper &&
+      c.tecdocVehicle.models.includes(model)
+  );
 }
 
 // ------------------------------------------------------------
