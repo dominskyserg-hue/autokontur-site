@@ -15,9 +15,9 @@ import { CATEGORIES } from '@/lib/categories';
 import { TECH_BG, TECH_SURFACE_2, TECH_BORDER, TECH_INK, TECH_MUTED, TECH_FAINT, TECH_DISPLAY_FONT, TECH_BODY_FONT } from '@/lib/techTheme';
 
 export const metadata: Metadata = {
-  title: 'Категорії автозапчастин — DominatorParts',
+  title: 'Категорії автозапчастин для іномарок — DominatorParts',
   description:
-    'Гальмівні колодки та диски, амортизатори, сайлентблоки, фільтри, свічки та інші деталі для Toyota, Ford, Volkswagen, Audi, Skoda з доставкою по Україні.',
+    'Запчастини для іномарок за категоріями: гальмівні колодки та диски, амортизатори, сайлентблоки, фільтри, свічки та інші деталі для Toyota, Ford, Volkswagen, Audi, Skoda з доставкою по Україні.',
 };
 
 export default function CategoryIndexPage() {

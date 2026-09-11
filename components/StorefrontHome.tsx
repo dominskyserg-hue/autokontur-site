@@ -1454,7 +1454,7 @@ export default function StorefrontHome() {
                 className="text-4xl md:text-5xl lg:text-[3.2rem] leading-[1.05] mb-5"
                 style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, letterSpacing: '-0.01em', color: '#fff', textWrap: 'balance' }}
               >
-                НАДІЙНІ ДЕТАЛІ.
+                АВТОЗАПЧАСТИНИ ДЛЯ ІНОМАРОК.
                 <br />
                 <span
                   style={{
@@ -1464,7 +1464,7 @@ export default function StorefrontHome() {
                     color: 'transparent',
                   }}
                 >
-                  ПЕРЕВІРЕНИЙ СЕРВІС.
+                  НАДІЙНО. ШВИДКО. ПЕРЕВІРЕНО.
                 </span>
               </h1>
               <p className="text-sm md:text-base mb-9 max-w-md mx-auto lg:mx-0" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
@@ -2322,6 +2322,11 @@ export default function StorefrontHome() {
                 onClick={() => setVinModalOpen(true)}
               />
             </div>
+            <p className="mt-3 text-center text-xs sm:text-left" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+              <Link href="/pidbir-za-vin" className="underline-offset-2 hover:underline" style={{ color: TECH_ACCENT_BRIGHT }}>
+                Детальніше про підбір запчастин за VIN-кодом →
+              </Link>
+            </p>
           </div>
 
           {/* ==================== ПОПУЛЯРНІ ТОВАРИ ==================== */}

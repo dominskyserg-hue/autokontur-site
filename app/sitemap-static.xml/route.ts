@@ -23,6 +23,7 @@ export async function GET() {
     { loc: SITE_URL, lastmod: today, changefreq: 'daily', priority: 1 },
     { loc: `${SITE_URL}/category`, lastmod: today, changefreq: 'weekly', priority: 0.8 },
     { loc: `${SITE_URL}/marky`, lastmod: today, changefreq: 'weekly', priority: 0.8 },
+    { loc: `${SITE_URL}/pidbir-za-vin`, lastmod: today, changefreq: 'monthly', priority: 0.7 },
     { loc: `${SITE_URL}/about`, lastmod: today, changefreq: 'monthly', priority: 0.4 },
     { loc: `${SITE_URL}/delivery`, lastmod: today, changefreq: 'monthly', priority: 0.5 },
     { loc: `${SITE_URL}/contacts`, lastmod: today, changefreq: 'monthly', priority: 0.5 },
