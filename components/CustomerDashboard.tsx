@@ -28,6 +28,7 @@
 
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import Link from 'next/link';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import {
   TECH_BG,
@@ -320,7 +321,16 @@ export default function CustomerDashboard() {
   // ==================== ЕКРАН ВХОДУ ====================
   if (!loggedInPhone) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-5" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-5" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
+        <div className="w-full max-w-sm">
+          <Link
+            href="/"
+            className="text-xs font-medium transition-colors hover:text-white"
+            style={{ color: TECH_MUTED }}
+          >
+            ← На головну
+          </Link>
+        </div>
         <div
           className="w-full max-w-sm rounded-2xl p-7"
           style={{ background: TECH_SURFACE, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER_2}` }}
@@ -398,14 +408,23 @@ export default function CustomerDashboard() {
               {loggedInPhone}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={handleLogout}
-            className="rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-white/5"
-            style={{ background: 'rgba(255,255,255,0.05)', color: TECH_MUTED }}
-          >
-            Вийти
-          </button>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className="rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-white/5"
+              style={{ background: 'rgba(255,255,255,0.05)', color: TECH_MUTED }}
+            >
+              ← До пошуку
+            </Link>
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-white/5"
+              style={{ background: 'rgba(255,255,255,0.05)', color: TECH_MUTED }}
+            >
+              Вийти
+            </button>
+          </div>
         </div>
       </header>
 
