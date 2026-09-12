@@ -1,26 +1,33 @@
 'use client';
 
 // ============================================================
-// Экран "Скидки клиентам" — персональные скидки покупателям по
-// номеру телефона (customer_discounts). Скидка применяется
-// АВТОМАТИЧЕСКИ при оформлении заказа (app/api/orders/create/route.ts),
-// как только покупатель укажет тот же номер телефона, что и здесь —
-// без промокода и без личного кабинета/пароля (на этом сайте
-// покупатель вообще не заводит аккаунт, см. components/CustomerDashboard.tsx).
+// Экран "Скидки и наценки клиентам" — персональные правила цены для
+// покупателя по номеру телефона (customer_pricing_rules). Правило
+// применяется АВТОМАТИЧЕСКИ при оформлении заказа
+// (app/api/orders/create/route.ts), как только покупатель укажет тот
+// же номер телефона, что и здесь — без промокода и без личного
+// кабинета/пароля (на этом сайте покупатель вообще не заводит
+// аккаунт, см. components/CustomerDashboard.tsx).
+//
+// У одного телефона одновременно может быть только ОДНО правило —
+// либо скидка, либо наценка (rule_type), не обе сразу.
 //
 // Использует эндпоинты:
-//   GET    /api/admin/customer-discounts          — список
-//   POST   /api/admin/customer-discounts          — назначить (создать/обновить)
-//   DELETE /api/admin/customer-discounts/[phone]  — снять скидку
+//   GET    /api/admin/customer-pricing-rules          — список
+//   POST   /api/admin/customer-pricing-rules          — назначить (создать/обновить)
+//   DELETE /api/admin/customer-pricing-rules/[phone]  — снять правило
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import AdminLayout from './AdminLayout';
 
-interface CustomerDiscount {
+type RuleType = 'discount' | 'markup';
+
+interface CustomerPricingRule {
   phone: string;
-  discountPercent: number;
+  ruleType: RuleType;
+  percent: number;
   note: string | null;
   createdAt: string;
   updatedAt: string;
@@ -36,72 +43,78 @@ function formatDateTime(iso: string): string {
   });
 }
 
-export default function CustomerDiscountsScreen() {
-  const [discounts, setDiscounts] = useState<CustomerDiscount[]>([]);
+export default function CustomerPricingRulesScreen() {
+  const [rules, setRules] = useState<CustomerPricingRule[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [phone, setPhone] = useState('');
-  const [discountPercent, setDiscountPercent] = useState('');
+  const [ruleType, setRuleType] = useState<RuleType>('discount');
+  const [percent, setPercent] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   const [deletingPhone, setDeletingPhone] = useState<string | null>(null);
 
-  const fetchDiscounts = useCallback(async () => {
+  const fetchRules = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const response = await fetch('/api/admin/customer-discounts');
+      const response = await fetch('/api/admin/customer-pricing-rules');
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Не удалось получить список скидок');
+        throw new Error(data.error || 'Не удалось получить список правил');
       }
-      setDiscounts(data.discounts as CustomerDiscount[]);
+      setRules(data.rules as CustomerPricingRule[]);
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Ошибка сети при загрузке скидок');
+      setLoadError(error instanceof Error ? error.message : 'Ошибка сети при загрузке правил');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchDiscounts();
-  }, [fetchDiscounts]);
+    fetchRules();
+  }, [fetchRules]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormError(null);
 
-    const parsedDiscount = parseFloat(discountPercent);
+    const parsedPercent = parseFloat(percent);
     if (!phone.trim()) {
       setFormError('Укажите номер телефона покупателя');
       return;
     }
-    if (!Number.isFinite(parsedDiscount) || parsedDiscount <= 0 || parsedDiscount > 100) {
-      setFormError('Скидка должна быть числом от 0 до 100 (больше нуля)');
+    if (!Number.isFinite(parsedPercent) || parsedPercent <= 0) {
+      setFormError('Процент должен быть положительным числом');
+      return;
+    }
+    if (ruleType === 'discount' && parsedPercent > 100) {
+      setFormError('Скидка не может быть больше 100%');
       return;
     }
 
     setSaving(true);
     try {
-      const response = await fetch('/api/admin/customer-discounts', {
+      const response = await fetch('/api/admin/customer-pricing-rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, discountPercent: parsedDiscount, note: note || undefined }),
+        body: JSON.stringify({ phone, ruleType, percent: parsedPercent, note: note || undefined }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Не удалось назначить скидку');
+        throw new Error(data.error || 'Не удалось назначить правило');
       }
 
       setPhone('');
-      setDiscountPercent('');
+      setPercent('');
       setNote('');
-      await fetchDiscounts();
+      setRuleType('discount');
+      await fetchRules();
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : 'Ошибка сети при сохранении скидки');
+      setFormError(error instanceof Error ? error.message : 'Ошибка сети при сохранении правила');
     } finally {
       setSaving(false);
     }
@@ -110,14 +123,14 @@ export default function CustomerDiscountsScreen() {
   const handleDelete = async (targetPhone: string) => {
     setDeletingPhone(targetPhone);
     try {
-      const response = await fetch(`/api/admin/customer-discounts/${targetPhone}`, { method: 'DELETE' });
+      const response = await fetch(`/api/admin/customer-pricing-rules/${targetPhone}`, { method: 'DELETE' });
       const data = await response.json();
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Не удалось удалить скидку');
+        throw new Error(data.error || 'Не удалось удалить правило');
       }
-      setDiscounts((prev) => prev.filter((d) => d.phone !== targetPhone));
+      setRules((prev) => prev.filter((r) => r.phone !== targetPhone));
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : 'Ошибка сети при удалении скидки');
+      setLoadError(error instanceof Error ? error.message : 'Ошибка сети при удалении правила');
     } finally {
       setDeletingPhone(null);
     }
@@ -126,12 +139,12 @@ export default function CustomerDiscountsScreen() {
   return (
     <AdminLayout active="customerDiscounts">
       <p className="text-xs mb-1" style={{ color: 'var(--ink-faint)' }}>
-        Админ-панель / Скидки клиентам
+        Админ-панель / Скидки и наценки клиентам
       </p>
-      <h1 className="text-2xl font-semibold mb-1">Скидки клиентам</h1>
+      <h1 className="text-2xl font-semibold mb-1">Скидки и наценки клиентам</h1>
       <p className="text-sm mb-6" style={{ color: 'var(--ink-muted)' }}>
-        Персональная скидка по номеру телефона — применяется автоматически при оформлении заказа,
-        как только покупатель укажет тот же номер. Промокод вводить не нужно.
+        Персональное правило цены по номеру телефона — применяется автоматически при оформлении
+        заказа, как только покупатель укажет тот же номер. Промокод вводить не нужно.
       </p>
 
       <form
@@ -152,17 +165,31 @@ export default function CustomerDiscountsScreen() {
             style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
           />
         </div>
+        <div className="w-40">
+          <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+            Тип
+          </label>
+          <select
+            value={ruleType}
+            onChange={(e) => setRuleType(e.target.value as RuleType)}
+            className="w-full px-3 py-2 text-sm rounded-md"
+            style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+          >
+            <option value="discount">Скидка</option>
+            <option value="markup">Наценка</option>
+          </select>
+        </div>
         <div className="w-32">
           <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
-            Скидка, %
+            Процент, %
           </label>
           <input
             type="number"
             min={0}
-            max={100}
+            max={ruleType === 'discount' ? 100 : undefined}
             step={0.5}
-            value={discountPercent}
-            onChange={(e) => setDiscountPercent(e.target.value)}
+            value={percent}
+            onChange={(e) => setPercent(e.target.value)}
             placeholder="10"
             className="w-full px-3 py-2 text-sm rounded-md font-mono"
             style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
@@ -212,18 +239,18 @@ export default function CustomerDiscountsScreen() {
           </p>
         )}
 
-        {!loading && discounts.length === 0 && (
+        {!loading && rules.length === 0 && (
           <p className="text-xs p-4" style={{ color: 'var(--ink-faint)' }}>
-            Скидок пока не назначено.
+            Правил пока не назначено.
           </p>
         )}
 
-        {!loading && discounts.length > 0 && (
+        {!loading && rules.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                  {['Телефон', 'Скидка', 'Заметка', 'Обновлено', ''].map((heading) => (
+                  {['Телефон', 'Правило', 'Заметка', 'Обновлено', ''].map((heading) => (
                     <th
                       key={heading}
                       className="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap"
@@ -235,32 +262,36 @@ export default function CustomerDiscountsScreen() {
                 </tr>
               </thead>
               <tbody>
-                {discounts.map((d) => (
-                  <tr key={d.phone} style={{ borderBottom: '1px solid var(--line)' }}>
-                    <td className="px-4 py-3 font-mono whitespace-nowrap">{d.phone}</td>
+                {rules.map((r) => (
+                  <tr key={r.phone} style={{ borderBottom: '1px solid var(--line)' }}>
+                    <td className="px-4 py-3 font-mono whitespace-nowrap">{r.phone}</td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span
                         className="text-xs px-2 py-1 rounded-full font-medium"
-                        style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
+                        style={
+                          r.ruleType === 'discount'
+                            ? { background: 'var(--good-soft)', color: 'var(--good)' }
+                            : { background: 'var(--warn-soft)', color: 'var(--warn)' }
+                        }
                       >
-                        -{d.discountPercent}%
+                        {r.ruleType === 'discount' ? `Скидка -${r.percent}%` : `Наценка +${r.percent}%`}
                       </span>
                     </td>
                     <td className="px-4 py-3" style={{ color: 'var(--ink-muted)' }}>
-                      {d.note || '—'}
+                      {r.note || '—'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap" style={{ color: 'var(--ink-faint)' }}>
-                      {formatDateTime(d.updatedAt)}
+                      {formatDateTime(r.updatedAt)}
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <button
                         type="button"
-                        disabled={deletingPhone === d.phone}
-                        onClick={() => handleDelete(d.phone)}
+                        disabled={deletingPhone === r.phone}
+                        onClick={() => handleDelete(r.phone)}
                         className="text-xs px-3 py-1.5 rounded-md font-medium disabled:opacity-50"
                         style={{ background: 'var(--bad-soft)', color: 'var(--bad)' }}
                       >
-                        {deletingPhone === d.phone ? 'Удаление...' : 'Снять скидку'}
+                        {deletingPhone === r.phone ? 'Удаление...' : 'Снять'}
                       </button>
                     </td>
                   </tr>

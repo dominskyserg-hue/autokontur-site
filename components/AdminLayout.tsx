@@ -104,7 +104,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'ПРОДАЖИ',
     items: [
       { key: 'orders', label: 'Заказы', href: '/admin/orders' },
-      { key: 'customerDiscounts', label: 'Скидки клиентам', href: '/admin/customer-discounts' },
+      { key: 'customerDiscounts', label: 'Скидки и наценки клиентам', href: '/admin/customer-pricing-rules' },
       { key: 'vinRequests', label: 'VIN-запросы', href: '/admin/vin-requests' },
       { key: 'analytics', label: 'Аналитика', href: '/admin/analytics' },
     ],

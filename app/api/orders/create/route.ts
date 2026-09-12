@@ -276,21 +276,27 @@ export async function POST(request: NextRequest) {
     );
     const orderId = orderResult.rows[0].id;
 
-    // Персональна знижка покупця (customer_discounts, за нормалізованим
-    // номером телефону) — застосовується АВТОМАТИЧНО, без промокоду:
-    // якщо для цього покупця раніше призначили знижку в адмінці
-    // (app/api/admin/customer-discounts/route.ts), вона одразу
-    // враховується в ціні кожної позиції ЩЕ ДО запису в order_items —
-    // так order_items і надалі лишається чесним "знімком" того, що
-    // покупець реально заплатив (той самий принцип, що й з product-level
-    // discount_percent при імпорті прайсу, див. lib/priceListImport.ts)
+    // Персональне правило ціни покупця (customer_pricing_rules, за
+    // нормалізованим номером телефону) — застосовується АВТОМАТИЧНО,
+    // без промокоду: якщо для цього покупця раніше призначили знижку
+    // або націнку в адмінці (app/api/admin/customer-pricing-rules/route.ts),
+    // вона одразу враховується в ціні кожної позиції ЩЕ ДО запису в
+    // order_items — так order_items і надалі лишається чесним "знімком"
+    // того, що покупець реально заплатив (той самий принцип, що й з
+    // product-level discount_percent при імпорті прайсу, див.
+    // lib/priceListImport.ts). Знижка й націнка — взаємовиключні: у
+    // телефону одночасно може бути лише ОДНЕ правило (rule_type)
     const normalizedPhone = normalizePhone(customerPhone);
-    const discountResult = await client.query<{ discount_percent: string }>(
-      'SELECT discount_percent FROM customer_discounts WHERE phone = $1',
+    const pricingRuleResult = await client.query<{ rule_type: 'discount' | 'markup'; percent: string }>(
+      'SELECT rule_type, percent FROM customer_pricing_rules WHERE phone = $1',
       [normalizedPhone]
     );
-    const customerDiscountPercent =
-      discountResult.rows.length > 0 ? parseFloat(discountResult.rows[0].discount_percent) : 0;
+    const pricingRule = pricingRuleResult.rows[0];
+    const customerPricingMultiplier = !pricingRule
+      ? 1
+      : pricingRule.rule_type === 'discount'
+        ? 1 - parseFloat(pricingRule.percent) / 100
+        : 1 + parseFloat(pricingRule.percent) / 100;
 
     // Шаг 2: позиции заказа — по одной вставке на каждый товар из
     // корзины, с уже проверенными (не из тела запроса!) артикулом,
@@ -301,8 +307,7 @@ export async function POST(request: NextRequest) {
     const summaryLines: string[] = [];
     for (const item of items) {
       const product = productById.get(item.id)!;
-      const unitPrice =
-        Math.round(parseFloat(product.retail_price) * (1 - customerDiscountPercent / 100) * 100) / 100;
+      const unitPrice = Math.round(parseFloat(product.retail_price) * customerPricingMultiplier * 100) / 100;
 
       await client.query(
         `
@@ -339,7 +344,11 @@ export async function POST(request: NextRequest) {
         `${customerName} ${customerSurname}, ${customerPhone}`,
         `${city}, ${novaPoshtaAddress}`,
         comment ? `Коментар: ${comment}` : null,
-        customerDiscountPercent > 0 ? `Персональна знижка: -${customerDiscountPercent}%` : null,
+        pricingRule
+          ? pricingRule.rule_type === 'discount'
+            ? `Персональна знижка: -${pricingRule.percent}%`
+            : `Персональна націнка: +${pricingRule.percent}%`
+          : null,
         '',
         ...summaryLines,
         '',
