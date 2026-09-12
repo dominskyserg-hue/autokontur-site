@@ -22,7 +22,7 @@ import { Pool } from 'pg';
 import { CategoryDef, getToCategories } from '@/lib/categories';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
-import { getCustomerPricingMultiplier, applyPricingMultiplier } from '@/lib/customerPricing';
+import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
@@ -96,10 +96,7 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
   // самий покупець для всіх секцій), а не по колу на кожну категорію.
   // Див. коментар біля того ж коду в app/category/[slug]/page.tsx
   const cookieStore = await cookies();
-  const customerPricingMultiplier = await getCustomerPricingMultiplier(
-    pool,
-    cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value
-  );
+  const customerPricingRule = await getCustomerPricingRule(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value);
 
   return Promise.all(
     categories.map(async (category): Promise<ToSection> => {
@@ -108,7 +105,7 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
       const [productsResult, countResult] = await Promise.all([
         pool.query(
           `
-          SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, s.delivery_time
+          SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, s.delivery_time
           FROM products p
           JOIN suppliers s ON s.id = p.supplier_id
           WHERE ${clause}
@@ -128,7 +125,7 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
         article: row.article,
         brand: row.brand,
         name: row.name,
-        retailPrice: applyPricingMultiplier(parseFloat(row.retail_price), customerPricingMultiplier),
+        retailPrice: computeCustomerPrice(parseFloat(row.cost_price), parseFloat(row.retail_price), customerPricingRule),
         stock: row.stock,
         deliveryTime: row.delivery_time,
       }));

@@ -7,6 +7,15 @@
 // воно вирішальне і НЕ залежить від цього файла, тому підміна цієї
 // cookie в браузері не дає покупцю реально заплатити менше).
 //
+// ВАЖЛИВО про базу розрахунку: для покупця з персональним правилом
+// відсоток рахується НЕ від retail_price (вона вже включає ЗВИЧАЙНУ
+// націнку магазину, mapping.markup/supplier_markup_rules — див.
+// lib/priceListImport.ts), а від "голої" ціни постачальника з прайса —
+// products.cost_price. Інакше для клієнта з персональною націнкою
+// вийшло б подвійне накручення (наша звичайна націнка + ще й його), а
+// для знижки — знижка рахувалась би від уже накрученої ціни, а не від
+// реальної собівартості, як домовлено з власником магазину.
+//
 // Покупець на цьому сайті не має пароля/сесії — єдина ідентифікація
 // це номер телефону (див. components/CustomerDashboard.tsx, "вхід" у
 // Особистий кабінет). Щоб той самий номер міг впливати на ціни, які
@@ -28,13 +37,6 @@ export interface CustomerPricingRule {
   percent: number;
 }
 
-// Множник, на який множиться "звичайна" retail_price. 1, якщо правила
-// нема (телефон не переданий або для нього нічого не призначено)
-export function pricingRuleToMultiplier(rule: CustomerPricingRule | null): number {
-  if (!rule) return 1;
-  return rule.ruleType === 'discount' ? 1 - rule.percent / 100 : 1 + rule.percent / 100;
-}
-
 // rawPhone — значення cookie ЯК Є (може бути undefined/порожнім, якщо
 // покупець не "логінився") — нормалізація відбувається тут же
 export async function getCustomerPricingRule(
@@ -54,20 +56,12 @@ export async function getCustomerPricingRule(
   return { ruleType: result.rows[0].rule_type, percent: parseFloat(result.rows[0].percent) };
 }
 
-// Зручний хелпер для місць, де просто потрібне готове число-множник
-// (напр. app/api/products/route.ts, що мапить багато рядків підряд) —
-// щоб не тягнути pricingRuleToMultiplier окремим імпортом щоразу
-export async function getCustomerPricingMultiplier(
-  pool: Pool,
-  rawPhone: string | undefined | null
-): Promise<number> {
-  const rule = await getCustomerPricingRule(pool, rawPhone);
-  return pricingRuleToMultiplier(rule);
-}
-
-// Округлення до копійок — той самий приём, що і скрізь у проєкті для
-// грошових значень (Math.round(x * 100) / 100), винесений сюди один
-// раз, щоб не повторювати в кожному місці застосування множника
-export function applyPricingMultiplier(price: number, multiplier: number): number {
-  return Math.round(price * multiplier * 100) / 100;
+// Ціна, яку реально бачить (і платить) конкретний покупець:
+//   - нема правила -> звичайна retail_price, як і для всіх
+//   - є правило -> costPrice ± percent% (від "голої" ціни постачальника,
+//     НЕ від retail_price — див. коментар на початку файлу)
+export function computeCustomerPrice(costPrice: number, retailPrice: number, rule: CustomerPricingRule | null): number {
+  if (!rule) return retailPrice;
+  const multiplier = rule.ruleType === 'discount' ? 1 - rule.percent / 100 : 1 + rule.percent / 100;
+  return Math.round(costPrice * multiplier * 100) / 100;
 }

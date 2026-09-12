@@ -20,7 +20,7 @@ import { buildProductPath, buildProductSlug } from '@/lib/slug';
 import { getCarMakeByDbValue } from '@/lib/carMakes';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
-import { getCustomerPricingMultiplier, applyPricingMultiplier } from '@/lib/customerPricing';
+import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 
 declare global {
@@ -92,10 +92,18 @@ export interface CrossRefItem {
   stock: number | null;
 }
 
-export const loadProduct = cache(async function loadProduct(id: string): Promise<ProductDetail | null> {
+// costPrice тут — "гола" ціна постачальника (products.cost_price),
+// потрібна ЛИШЕ щоб порахувати персональну ціну покупця (див.
+// lib/customerPricing.ts) в loadProductPageData нижче. У ПУБЛІЧНИЙ
+// ProductDetail (те, що реально йде в JSX/пропси сторінки) вона НЕ
+// потрапляє — щоб оптова собівартість випадково не опинилась у HTML,
+// відданому браузеру покупця
+type ProductDetailRaw = ProductDetail & { costPrice: number };
+
+export const loadProduct = cache(async function loadProduct(id: string): Promise<ProductDetailRaw | null> {
   const result = await pool.query(
     `
-    SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, p.image_url,
+    SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url,
            p.meta_description, p.car_make, p.car_model, p.updated_at,
            s.name AS supplier_name, s.delivery_time
     FROM products p
@@ -113,6 +121,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     article: row.article,
     brand: row.brand,
     name: row.name,
+    costPrice: parseFloat(row.cost_price),
     retailPrice: parseFloat(row.retail_price),
     stock: row.stock,
     imageUrl: row.image_url,
@@ -140,12 +149,14 @@ const loadProductImages = cache(async function loadProductImages(productId: stri
   }));
 });
 
+type OtherOfferRaw = OtherOffer & { costPrice: number };
+
 const loadOtherOffers = cache(async function loadOtherOffers(
   product: ProductDetail
-): Promise<OtherOffer[]> {
+): Promise<OtherOfferRaw[]> {
   const result = await pool.query(
     `
-    SELECT p2.id, p2.retail_price, p2.stock, s2.name AS supplier_name
+    SELECT p2.id, p2.cost_price, p2.retail_price, p2.stock, s2.name AS supplier_name
     FROM products p2
     JOIN suppliers s2 ON s2.id = p2.supplier_id
     WHERE p2.article = $1
@@ -159,6 +170,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
 
   return result.rows.map((row) => ({
     id: row.id,
+    costPrice: parseFloat(row.cost_price),
     retailPrice: parseFloat(row.retail_price),
     stock: row.stock,
     supplierName: row.supplier_name,
@@ -168,9 +180,11 @@ const loadOtherOffers = cache(async function loadOtherOffers(
 // OEM/кросс-номери — та сама модель "груп взаємозамінності", що і в
 // app/api/products/cross-lookup/route.ts (звідти й скопійована логіка
 // вибірки, тут вона лише читає дані, без створення нових зв'язків)
+type CrossRefItemRaw = CrossRefItem & { costPrice: number | null };
+
 const loadCrossReferences = cache(async function loadCrossReferences(
   product: ProductDetail
-): Promise<{ oem: CrossRefItem[]; aftermarket: CrossRefItem[] }> {
+): Promise<{ oem: CrossRefItemRaw[]; aftermarket: CrossRefItemRaw[] }> {
   if (!product.brand) return { oem: [], aftermarket: [] };
 
   const groupsResult = await pool.query(
@@ -182,7 +196,7 @@ const loadCrossReferences = cache(async function loadCrossReferences(
 
   const membersResult = await pool.query(
     `
-    SELECT m.brand, m.part_number, m.part_type, m.product_id, p3.retail_price, p3.stock
+    SELECT m.brand, m.part_number, m.part_type, m.product_id, p3.cost_price, p3.retail_price, p3.stock
     FROM cross_reference_members m
     LEFT JOIN products p3 ON p3.id = m.product_id
     WHERE m.group_id = ANY($1::uuid[])
@@ -192,8 +206,8 @@ const loadCrossReferences = cache(async function loadCrossReferences(
     [groupIds, product.article, product.brand]
   );
 
-  const oem: CrossRefItem[] = [];
-  const aftermarket: CrossRefItem[] = [];
+  const oem: CrossRefItemRaw[] = [];
+  const aftermarket: CrossRefItemRaw[] = [];
   const seen = new Set<string>();
 
   for (const row of membersResult.rows) {
@@ -201,10 +215,11 @@ const loadCrossReferences = cache(async function loadCrossReferences(
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const item: CrossRefItem = {
+    const item: CrossRefItemRaw = {
       brand: row.brand,
       partNumber: row.part_number,
       productId: row.product_id,
+      costPrice: row.cost_price !== null ? parseFloat(row.cost_price) : null,
       retailPrice: row.retail_price !== null ? parseFloat(row.retail_price) : null,
       stock: row.stock,
     };
@@ -263,7 +278,9 @@ const TECDOC_COMPATIBILITY_LIMIT = 20;
 // у schema.sql). tecdoc_crosses.article_a заповнений тією ж функцією
 // cleanArticle() під час імпорту (scripts/tecdoc/cleanArticle.ts),
 // тому пряме порівняння текстом коректне
-const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string): Promise<TecdocCrossItem[]> {
+type TecdocCrossItemRaw = TecdocCrossItem & { costPrice: number | null };
+
+const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string): Promise<TecdocCrossItemRaw[]> {
   const result = await pool.query(
     `
     SELECT
@@ -273,6 +290,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string
       p.brand AS product_brand,
       p.article AS product_article,
       p.name AS product_name,
+      p.cost_price,
       p.retail_price,
       p.stock
     FROM (
@@ -285,7 +303,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string
       WHERE article_a = $1 AND article_b <> $1 AND LENGTH(article_b) >= 3
     ) tc
     LEFT JOIN LATERAL (
-      SELECT id, brand, article, name, retail_price, stock
+      SELECT id, brand, article, name, cost_price, retail_price, stock
       FROM products p2
       WHERE p2.article = tc.article_b AND UPPER(p2.brand) = UPPER(tc.brand_b)
       ORDER BY (p2.stock > 0) DESC, p2.retail_price ASC
@@ -310,6 +328,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string
             name: row.product_name,
           })
         : null,
+    costPrice: row.cost_price !== null ? parseFloat(row.cost_price) : null,
     retailPrice: row.retail_price !== null ? parseFloat(row.retail_price) : null,
     stock: row.stock,
   }));
@@ -408,34 +427,63 @@ export async function loadProductPageData(
   // потрібна незміненою в інших місцях (напр. generateMetadata окремо
   // викликає loadProduct без будь-якої персоналізації). cookies() тут
   // також гарантує, що Next.js не роздасть цю сторінку зі статичного
-  // кешу одному покупцю з ціною іншого
+  // кешу одному покупцю з ціною іншого.
+  //
+  // computeCustomerPrice рахує від costPrice ("голої" ціни постачальника),
+  // а НЕ від retailPrice — інакше для покупця з персональним правилом
+  // накрутилась би ще й звичайна націнка магазину поверх його власної.
+  // costPrice є лише в *Raw-об'єктах нижче (loadProduct/loadOtherOffers/...
+  // повертають розширені типи з costPrice) — у фінальні об'єкти, які
+  // йдуть у JSX, costPrice свідомо НЕ включається (перелік полів
+  // явний, без spread), щоб оптова собівартість не потрапила в HTML,
+  // відданий браузеру покупця
   const cookieStore = await cookies();
-  const customerPricingMultiplier = await getCustomerPricingMultiplier(
-    pool,
-    cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value
-  );
+  const customerPricingRule = await getCustomerPricingRule(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value);
 
   const personalizedProduct: ProductDetail = {
-    ...product,
-    retailPrice: applyPricingMultiplier(product.retailPrice, customerPricingMultiplier),
+    id: product.id,
+    article: product.article,
+    brand: product.brand,
+    name: product.name,
+    retailPrice: computeCustomerPrice(product.costPrice, product.retailPrice, customerPricingRule),
+    stock: product.stock,
+    imageUrl: product.imageUrl,
+    metaDescription: product.metaDescription,
+    carMake: product.carMake,
+    carModel: product.carModel,
+    supplierName: product.supplierName,
+    deliveryTime: product.deliveryTime,
+    updatedAt: product.updatedAt,
   };
   const otherOffers: OtherOffer[] = rawOtherOffers.map((offer) => ({
-    ...offer,
-    retailPrice: applyPricingMultiplier(offer.retailPrice, customerPricingMultiplier),
+    id: offer.id,
+    retailPrice: computeCustomerPrice(offer.costPrice, offer.retailPrice, customerPricingRule),
+    stock: offer.stock,
+    supplierName: offer.supplierName,
   }));
+  const toPublicCrossRef = (item: CrossRefItemRaw): CrossRefItem => ({
+    brand: item.brand,
+    partNumber: item.partNumber,
+    productId: item.productId,
+    retailPrice:
+      item.retailPrice !== null && item.costPrice !== null
+        ? computeCustomerPrice(item.costPrice, item.retailPrice, customerPricingRule)
+        : null,
+    stock: item.stock,
+  });
   const crossRefs = {
-    oem: rawCrossRefs.oem.map((item) => ({
-      ...item,
-      retailPrice: item.retailPrice !== null ? applyPricingMultiplier(item.retailPrice, customerPricingMultiplier) : null,
-    })),
-    aftermarket: rawCrossRefs.aftermarket.map((item) => ({
-      ...item,
-      retailPrice: item.retailPrice !== null ? applyPricingMultiplier(item.retailPrice, customerPricingMultiplier) : null,
-    })),
+    oem: rawCrossRefs.oem.map(toPublicCrossRef),
+    aftermarket: rawCrossRefs.aftermarket.map(toPublicCrossRef),
   };
   const tecdocCrosses: TecdocCrossItem[] = rawTecdocCrosses.map((item) => ({
-    ...item,
-    retailPrice: item.retailPrice !== null ? applyPricingMultiplier(item.retailPrice, customerPricingMultiplier) : null,
+    brand: item.brand,
+    article: item.article,
+    productPath: item.productPath,
+    retailPrice:
+      item.retailPrice !== null && item.costPrice !== null
+        ? computeCustomerPrice(item.costPrice, item.retailPrice, customerPricingRule)
+        : null,
+    stock: item.stock,
   }));
 
   const make = getCarMakeByDbValue(product.carMake);

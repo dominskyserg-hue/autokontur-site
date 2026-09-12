@@ -60,6 +60,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { sendTelegramMessage } from '@/lib/telegramNotify';
 import { normalizePhone } from '@/lib/phoneNormalize';
+import { computeCustomerPrice, type CustomerPricingRule } from '@/lib/customerPricing';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -142,6 +143,7 @@ interface ProductSnapshotRow {
   article: string;
   brand: string | null;
   name: string | null;
+  cost_price: string; // NUMERIC из pg приходит строкой
   retail_price: string; // NUMERIC из pg приходит строкой
   supplier_id: string;
   supplier_name: string;
@@ -240,7 +242,7 @@ export async function POST(request: NextRequest) {
     const ids = items.map((item) => item.id);
     const productsResult = await client.query<ProductSnapshotRow>(
       `
-      SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.supplier_id, s.name AS supplier_name
+      SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.supplier_id, s.name AS supplier_name
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE p.id = ANY($1::uuid[])
@@ -285,18 +287,21 @@ export async function POST(request: NextRequest) {
     // того, що покупець реально заплатив (той самий принцип, що й з
     // product-level discount_percent при імпорті прайсу, див.
     // lib/priceListImport.ts). Знижка й націнка — взаємовиключні: у
-    // телефону одночасно може бути лише ОДНЕ правило (rule_type)
+    // телефону одночасно може бути лише ОДНЕ правило (rule_type).
+    //
+    // computeCustomerPrice рахує відсоток від cost_price ("голої" ціни
+    // постачальника), а НЕ від retail_price — інакше для покупця з
+    // персональним правилом накрутилась би ще й звичайна націнка
+    // магазину поверх його власної (див. lib/customerPricing.ts)
     const normalizedPhone = normalizePhone(customerPhone);
     const pricingRuleResult = await client.query<{ rule_type: 'discount' | 'markup'; percent: string }>(
       'SELECT rule_type, percent FROM customer_pricing_rules WHERE phone = $1',
       [normalizedPhone]
     );
-    const pricingRule = pricingRuleResult.rows[0];
-    const customerPricingMultiplier = !pricingRule
-      ? 1
-      : pricingRule.rule_type === 'discount'
-        ? 1 - parseFloat(pricingRule.percent) / 100
-        : 1 + parseFloat(pricingRule.percent) / 100;
+    const pricingRuleRow = pricingRuleResult.rows[0];
+    const pricingRule: CustomerPricingRule | null = pricingRuleRow
+      ? { ruleType: pricingRuleRow.rule_type, percent: parseFloat(pricingRuleRow.percent) }
+      : null;
 
     // Шаг 2: позиции заказа — по одной вставке на каждый товар из
     // корзины, с уже проверенными (не из тела запроса!) артикулом,
@@ -307,7 +312,7 @@ export async function POST(request: NextRequest) {
     const summaryLines: string[] = [];
     for (const item of items) {
       const product = productById.get(item.id)!;
-      const unitPrice = Math.round(parseFloat(product.retail_price) * customerPricingMultiplier * 100) / 100;
+      const unitPrice = computeCustomerPrice(parseFloat(product.cost_price), parseFloat(product.retail_price), pricingRule);
 
       await client.query(
         `
@@ -345,7 +350,7 @@ export async function POST(request: NextRequest) {
         `${city}, ${novaPoshtaAddress}`,
         comment ? `Коментар: ${comment}` : null,
         pricingRule
-          ? pricingRule.rule_type === 'discount'
+          ? pricingRule.ruleType === 'discount'
             ? `Персональна знижка: -${pricingRule.percent}%`
             : `Персональна націнка: +${pricingRule.percent}%`
           : null,

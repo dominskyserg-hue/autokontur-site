@@ -58,7 +58,7 @@ import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline'
 import { resolveMakeDbValues } from '@/lib/carMakes';
 import { detectCategoryInText, buildCategoryWhereClause } from '@/lib/categories';
 import { extractCarReference } from '@/lib/searchCarText';
-import { getCustomerPricingMultiplier, applyPricingMultiplier } from '@/lib/customerPricing';
+import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
@@ -465,9 +465,9 @@ export async function GET(request: NextRequest) {
     // телефоном "залогіненого" в Особистому кабінеті покупця —
     // components/CustomerDashboard.tsx) — рахуємо ПАРАЛЕЛЬНО з основним
     // запитом товарів (незалежні один від одного), щоб не додавати
-    // зайву затримку. Множник застосовується нижче, при мапінгу рядків
-    const [customerPricingMultiplier, result] = await Promise.all([
-      getCustomerPricingMultiplier(pool, request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value),
+    // зайву затримку. Застосовується нижче, при мапінгу рядків
+    const [customerPricingRule, result] = await Promise.all([
+      getCustomerPricingRule(pool, request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value),
       pool.query(
       `
       SELECT
@@ -521,7 +521,7 @@ export async function GET(request: NextRequest) {
       // возвращает такие значения строкой (чтобы не терять точность
       // при преобразовании в float), поэтому явно переводим в число
       costPrice: parseFloat(row.cost_price),
-      retailPrice: applyPricingMultiplier(parseFloat(row.retail_price), customerPricingMultiplier),
+      retailPrice: computeCustomerPrice(parseFloat(row.cost_price), parseFloat(row.retail_price), customerPricingRule),
       discountPercent: parseFloat(row.discount_percent),
       stock: row.stock,
       supplierId: row.supplier_id,
