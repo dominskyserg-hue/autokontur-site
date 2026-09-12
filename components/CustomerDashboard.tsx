@@ -485,13 +485,13 @@ export default function CustomerDashboard() {
                 <button
                   type="button"
                   onClick={() => toggleOrder(order.id)}
-                  className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
+                  className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2 px-5 py-4 text-left transition-colors hover:bg-white/[0.03]"
                 >
-                  <div className="flex min-w-0 items-center gap-4">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
                     <span className="text-sm" style={{ fontFamily: TECH_MONO_FONT, color: TECH_FAINT }}>
                       {shortId(order.id)}
                     </span>
-                    <span className="text-sm" style={{ color: TECH_MUTED }}>
+                    <span className="whitespace-nowrap text-sm" style={{ color: TECH_MUTED }}>
                       {formatDate(order.createdAt)}
                     </span>
                     <span className="hidden text-sm sm:inline" style={{ color: TECH_MUTED }}>
