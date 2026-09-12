@@ -21,12 +21,52 @@
 // ============================================================
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 
 // Показывается, пока /api/site-settings ещё не ответил — то же
 // значение по умолчанию, что и на витрине (components/StorefrontHome.tsx)
 const DEFAULT_SHOP_NAME = 'AUTOKONTUR';
+
+// Как часто проверять, не появились ли новые заказы (мс). Это лёгкий
+// запрос (status=new&pageSize=1 — берём только totalCount из
+// пагинации, ни один заказ целиком не грузится), поэтому раз в 20
+// секунд не создаёт заметной нагрузки
+const NEW_ORDERS_POLL_INTERVAL_MS = 20_000;
+
+// Короткий двухтональный сигнал через Web Audio API — без отдельного
+// аудиофайла, чтобы не тащить в проект бинарный ассет ради одного
+// звука. Играет только пока вкладка админки открыта в браузере — это
+// осознанно дополнительный, а не единственный канал оповещения (см.
+// sendTelegramMessage в lib/telegramNotify.ts — тот работает всегда,
+// даже если админку никто не смотрит)
+function playNewOrderChime() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    [880, 1320].forEach((freq, i) => {
+      const start = now + i * 0.15;
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.25, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.28);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(start);
+      oscillator.stop(start + 0.3);
+    });
+  } catch {
+    // Web Audio недоступний (рідкісний старий браузер) — тиша замість
+    // помилки, це не критично для роботи адмінки
+  }
+}
 
 export type AdminSection =
   | 'suppliers'
@@ -123,6 +163,46 @@ export default function AdminLayout({
       });
   }, []);
 
+  // ---- бейдж "новые заказы" в пункте меню + звук при появлении ----
+  const [newOrdersCount, setNewOrdersCount] = useState(0);
+  // useRef, а не просто сравнение с предыдущим состоянием в замыкании:
+  // нужно знать, был ли это ПЕРВЫЙ опрос за сессию — если да, звук не
+  // играем (иначе он звучал бы при каждом открытии админки, если в ней
+  // уже накопились необработанные заказы, а не только при НОВЫХ)
+  const isFirstPollRef = useRef(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const response = await fetch('/api/orders?status=new&pageSize=1');
+        const data = await response.json();
+        if (cancelled || !data.success) return;
+
+        const count = data.pagination?.totalCount ?? 0;
+        setNewOrdersCount((previousCount) => {
+          if (!isFirstPollRef.current && count > previousCount) {
+            playNewOrderChime();
+          }
+          return count;
+        });
+        isFirstPollRef.current = false;
+      } catch {
+        // Сбой опроса — не критично, просто попробуем ещё раз через
+        // обычный интервал, без отдельной обработки ошибки в UI
+      }
+    };
+
+    poll();
+    const intervalId = window.setInterval(poll, NEW_ORDERS_POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, []);
+
   // ВЫХОД — стирает cookie-сессию (см. app/api/admin/logout/route.ts),
   // затем полной перезагрузкой уходит на экран входа. Полная
   // перезагрузка (а не клиентская навигация) — чтобы middleware.ts
@@ -171,13 +251,21 @@ export default function AdminLayout({
                       <Link
                         key={item.key}
                         href={item.href as string}
-                        className="px-2 py-2 rounded-md text-sm font-medium"
+                        className="flex items-center justify-between gap-2 px-2 py-2 rounded-md text-sm font-medium"
                         style={{
                           background: isActive ? 'var(--accent-soft)' : 'transparent',
                           color: isActive ? 'var(--accent)' : 'var(--ink-muted)',
                         }}
                       >
-                        {item.label}
+                        <span>{item.label}</span>
+                        {item.key === 'orders' && newOrdersCount > 0 && (
+                          <span
+                            className="flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold"
+                            style={{ background: 'var(--bad)', color: '#fff' }}
+                          >
+                            {newOrdersCount}
+                          </span>
+                        )}
                       </Link>
                     );
                   }

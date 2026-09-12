@@ -58,6 +58,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { sendTelegramMessage } from '@/lib/telegramNotify';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -276,7 +277,11 @@ export async function POST(request: NextRequest) {
 
     // Шаг 2: позиции заказа — по одной вставке на каждый товар из
     // корзины, с уже проверенными (не из тела запроса!) артикулом,
-    // брендом, названием, ценой и поставщиком
+    // брендом, названием, ценой и поставщиком.
+    // Заодно копим summaryLines/totalAmount — для Telegram-уведомления
+    // ниже, чтобы не делать по коммиту отдельный SELECT за тем же самым
+    let totalAmount = 0;
+    const summaryLines: string[] = [];
     for (const item of items) {
       const product = productById.get(item.id)!;
       await client.query(
@@ -296,9 +301,32 @@ export async function POST(request: NextRequest) {
           product.supplier_name,
         ]
       );
+
+      const lineTotal = parseFloat(product.retail_price) * item.count;
+      totalAmount += lineTotal;
+      summaryLines.push(`• ${product.name || product.article} ×${item.count} — ${lineTotal.toFixed(0)} грн`);
     }
 
     await client.query('COMMIT');
+
+    // Telegram-сповіщення — навмисно ПІСЛЯ COMMIT (замовлення вже
+    // гарантовано збережене) і без await у виклику коду нижче по потоку
+    // немає, але сам sendTelegramMessage ніколи не кидає виняток —
+    // збій відправки не завадить віддати відповідь покупцю
+    void sendTelegramMessage(
+      [
+        `🛒 Нове замовлення`,
+        `${customerName} ${customerSurname}, ${customerPhone}`,
+        `${city}, ${novaPoshtaAddress}`,
+        comment ? `Коментар: ${comment}` : null,
+        '',
+        ...summaryLines,
+        '',
+        `Разом: ${totalAmount.toFixed(0)} грн`,
+      ]
+        .filter((line) => line !== null)
+        .join('\n')
+    );
 
     return NextResponse.json({ success: true, orderId });
   } catch (error) {
