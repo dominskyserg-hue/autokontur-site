@@ -74,6 +74,7 @@ export type AdminSection =
   | 'crossReferences'
   | 'searchSynonyms'
   | 'orders'
+  | 'customerDiscounts'
   | 'vinRequests'
   | 'analytics'
   | 'settings';
@@ -103,6 +104,7 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'ПРОДАЖИ',
     items: [
       { key: 'orders', label: 'Заказы', href: '/admin/orders' },
+      { key: 'customerDiscounts', label: 'Скидки клиентам', href: '/admin/customer-discounts' },
       { key: 'vinRequests', label: 'VIN-запросы', href: '/admin/vin-requests' },
       { key: 'analytics', label: 'Аналитика', href: '/admin/analytics' },
     ],

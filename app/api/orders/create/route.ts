@@ -59,6 +59,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { sendTelegramMessage } from '@/lib/telegramNotify';
+import { normalizePhone } from '@/lib/phoneNormalize';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -275,6 +276,22 @@ export async function POST(request: NextRequest) {
     );
     const orderId = orderResult.rows[0].id;
 
+    // Персональна знижка покупця (customer_discounts, за нормалізованим
+    // номером телефону) — застосовується АВТОМАТИЧНО, без промокоду:
+    // якщо для цього покупця раніше призначили знижку в адмінці
+    // (app/api/admin/customer-discounts/route.ts), вона одразу
+    // враховується в ціні кожної позиції ЩЕ ДО запису в order_items —
+    // так order_items і надалі лишається чесним "знімком" того, що
+    // покупець реально заплатив (той самий принцип, що й з product-level
+    // discount_percent при імпорті прайсу, див. lib/priceListImport.ts)
+    const normalizedPhone = normalizePhone(customerPhone);
+    const discountResult = await client.query<{ discount_percent: string }>(
+      'SELECT discount_percent FROM customer_discounts WHERE phone = $1',
+      [normalizedPhone]
+    );
+    const customerDiscountPercent =
+      discountResult.rows.length > 0 ? parseFloat(discountResult.rows[0].discount_percent) : 0;
+
     // Шаг 2: позиции заказа — по одной вставке на каждый товар из
     // корзины, с уже проверенными (не из тела запроса!) артикулом,
     // брендом, названием, ценой и поставщиком.
@@ -284,6 +301,9 @@ export async function POST(request: NextRequest) {
     const summaryLines: string[] = [];
     for (const item of items) {
       const product = productById.get(item.id)!;
+      const unitPrice =
+        Math.round(parseFloat(product.retail_price) * (1 - customerDiscountPercent / 100) * 100) / 100;
+
       await client.query(
         `
         INSERT INTO order_items (order_id, product_id, article, brand, name, price, quantity, supplier_id, supplier_name)
@@ -295,14 +315,14 @@ export async function POST(request: NextRequest) {
           product.article,
           product.brand,
           product.name,
-          product.retail_price,
+          unitPrice,
           item.count,
           product.supplier_id,
           product.supplier_name,
         ]
       );
 
-      const lineTotal = parseFloat(product.retail_price) * item.count;
+      const lineTotal = unitPrice * item.count;
       totalAmount += lineTotal;
       summaryLines.push(`• ${product.name || product.article} ×${item.count} — ${lineTotal.toFixed(0)} грн`);
     }
@@ -319,6 +339,7 @@ export async function POST(request: NextRequest) {
         `${customerName} ${customerSurname}, ${customerPhone}`,
         `${city}, ${novaPoshtaAddress}`,
         comment ? `Коментар: ${comment}` : null,
+        customerDiscountPercent > 0 ? `Персональна знижка: -${customerDiscountPercent}%` : null,
         '',
         ...summaryLines,
         '',
