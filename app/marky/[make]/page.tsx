@@ -12,9 +12,12 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CAR_MAKES, getCarMakeBySlug, buildMakeWhereClause } from '@/lib/carMakes';
+import { getCustomerPricingMultiplier, applyPricingMultiplier } from '@/lib/customerPricing';
+import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
@@ -86,7 +89,10 @@ const loadMakeProducts = cache(async function loadMakeProducts(
   const { clause, param } = buildMakeWhereClause(make, 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [productsResult, countResult] = await Promise.all([
+  // Персональна ціна покупця — див. коментар біля того ж коду в
+  // app/category/[slug]/page.tsx
+  const cookieStore = await cookies();
+  const [productsResult, countResult, customerPricingMultiplier] = await Promise.all([
     pool.query(
       `
       SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.stock, p.image_url, s.delivery_time
@@ -99,6 +105,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
       [param, PAGE_SIZE, offset]
     ),
     pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`, [param]),
+    getCustomerPricingMultiplier(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value),
   ]);
 
   const products: MakeProduct[] = productsResult.rows.map((row) => ({
@@ -106,7 +113,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
     article: row.article,
     brand: row.brand,
     name: row.name,
-    retailPrice: parseFloat(row.retail_price),
+    retailPrice: applyPricingMultiplier(parseFloat(row.retail_price), customerPricingMultiplier),
     stock: row.stock,
     deliveryTime: row.delivery_time,
     imageUrl: row.image_url,

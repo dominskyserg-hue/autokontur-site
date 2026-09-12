@@ -16,11 +16,14 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CategoryDef, getToCategories } from '@/lib/categories';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
+import { getCustomerPricingMultiplier, applyPricingMultiplier } from '@/lib/customerPricing';
+import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
@@ -89,6 +92,15 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
 
   const categories = getToCategories();
 
+  // Персональна ціна покупця — рахуємо ОДИН раз на всю сторінку (той
+  // самий покупець для всіх секцій), а не по колу на кожну категорію.
+  // Див. коментар біля того ж коду в app/category/[slug]/page.tsx
+  const cookieStore = await cookies();
+  const customerPricingMultiplier = await getCustomerPricingMultiplier(
+    pool,
+    cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value
+  );
+
   return Promise.all(
     categories.map(async (category): Promise<ToSection> => {
       const { clause, params } = buildCategoryAndMakeWhereClause(category, make, 1);
@@ -116,7 +128,7 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
         article: row.article,
         brand: row.brand,
         name: row.name,
-        retailPrice: parseFloat(row.retail_price),
+        retailPrice: applyPricingMultiplier(parseFloat(row.retail_price), customerPricingMultiplier),
         stock: row.stock,
         deliveryTime: row.delivery_time,
       }));

@@ -58,6 +58,8 @@ import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline'
 import { resolveMakeDbValues } from '@/lib/carMakes';
 import { detectCategoryInText, buildCategoryWhereClause } from '@/lib/categories';
 import { extractCarReference } from '@/lib/searchCarText';
+import { getCustomerPricingMultiplier, applyPricingMultiplier } from '@/lib/customerPricing';
+import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -459,7 +461,14 @@ export async function GET(request: NextRequest) {
     const limitPlaceholder = `$${values.length - 1}`;
     const offsetPlaceholder = `$${values.length}`;
 
-    const result = await pool.query(
+    // Персональна ціна покупця (customer_pricing_rules, за cookie з
+    // телефоном "залогіненого" в Особистому кабінеті покупця —
+    // components/CustomerDashboard.tsx) — рахуємо ПАРАЛЕЛЬНО з основним
+    // запитом товарів (незалежні один від одного), щоб не додавати
+    // зайву затримку. Множник застосовується нижче, при мапінгу рядків
+    const [customerPricingMultiplier, result] = await Promise.all([
+      getCustomerPricingMultiplier(pool, request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value),
+      pool.query(
       `
       SELECT
         p.id,
@@ -488,8 +497,9 @@ export async function GET(request: NextRequest) {
       ${orderBySql}
       LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
       `,
-      values
-    );
+        values
+      ),
+    ]);
 
     // Если строк не нашлось (например, пустая база или поиск ничего
     // не дал), total_count из запроса взять неоткуда — тогда 0
@@ -511,7 +521,7 @@ export async function GET(request: NextRequest) {
       // возвращает такие значения строкой (чтобы не терять точность
       // при преобразовании в float), поэтому явно переводим в число
       costPrice: parseFloat(row.cost_price),
-      retailPrice: parseFloat(row.retail_price),
+      retailPrice: applyPricingMultiplier(parseFloat(row.retail_price), customerPricingMultiplier),
       discountPercent: parseFloat(row.discount_percent),
       stock: row.stock,
       supplierId: row.supplier_id,

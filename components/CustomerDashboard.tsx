@@ -28,6 +28,7 @@
 
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -84,6 +85,21 @@ interface OrderDetails {
 }
 
 const PHONE_STORAGE_KEY = 'autokontur-customer-phone';
+
+// Крім localStorage (для самого кабінету), той самий телефон пишеться
+// й у cookie — localStorage сервер не бачить, а персональну ціну
+// (lib/customerPricing.ts) потрібно рахувати саме на сервері, коли він
+// рендерить сторінки категорій/марок і відповідає на /api/products.
+// max-age=31536000 — рік, той самий термін, на який практично
+// "запам'ятовується" вхід і в самому localStorage (там термін не
+// обмежений явно, але рік — розумний орієнтир і для cookie)
+function setCustomerPhoneCookie(phone: string) {
+  document.cookie = `${CUSTOMER_PHONE_COOKIE}=${encodeURIComponent(phone)}; path=/; max-age=31536000`;
+}
+
+function clearCustomerPhoneCookie() {
+  document.cookie = `${CUSTOMER_PHONE_COOKIE}=; path=/; max-age=0`;
+}
 
 // Людський переклад статусу + колір — той самий язик кольорів, що і
 // статуси наявності товару (зелене світіння "готово", бурштинове
@@ -184,6 +200,10 @@ export default function CustomerDashboard() {
     try {
       const savedPhone = window.localStorage.getItem(PHONE_STORAGE_KEY);
       if (savedPhone) {
+        // Синхронізуємо cookie з localStorage і тут — якщо вона колись
+        // не проставилась (стара сесія, збережена ще до появи cookie)
+        // або строк дії cookie вийшов раніше за localStorage
+        setCustomerPhoneCookie(savedPhone);
         setLoggedInPhone(savedPhone);
       }
     } catch {
@@ -243,6 +263,7 @@ export default function CustomerDashboard() {
       // Успіх — запам'ятовуємо телефон і показуємо кабінет одразу з
       // уже отриманими замовленнями (повторний запит не потрібен)
       window.localStorage.setItem(PHONE_STORAGE_KEY, phoneInput);
+      setCustomerPhoneCookie(phoneInput);
       setOrders(data.orders as OrderListItem[]);
       setLoggedInPhone(phoneInput);
     } catch (error) {
@@ -254,6 +275,7 @@ export default function CustomerDashboard() {
 
   const handleLogout = () => {
     window.localStorage.removeItem(PHONE_STORAGE_KEY);
+    clearCustomerPhoneCookie();
     setLoggedInPhone(null);
     setOrders([]);
     setExpandedOrderId(null);

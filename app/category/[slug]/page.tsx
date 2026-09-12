@@ -19,9 +19,12 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { CATEGORIES, getCategoryBySlug, findNarrowPageForVehicle } from '@/lib/categories';
+import { getCustomerPricingMultiplier, applyPricingMultiplier } from '@/lib/customerPricing';
+import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
 import CategoryVehicleFilter from '@/components/CategoryVehicleFilter';
 import { getCarMakeBySlug } from '@/lib/carMakes';
@@ -131,7 +134,14 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
 
   const offset = (page - 1) * PAGE_SIZE;
 
-  const [productsResult, countResult] = await Promise.all([
+  // Персональна ціна покупця (customer_pricing_rules) — за cookie з
+  // телефоном "залогіненого" в Особистому кабінеті покупця (див.
+  // lib/customerPricing.ts). cookies() тут ЩЕ й гарантує, що Next.js
+  // не віддасть цю сторінку зі статичного кешу одному покупцю з ціною
+  // іншого — використання cookies()/headers() саме собою вимикає
+  // статичну генерацію для сторінки, що її викликає
+  const cookieStore = await cookies();
+  const [productsResult, countResult, customerPricingMultiplier] = await Promise.all([
     pool.query(
       `
       SELECT p.id, p.article, p.brand, p.name, p.retail_price, p.discount_percent, p.stock, p.image_url, s.delivery_time
@@ -144,6 +154,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
       [...params, PAGE_SIZE, offset]
     ),
     pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`, params),
+    getCustomerPricingMultiplier(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value),
   ]);
 
   const products: CategoryProduct[] = productsResult.rows.map((row) => ({
@@ -151,7 +162,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
     article: row.article,
     brand: row.brand,
     name: row.name,
-    retailPrice: parseFloat(row.retail_price),
+    retailPrice: applyPricingMultiplier(parseFloat(row.retail_price), customerPricingMultiplier),
     discountPercent: parseFloat(row.discount_percent),
     stock: row.stock,
     deliveryTime: row.delivery_time,

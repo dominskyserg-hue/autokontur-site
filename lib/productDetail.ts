@@ -13,12 +13,15 @@
 // ============================================================
 
 import { cache } from 'react';
+import { cookies } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { buildProductPath, buildProductSlug } from '@/lib/slug';
 import { getCarMakeByDbValue } from '@/lib/carMakes';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
+import { getCustomerPricingMultiplier, applyPricingMultiplier } from '@/lib/customerPricing';
+import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -390,13 +393,50 @@ export async function loadProductPageData(
     permanentRedirect(buildProductPath(id, product));
   }
 
-  const [images, otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility] = await Promise.all([
+  const [images, rawOtherOffers, rawCrossRefs, rawTecdocCrosses, tecdocCompatibility] = await Promise.all([
     loadProductImages(id),
     loadOtherOffers(product),
     loadCrossReferences(product),
     loadTecdocCrosses(product.article),
     loadTecdocCompatibility(product.article),
   ]);
+
+  // Персональна ціна покупця (customer_pricing_rules) — застосовується
+  // ТУТ, ОКРЕМИМ фінальним кроком поверх уже завантажених "сирих" даних
+  // (а не всередині loadProduct/loadOtherOffers/... вище), щоб самі ці
+  // cache()-функції й надалі повертали справжню базову ціну — вона
+  // потрібна незміненою в інших місцях (напр. generateMetadata окремо
+  // викликає loadProduct без будь-якої персоналізації). cookies() тут
+  // також гарантує, що Next.js не роздасть цю сторінку зі статичного
+  // кешу одному покупцю з ціною іншого
+  const cookieStore = await cookies();
+  const customerPricingMultiplier = await getCustomerPricingMultiplier(
+    pool,
+    cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value
+  );
+
+  const personalizedProduct: ProductDetail = {
+    ...product,
+    retailPrice: applyPricingMultiplier(product.retailPrice, customerPricingMultiplier),
+  };
+  const otherOffers: OtherOffer[] = rawOtherOffers.map((offer) => ({
+    ...offer,
+    retailPrice: applyPricingMultiplier(offer.retailPrice, customerPricingMultiplier),
+  }));
+  const crossRefs = {
+    oem: rawCrossRefs.oem.map((item) => ({
+      ...item,
+      retailPrice: item.retailPrice !== null ? applyPricingMultiplier(item.retailPrice, customerPricingMultiplier) : null,
+    })),
+    aftermarket: rawCrossRefs.aftermarket.map((item) => ({
+      ...item,
+      retailPrice: item.retailPrice !== null ? applyPricingMultiplier(item.retailPrice, customerPricingMultiplier) : null,
+    })),
+  };
+  const tecdocCrosses: TecdocCrossItem[] = rawTecdocCrosses.map((item) => ({
+    ...item,
+    retailPrice: item.retailPrice !== null ? applyPricingMultiplier(item.retailPrice, customerPricingMultiplier) : null,
+  }));
 
   const make = getCarMakeByDbValue(product.carMake);
   const breadcrumbItems: BreadcrumbItem[] = [
@@ -408,5 +448,5 @@ export async function loadProductPageData(
     },
   ];
 
-  return { product, images, otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility, breadcrumbItems };
+  return { product: personalizedProduct, images, otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility, breadcrumbItems };
 }
