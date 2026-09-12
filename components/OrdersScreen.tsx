@@ -90,6 +90,7 @@ interface OrderDetails {
   city: string;
   novaPoshtaAddress: string;
   comment: string | null;
+  ttnNumber: string | null;
   status: OrderStatus;
   createdAt: string;
   updatedAt: string;
@@ -164,6 +165,12 @@ export default function OrdersScreen() {
   const [statusDraft, setStatusDraft] = useState<OrderStatus>('new');
   const [savingStatus, setSavingStatus] = useState(false);
   const [statusSaveError, setStatusSaveError] = useState<string | null>(null);
+
+  // ---- номер ТТН Новой Почты — отдельное поле, сохраняется своей
+  // кнопкой, не смешано с формой смены статуса ----
+  const [ttnDraft, setTtnDraft] = useState('');
+  const [savingTtn, setSavingTtn] = useState(false);
+  const [ttnSaveError, setTtnSaveError] = useState<string | null>(null);
 
   // ---- список поставщиков для выпадающего списка "сменить поставщика" ----
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -274,6 +281,7 @@ export default function OrdersScreen() {
         if (!cancelled) {
           setOrderDetails(data.order as OrderDetails);
           setStatusDraft((data.order as OrderDetails).status);
+          setTtnDraft((data.order as OrderDetails).ttnNumber || '');
         }
       })
       .catch((error) => {
@@ -317,6 +325,33 @@ export default function OrdersScreen() {
       setStatusSaveError(error instanceof Error ? error.message : 'Ошибка сети при сохранении статуса');
     } finally {
       setSavingStatus(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // СОХРАНЕНИЕ ТТН — PATCH /api/orders/[id]
+  // ------------------------------------------------------------
+  const handleSaveTtn = async () => {
+    if (!orderDetails) return;
+
+    setSavingTtn(true);
+    setTtnSaveError(null);
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttnNumber: ttnDraft.trim() || null }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось сохранить номер ТТН');
+      }
+
+      setOrderDetails({ ...orderDetails, ttnNumber: (data.order as { ttnNumber: string | null }).ttnNumber });
+    } catch (error) {
+      setTtnSaveError(error instanceof Error ? error.message : 'Ошибка сети при сохранении ТТН');
+    } finally {
+      setSavingTtn(false);
     }
   };
 
@@ -657,6 +692,43 @@ export default function OrdersScreen() {
                   {statusSaveError && (
                     <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
                       {statusSaveError}
+                    </p>
+                  )}
+                </div>
+
+                {/* ---- номер ТТН Новой Почты ---- */}
+                <div
+                  className="p-3.5 rounded-md mb-5"
+                  style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
+                >
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                    Номер ТТН (Новая Почта)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 px-3 py-2 text-sm rounded-md font-mono"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                      placeholder="напр. 20450123456789"
+                      value={ttnDraft}
+                      onChange={(e) => setTtnDraft(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      disabled={savingTtn || ttnDraft.trim() === (orderDetails.ttnNumber || '')}
+                      onClick={handleSaveTtn}
+                      className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                      style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                    >
+                      {savingTtn ? 'Сохранение...' : 'Сохранить'}
+                    </button>
+                  </div>
+                  <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                    После сохранения клиент увидит номер и кнопку отслеживания в своём личном кабинете.
+                  </p>
+                  {ttnSaveError && (
+                    <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
+                      {ttnSaveError}
                     </p>
                   )}
                 </div>

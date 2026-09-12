@@ -1173,6 +1173,125 @@ CREATE TABLE IF NOT EXISTS customer_pricing_rules (
 
 
 -- ============================================================
+-- 20. ТАБЛИЦА customer_vehicles — "Мій Гараж" покупця
+-- ============================================================
+-- Автомобілі, які покупець зберіг у своєму особистому кабінеті
+-- (components/CustomerDashboard.tsx, вкладка "Мій Гараж"). Дані
+-- вводяться покупцем вручну (марка/модель/рік/двигун/VIN) — на сайті
+-- немає підключеного VIN-декодера, який умів би підтягувати
+-- специфікацію автоматично за номером кузова.
+--
+-- phone — той самий "ключ" покупця, що і в customer_pricing_rules
+-- вище: НЕ нормалізований до 9 цифр тут (на відміну від
+-- customer_pricing_rules), а зберігається в тому вигляді, в якому
+-- покупець увійшов у кабінет (той самий, що і customer_phone в
+-- orders) — API-роути (app/api/customer/vehicles/route.ts) самі
+-- порівнюють останні 9 цифр при пошуку/перевірці належності, той
+-- самий підхід, що і в app/api/customer/orders/route.ts
+CREATE TABLE IF NOT EXISTS customer_vehicles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  phone TEXT NOT NULL,
+
+  make TEXT NOT NULL,
+  model TEXT NOT NULL,
+
+  -- Рік випуску — необов'язковий (покупець може не пам'ятати точно)
+  year INTEGER,
+
+  -- Двигун — вільний текст ("1.6 TDI", "2.0 бензин"...), а не
+  -- структуровані об'єм/тип: покупці описують його по-різному, і
+  -- жорсткий формат тільки заважав би заповненню форми
+  engine TEXT,
+
+  -- VIN — необов'язковий, зберігається як є (у верхньому регістрі),
+  -- без перевірки контрольної цифри чи довжини: тут це просто
+  -- довідкове поле для самого покупця, а не ключ для декодування
+  vin TEXT,
+
+  -- Яке авто зараз "активне" (використовується для швидкого переходу
+  -- "Знайти запчастини для цього авто"). У одного покупця активним
+  -- може бути лише ОДНЕ авто одночасно — це не CHECK-обмеження бази
+  -- (перевірити "лише один TRUE на phone" у CHECK неможливо), а
+  -- відповідальність API-роута (app/api/customer/vehicles/[id]/route.ts):
+  -- перед тим, як зробити одне авто активним, він знімає активність
+  -- з усіх інших автомобілів цього ж покупця
+  is_active BOOLEAN NOT NULL DEFAULT false,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Пришвидшує "усі авто цього покупця" (GET /api/customer/vehicles) —
+-- саме так завжди читається ця таблиця, ніколи не по одному id
+CREATE INDEX IF NOT EXISTS idx_customer_vehicles_phone ON customer_vehicles (phone);
+
+
+-- ============================================================
+-- 21. ТАБЛИЦА customer_favorites — обране покупця
+-- ============================================================
+-- Товари, які покупець позначив "у обране" в особистому кабінеті.
+-- UNIQUE (phone, product_id) — той самий товар не може двічі
+-- потрапити в обране одного покупця (повторне натискання "У обране"
+-- просто нічого не робить, роут повертає вже існуючий рядок)
+CREATE TABLE IF NOT EXISTS customer_favorites (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  phone TEXT NOT NULL,
+
+  -- ON DELETE CASCADE — товар видалили з каталогу, він автоматично
+  -- зникає і з усіх "обраних" списків покупців (посилання на
+  -- видалений товар було б безглуздим)
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  UNIQUE (phone, product_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_favorites_phone ON customer_favorites (phone);
+
+
+-- ============================================================
+-- 22. ТАБЛИЦА customer_addresses — збережені адреси Нової Пошти
+-- ============================================================
+-- Дані отримувача й відділення/адреса Нової Пошти, які покупець
+-- зберіг у кабінеті для швидкого оформлення наступних замовлень
+-- (вкладка "Налаштування профілю & Доставка"). Це ЛИШЕ довідник для
+-- самого покупця — оформлення замовлення (app/api/orders/create/
+-- route.ts) як і раніше приймає ці поля прямим текстом у формі на
+-- вітрині, а не читає їх звідси автоматично
+CREATE TABLE IF NOT EXISTS customer_addresses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  phone TEXT NOT NULL,
+
+  recipient_name TEXT NOT NULL,
+  recipient_phone TEXT,
+
+  city TEXT NOT NULL,
+  warehouse TEXT NOT NULL,
+
+  -- Адреса "за замовчуванням" — не CHECK (як і is_active в
+  -- customer_vehicles вище, "лише один TRUE" забезпечує сам роут
+  -- app/api/customer/addresses/[id]/route.ts, а не база)
+  is_default BOOLEAN NOT NULL DEFAULT false,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_addresses_phone ON customer_addresses (phone);
+
+
+-- ------------------------------------------------------------
+-- TTN (номер накладної Нової Пошти) — додано до вже існуючих
+-- замовлень пізніше, коли в кабінеті покупця з'явилось відстеження
+-- посилки. NULL, доки адмін не проставить номер вручну на екрані
+-- "Заказы" (components/OrdersScreen.tsx) після відправки
+-- ------------------------------------------------------------
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS ttn_number TEXT;
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не

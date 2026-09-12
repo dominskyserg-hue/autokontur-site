@@ -86,6 +86,7 @@ interface OrderDetailsResponse {
   city: string;
   novaPoshtaAddress: string;
   comment: string | null;
+  ttnNumber: string | null;
   status: OrderStatus;
   createdAt: string;
   updatedAt: string;
@@ -110,7 +111,7 @@ export async function GET(
     const orderResult = await pool.query(
       `
       SELECT id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment,
-             status, created_at, updated_at
+             ttn_number, status, created_at, updated_at
       FROM orders
       WHERE id = $1
       `,
@@ -161,6 +162,7 @@ export async function GET(
       city: orderRow.city,
       novaPoshtaAddress: orderRow.nova_poshta_address,
       comment: orderRow.comment,
+      ttnNumber: orderRow.ttn_number,
       status: orderRow.status,
       createdAt: orderRow.created_at,
       updatedAt: orderRow.updated_at,
@@ -180,10 +182,15 @@ export async function GET(
 }
 
 // ------------------------------------------------------------
-// PATCH /api/orders/[id] — сменить статус заказа
+// PATCH /api/orders/[id] — сменить статус и/или ТТН заказа
 // ------------------------------------------------------------
+// ttnNumber — необязательное поле (номер накладной Новой Почты),
+// добавлено вместе с отслеживанием посылки в личном кабинете клиента
+// (components/CustomerDashboard.tsx). Можно передать оба поля сразу
+// или только одно из них — то, что не передано, просто не меняется
 interface PatchOrderRequestBody {
   status?: string;
+  ttnNumber?: string | null;
 }
 
 export async function PATCH(
@@ -206,22 +213,36 @@ export async function PATCH(
     );
   }
 
-  if (!body.status || !isValidStatus(body.status)) {
+  if (body.status === undefined && body.ttnNumber === undefined) {
+    return NextResponse.json(
+      { error: 'Укажите статус и/или номер ТТН для обновления.' },
+      { status: 400 }
+    );
+  }
+
+  if (body.status !== undefined && !isValidStatus(body.status)) {
     return NextResponse.json(
       { error: `Укажите статус — один из: ${STATUS_VALUES.join(', ')}.` },
       { status: 400 }
     );
   }
 
+  const nextStatus = body.status;
+  const nextTtnNumber = body.ttnNumber !== undefined ? (body.ttnNumber || '').trim() || null : undefined;
+
   try {
+    // COALESCE($N, колонка) — обновляет колонку, только если для неё
+    // реально передали значение в запросе; параметр undefined (поле не
+    // передали вовсе) превращается в null через pg, а COALESCE в этом
+    // случае оставляет прежнее значение колонки как есть
     const result = await pool.query(
       `
       UPDATE orders
-      SET status = $2, updated_at = now()
+      SET status = COALESCE($2, status), ttn_number = CASE WHEN $3 THEN $4 ELSE ttn_number END, updated_at = now()
       WHERE id = $1
-      RETURNING id, customer_name, customer_phone, status, created_at, updated_at
+      RETURNING id, customer_name, customer_phone, status, ttn_number, created_at, updated_at
       `,
-      [id, body.status]
+      [id, nextStatus ?? null, nextTtnNumber !== undefined, nextTtnNumber ?? null]
     );
 
     if (result.rows.length === 0) {
@@ -237,15 +258,16 @@ export async function PATCH(
         customerName: row.customer_name,
         customerPhone: row.customer_phone,
         status: row.status,
+        ttnNumber: row.ttn_number,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },
     });
   } catch (error) {
-    console.error('Ошибка при обновлении статуса заказа:', error);
+    console.error('Ошибка при обновлении заказа:', error);
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
     return NextResponse.json(
-      { error: 'Не удалось обновить статус заказа: ' + message },
+      { error: 'Не удалось обновить заказ: ' + message },
       { status: 500 }
     );
   }

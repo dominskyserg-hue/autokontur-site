@@ -74,6 +74,7 @@ function isValidPhone(rawPhone: string): boolean {
 
 interface CustomerOrderItem {
   id: string;
+  productId: string | null;
   article: string;
   brand: string | null;
   name: string | null;
@@ -87,6 +88,7 @@ interface CustomerOrderDetails {
   city: string;
   novaPoshtaAddress: string;
   comment: string | null;
+  ttnNumber: string | null;
   createdAt: string;
   items: CustomerOrderItem[];
   totalAmount: number;
@@ -117,7 +119,7 @@ export async function GET(
     // вообще заказ с таким id, если это не его номер
     const orderResult = await pool.query(
       `
-      SELECT id, status, city, nova_poshta_address, comment, created_at
+      SELECT id, status, city, nova_poshta_address, comment, ttn_number, created_at
       FROM orders
       WHERE id = $1 AND RIGHT(regexp_replace(customer_phone, '\\D', '', 'g'), 9) = $2
       `,
@@ -132,7 +134,7 @@ export async function GET(
 
     const itemsResult = await pool.query(
       `
-      SELECT id, article, brand, name, price, quantity
+      SELECT id, product_id, article, brand, name, price, quantity
       FROM order_items
       WHERE order_id = $1
       ORDER BY created_at ASC
@@ -142,6 +144,7 @@ export async function GET(
 
     const items: CustomerOrderItem[] = itemsResult.rows.map((row) => ({
       id: row.id,
+      productId: row.product_id,
       article: row.article,
       brand: row.brand,
       name: row.name,
@@ -159,6 +162,7 @@ export async function GET(
       city: orderRow.city,
       novaPoshtaAddress: orderRow.nova_poshta_address,
       comment: orderRow.comment,
+      ttnNumber: orderRow.ttn_number,
       createdAt: orderRow.created_at,
       items,
       totalAmount,

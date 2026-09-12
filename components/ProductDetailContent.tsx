@@ -21,6 +21,7 @@ import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@
 import { SITE_URL } from '@/lib/siteConfig';
 import type { CrossRefItem, ProductPageData, TecdocCompatibilityItem, TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
+import FavoriteButton from '@/components/FavoriteButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
 import ProductGallery, { type GalleryPhoto } from '@/components/ProductGallery';
@@ -192,6 +193,7 @@ export default function ProductDetailContent({
                 stock: product.stock,
               }}
             />
+            <FavoriteButton productId={product.id} />
             <QuickOrderModal
               product={{
                 id: product.id,
