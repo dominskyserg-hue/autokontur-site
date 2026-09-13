@@ -16,6 +16,8 @@
 // ============================================================
 
 import Link from 'next/link';
+import { Send } from 'lucide-react';
+import { TELEGRAM_BOT_USERNAME } from '@/lib/telegramNotify';
 import { buildProductPath } from '@/lib/slug';
 import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
@@ -204,6 +206,23 @@ export default function ProductDetailContent({
               }}
             />
           </div>
+
+          {/* ==================== ПИТАННЯ ПРО ТОВАР У TELEGRAM ==================== */}
+          {/* Відкриває чат із ботом @dominatorparts_orders_bot без
+              "/start" — будь-яке повідомлення звідти потрапляє
+              менеджеру (окрема тема на покупця в закритій групі
+              підтримки, app/api/telegram/webhook/route.ts), той самий
+              механізм, що і кнопка "Telegram" у шапці Головної */}
+          <a
+            href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-white/5"
+            style={{ fontFamily: BODY_FONT, border: `1px solid ${BORDER_SOFT}`, color: MUTED }}
+          >
+            <Send className="h-4 w-4" style={{ color: ACCENT }} />
+            Є питання? Напишіть нам у Telegram
+          </a>
         </div>
       </div>
 
