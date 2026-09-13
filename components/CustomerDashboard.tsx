@@ -38,7 +38,7 @@ import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users, ChevronRight } from 'lucide-react';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { getCarMakeByName } from '@/lib/carMakes';
 import { normalizePhone } from '@/lib/phoneNormalize';
@@ -311,32 +311,8 @@ export default function CustomerDashboard() {
   const [activeTab, setActiveTab] = useState<TabKey>('garage');
   const [loadedTabs, setLoadedTabs] = useState<Set<TabKey>>(new Set());
 
-  // ---- мобільний рядок вкладок: чи є куди прокрутити ----
+  // ---- мобільний рядок вкладок ----
   const mobileNavRef = useRef<HTMLElement>(null);
-  const [mobileNavScroll, setMobileNavScroll] = useState({ left: false, right: false });
-
-  const updateMobileNavScrollState = useCallback(() => {
-    const el = mobileNavRef.current;
-    if (!el) return;
-    setMobileNavScroll({
-      left: el.scrollLeft > 4,
-      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
-    });
-  }, []);
-
-  useEffect(() => {
-    updateMobileNavScrollState();
-    window.addEventListener('resize', updateMobileNavScrollState);
-
-    // Шрифти (Space Grotesk тощо) довантажуються АСИНХРОННО й можуть
-    // трохи розширити текст вкладок вже ПІСЛЯ першого замірювання —
-    // подія "resize" вікна на це не реагує (сама сторінка не міняє
-    // розмір), тому без цього переміру градієнт-підказка іноді не
-    // з'являлась би, навіть коли рядок вкладок реально не влазить
-    document.fonts?.ready?.then(updateMobileNavScrollState).catch(() => {});
-
-    return () => window.removeEventListener('resize', updateMobileNavScrollState);
-  }, [updateMobileNavScrollState]);
 
   // При виборі вкладки прокручуємо саме її кнопку у видиму область —
   // так після кліку по краєвій вкладці (наприклад, "Налаштування")
@@ -346,8 +322,7 @@ export default function CustomerDashboard() {
     if (!el) return;
     const activeButton = el.querySelector<HTMLButtonElement>(`[data-tab-key="${activeTab}"]`);
     activeButton?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
-    updateMobileNavScrollState();
-  }, [activeTab, updateMobileNavScrollState]);
+  }, [activeTab]);
 
   // ---- персональна знижка/наценка (бейдж у профілі) ----
   const [pricingRule, setPricingRule] = useState<PricingRule | null>(null);
@@ -953,14 +928,22 @@ export default function CustomerDashboard() {
           {/* Усі 4 вкладки не влазять в екран телефону одразу, тому рядок
               скролиться вбік — але БЕЗ жодного натяку на це покупець просто
               не здогадувався прокрутити і не бачив "Налаштування" (звідти і
-              Telegram-сповіщення) взагалі. Тому: градієнтна "тінь" з боку,
-              куди ще можна прокрутити (canScrollLeft/canScrollRight), і
-              активна вкладка сама прокручується у видиму область при виборі */}
+              Telegram-сповіщення) взагалі. Замість того, щоб рахувати стан
+              скролу через JS (ефект на монтуванні один раз "не встигав" —
+              шрифти й розкладка ще не встановились остаточно, і підказка
+              іноді не з'являлась одразу), тут суцільна CSS-маска: правий
+              край рядка ЗАВЖДИ трохи "розчиняється" в тінь + іконка "›" —
+              це чисто CSS, не залежить від жодного таймінгу JS, тому працює
+              зі старту, без миготіння чи запізнення. Активна вкладка все
+              одно сама прокручується у видиму область при виборі (ефект нижче) */}
           <div className="relative -mx-5 md:hidden">
             <nav
               ref={mobileNavRef}
-              onScroll={updateMobileNavScrollState}
               className="flex gap-1 overflow-x-auto px-5 pb-1"
+              style={{
+                WebkitMaskImage: 'linear-gradient(90deg, black, black calc(100% - 28px), transparent)',
+                maskImage: 'linear-gradient(90deg, black, black calc(100% - 28px), transparent)',
+              }}
             >
               {TABS.map((tab) => {
                 const Icon = tab.icon;
@@ -987,23 +970,15 @@ export default function CustomerDashboard() {
                   </button>
                 );
               })}
+              {/* "Розпірка" в кінці рядка — щоб CSS-маска вище завжди мала
+                  що "розчиняти" навіть коли вкладки самі коротші за екран,
+                  і щоб останню вкладку теж не обрізало впритул під маску */}
+              <span className="flex-none px-1" aria-hidden />
             </nav>
-            {mobileNavScroll.left && (
-              <div
-                className="pointer-events-none absolute bottom-1 left-0 top-0 flex w-10 items-center justify-start"
-                style={{ background: `linear-gradient(90deg, ${TECH_BG} 40%, transparent)` }}
-              >
-                <ChevronLeft className="h-4 w-4" style={{ color: TECH_ACCENT_BRIGHT }} />
-              </div>
-            )}
-            {mobileNavScroll.right && (
-              <div
-                className="pointer-events-none absolute bottom-1 right-0 top-0 flex w-10 items-center justify-end"
-                style={{ background: `linear-gradient(270deg, ${TECH_BG} 40%, transparent)` }}
-              >
-                <ChevronRight className="h-4 w-4" style={{ color: TECH_ACCENT_BRIGHT }} />
-              </div>
-            )}
+            <ChevronRight
+              className="pointer-events-none absolute bottom-1 right-0 top-0 my-auto h-4 w-4"
+              style={{ color: TECH_ACCENT_BRIGHT }}
+            />
           </div>
 
           {/* ==================== ВМІСТ ВКЛАДКИ ==================== */}
