@@ -33,12 +33,12 @@
 // хуки (useState/useEffect) і працює з браузерним fetch/localStorage
 // ============================================================
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users, ChevronRight } from 'lucide-react';
+import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users } from 'lucide-react';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { getCarMakeByName } from '@/lib/carMakes';
 import { normalizePhone } from '@/lib/phoneNormalize';
@@ -310,19 +310,6 @@ export default function CustomerDashboard() {
   // ---- активна вкладка ----
   const [activeTab, setActiveTab] = useState<TabKey>('garage');
   const [loadedTabs, setLoadedTabs] = useState<Set<TabKey>>(new Set());
-
-  // ---- мобільний рядок вкладок ----
-  const mobileNavRef = useRef<HTMLElement>(null);
-
-  // При виборі вкладки прокручуємо саме її кнопку у видиму область —
-  // так після кліку по краєвій вкладці (наприклад, "Налаштування")
-  // покупець одразу бачить, що саме вона активна, а не губиться за краєм
-  useEffect(() => {
-    const el = mobileNavRef.current;
-    if (!el) return;
-    const activeButton = el.querySelector<HTMLButtonElement>(`[data-tab-key="${activeTab}"]`);
-    activeButton?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
-  }, [activeTab]);
 
   // ---- персональна знижка/наценка (бейдж у профілі) ----
   const [pricingRule, setPricingRule] = useState<PricingRule | null>(null);
@@ -863,9 +850,16 @@ export default function CustomerDashboard() {
 
       <main className="mx-auto max-w-6xl px-5 py-8 md:px-8">
         <div className="grid gap-6 md:grid-cols-[15rem_1fr]">
-          {/* ==================== БІЧНЕ МЕНЮ (md+) ==================== */}
-          <aside className="hidden md:block">
-            <div className="sticky top-24 flex flex-col gap-5">
+          {/* ==================== ПРОФІЛЬ + НАВІГАЦІЯ ==================== */}
+          {/* Раніше на мобільному тут був окремий горизонтальний рядок
+              вкладок, що скролився вбік, — виглядало неохайно й погано
+              вписувалось у загальний стиль кабінету. Тепер той самий
+              вертикальний список пунктів, що і на десктопі, показується
+              одразу на всіх екранах (sticky-позиціонування лишається
+              тільки з md+, щоб на телефоні список просто йшов у звичайному
+              потоці сторінки, а не "прилипав" згори під час скролу) */}
+          <aside>
+            <div className="flex flex-col gap-5 md:sticky md:top-24">
               {/* ---- профіль ---- */}
               <div className="rounded-2xl p-5" style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}>
                 <div className="flex items-center gap-3">
@@ -923,63 +917,6 @@ export default function CustomerDashboard() {
               </nav>
             </div>
           </aside>
-
-          {/* ==================== МОБІЛЬНІ ВКЛАДКИ ==================== */}
-          {/* Усі 4 вкладки не влазять в екран телефону одразу, тому рядок
-              скролиться вбік — але БЕЗ жодного натяку на це покупець просто
-              не здогадувався прокрутити і не бачив "Налаштування" (звідти і
-              Telegram-сповіщення) взагалі. Замість того, щоб рахувати стан
-              скролу через JS (ефект на монтуванні один раз "не встигав" —
-              шрифти й розкладка ще не встановились остаточно, і підказка
-              іноді не з'являлась одразу), тут суцільна CSS-маска: правий
-              край рядка ЗАВЖДИ трохи "розчиняється" в тінь + іконка "›" —
-              це чисто CSS, не залежить від жодного таймінгу JS, тому працює
-              зі старту, без миготіння чи запізнення. Активна вкладка все
-              одно сама прокручується у видиму область при виборі (ефект нижче) */}
-          <div className="relative -mx-5 md:hidden">
-            <nav
-              ref={mobileNavRef}
-              className="flex gap-1 overflow-x-auto px-5 pb-1"
-              style={{
-                WebkitMaskImage: 'linear-gradient(90deg, black, black calc(100% - 28px), transparent)',
-                maskImage: 'linear-gradient(90deg, black, black calc(100% - 28px), transparent)',
-              }}
-            >
-              {TABS.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.key;
-                return (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    data-tab-key={tab.key}
-                    onClick={() => setActiveTab(tab.key)}
-                    className="relative flex flex-none items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-xs font-medium transition-colors"
-                    style={{ color: isActive ? '#fff' : TECH_MUTED }}
-                  >
-                    {isActive && (
-                      <motion.span
-                        layoutId="dashboard-nav-thumb-mobile"
-                        className="absolute inset-0 -z-10 rounded-xl"
-                        style={{ background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.3)' }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-                      />
-                    )}
-                    <Icon className="h-3.5 w-3.5" style={{ color: isActive ? TECH_ACCENT_BRIGHT : TECH_FAINT }} />
-                    {tab.label}
-                  </button>
-                );
-              })}
-              {/* "Розпірка" в кінці рядка — щоб CSS-маска вище завжди мала
-                  що "розчиняти" навіть коли вкладки самі коротші за екран,
-                  і щоб останню вкладку теж не обрізало впритул під маску */}
-              <span className="flex-none px-1" aria-hidden />
-            </nav>
-            <ChevronRight
-              className="pointer-events-none absolute bottom-1 right-0 top-0 my-auto h-4 w-4"
-              style={{ color: TECH_ACCENT_BRIGHT }}
-            />
-          </div>
 
           {/* ==================== ВМІСТ ВКЛАДКИ ==================== */}
           <div className="min-w-0 md:col-start-2 md:row-start-1">
