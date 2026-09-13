@@ -62,6 +62,7 @@ const PUBLIC_API_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: 'POST', pattern: /^\/api\/customer\/addresses$/ },
   { method: 'PATCH', pattern: /^\/api\/customer\/addresses\/[^/]+$/ },
   { method: 'DELETE', pattern: /^\/api\/customer\/addresses\/[^/]+$/ },
+  { method: 'GET', pattern: /^\/api\/customer\/telegram-link$/ },
   { method: 'POST', pattern: /^\/api\/vin-requests$/ },
   { method: 'GET', pattern: /^\/api\/announcements$/ },
   { method: 'GET', pattern: /^\/api\/site-settings$/ },
@@ -69,6 +70,10 @@ const PUBLIC_API_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: 'GET', pattern: /^\/api\/nova-poshta\/warehouses$/ },
   { method: 'POST', pattern: /^\/api\/admin\/login$/ },
   { method: 'POST', pattern: /^\/api\/admin\/logout$/ },
+  // Захищений НЕ паролем адмінки, а власним секретом у заголовку
+  // X-Telegram-Bot-Api-Secret-Token (перевіряється всередині самого
+  // роута) — Telegram не має пароля адмінки й не зможе його передати
+  { method: 'POST', pattern: /^\/api\/telegram\/webhook$/ },
 ];
 
 function isPublicApiRoute(pathname: string, method: string): boolean {

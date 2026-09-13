@@ -14,6 +14,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { normalizePhone } from '@/lib/phoneNormalize';
+import { sendTelegramMessageTo } from '@/lib/telegramNotify';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -231,6 +233,14 @@ export async function PATCH(
   const nextTtnNumber = body.ttnNumber !== undefined ? (body.ttnNumber || '').trim() || null : undefined;
 
   try {
+    // Старое значение ТТН — нужно ДО обновления, чтобы понять, реально
+    // ли админ только что ВПЕРВЫЕ проставил номер (или изменил его), а
+    // не просто повторно сохранил статус без изменения ТТН — иначе
+    // клиенту улетало бы одно и то же Telegram-уведомление про ТТН при
+    // каждом сохранении карточки заказа
+    const previousResult = await pool.query('SELECT ttn_number FROM orders WHERE id = $1', [id]);
+    const previousTtnNumber: string | null = previousResult.rows[0]?.ttn_number ?? null;
+
     // COALESCE($N, колонка) — обновляет колонку, только если для неё
     // реально передали значение в запросе; параметр undefined (поле не
     // передали вовсе) превращается в null через pg, а COALESCE в этом
@@ -250,6 +260,32 @@ export async function PATCH(
     }
 
     const row = result.rows[0];
+
+    // Персональне сповіщення покупцю про ТТН — лише коли номер реально
+    // З'ЯВИВСЯ або ЗМІНИВСЯ (не при кожному збереженні картки заказу),
+    // і лише якщо покупець раніше підключив Telegram-сповіщення
+    // (customer_telegram_links, app/api/telegram/webhook/route.ts)
+    if (row.ttn_number && row.ttn_number !== previousTtnNumber) {
+      void pool
+        .query(
+          `SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1`,
+          [normalizePhone(row.customer_phone)]
+        )
+        .then((chatResult) => {
+          const chatId = chatResult.rows[0]?.telegram_chat_id;
+          if (!chatId) return;
+          void sendTelegramMessageTo(
+            chatId,
+            [
+              `Ваше замовлення №${(row.id as string).slice(0, 8)} відправлено Новою Поштою!`,
+              `Номер ТТН: ${row.ttn_number}`,
+            ].join('\n')
+          );
+        })
+        .catch((error) => {
+          console.error('Ошибка при отправке Telegram-уведомления о ТТН:', error);
+        });
+    }
 
     return NextResponse.json({
       success: true,

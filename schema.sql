@@ -635,6 +635,13 @@ CREATE TABLE IF NOT EXISTS site_settings (
 -- ------------------------------------------------------------
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS shop_name TEXT;
 
+-- Посилання-запрошення в загальну Telegram-групу магазину (не плутати
+-- з персональними сповіщеннями про замовлення — див. customer_telegram_links
+-- нижче). Саму групу бот створити не може (Bot API цього не вміє) —
+-- адмін створює її вручну в Telegram і просто вставляє готове
+-- запрошення сюди через екран "Настройки"
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS telegram_group_url TEXT;
+
 -- Заполняем единственную строку значениями по умолчанию, если её
 -- ещё нет — ON CONFLICT DO NOTHING делает эту вставку безопасной
 -- для повторного запуска скрипта
@@ -1289,6 +1296,35 @@ CREATE INDEX IF NOT EXISTS idx_customer_addresses_phone ON customer_addresses (p
 -- "Заказы" (components/OrdersScreen.tsx) після відправки
 -- ------------------------------------------------------------
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS ttn_number TEXT;
+
+
+-- ============================================================
+-- 23. ТАБЛИЦА customer_telegram_links — персональні Telegram-сповіщення
+-- ============================================================
+-- Прив'язка "номер телефону покупця → його Telegram-чат", щоб бот
+-- (lib/telegramNotify.ts) міг надсилати сповіщення про ЙОГО замовлення
+-- ЙОМУ ОСОБИСТО, а не в загальний чат власника магазину. Telegram-боти
+-- не можуть написати першими — покупець сам натискає посилання-запрошення
+-- в особистому кабінеті (components/CustomerDashboard.tsx), яке
+-- відкриває бота з командою "/start <телефон>"; бот ловить цю команду
+-- на app/api/telegram/webhook/route.ts і зберігає рядок сюди.
+--
+-- phone — той самий нормалізований ключ (останні 9 цифр), що і в
+-- customer_pricing_rules/lib/phoneNormalize.ts
+CREATE TABLE IF NOT EXISTS customer_telegram_links (
+  phone TEXT PRIMARY KEY,
+
+  -- Числовий ідентифікатор особистого чату покупця з ботом — саме
+  -- на нього надсилається sendMessage. BIGINT, а не INTEGER: у Telegram
+  -- це 64-бітне число, у INTEGER воно не завжди вміщається
+  telegram_chat_id BIGINT NOT NULL,
+
+  -- Telegram-нік покупця (якщо є) — лише для зручності адміна при
+  -- перегляді бази, у самій логіці сповіщень не використовується
+  telegram_username TEXT,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
 
 -- ============================================================

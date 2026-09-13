@@ -42,6 +42,7 @@ interface PatchSiteSettingsBody {
   shopName?: string;
   phone?: string;
   workingHours?: string;
+  telegramGroupUrl?: string;
 }
 
 // ------------------------------------------------------------
@@ -50,13 +51,13 @@ interface PatchSiteSettingsBody {
 export async function GET() {
   try {
     const result = await pool.query(
-      'SELECT shop_name, phone, working_hours, updated_at FROM site_settings WHERE id = 1'
+      'SELECT shop_name, phone, working_hours, telegram_group_url, updated_at FROM site_settings WHERE id = 1'
     );
 
     // Строка гарантированно должна быть (schema.sql вставляет её
     // значениями по умолчанию), но на случай, если кто-то вручную
     // удалил её из базы — отдаём пустые значения, а не падаем с ошибкой
-    const row = result.rows[0] || { shop_name: null, phone: null, working_hours: null, updated_at: null };
+    const row = result.rows[0] || { shop_name: null, phone: null, working_hours: null, telegram_group_url: null, updated_at: null };
 
     return NextResponse.json({
       success: true,
@@ -64,6 +65,7 @@ export async function GET() {
         shopName: row.shop_name,
         phone: row.phone,
         workingHours: row.working_hours,
+        telegramGroupUrl: row.telegram_group_url,
         updatedAt: row.updated_at,
       },
     });
@@ -94,10 +96,11 @@ export async function PATCH(request: NextRequest) {
   const hasShopName = body.shopName !== undefined;
   const hasPhone = body.phone !== undefined;
   const hasWorkingHours = body.workingHours !== undefined;
+  const hasTelegramGroupUrl = body.telegramGroupUrl !== undefined;
 
-  if (!hasShopName && !hasPhone && !hasWorkingHours) {
+  if (!hasShopName && !hasPhone && !hasWorkingHours && !hasTelegramGroupUrl) {
     return NextResponse.json(
-      { error: 'Передайте хотя бы одно поле для изменения: shopName, phone или workingHours.' },
+      { error: 'Передайте хотя бы одно поле для изменения: shopName, phone, workingHours или telegramGroupUrl.' },
       { status: 400 }
     );
   }
@@ -115,20 +118,23 @@ export async function PATCH(request: NextRequest) {
     // вставки из schema.sql): тогда INSERT создаст её, а не упадёт
     const result = await pool.query(
       `
-      INSERT INTO site_settings (id, shop_name, phone, working_hours)
-      VALUES (1, $1, $2, $3)
+      INSERT INTO site_settings (id, shop_name, phone, working_hours, telegram_group_url)
+      VALUES (1, $1, $2, $3, $4)
       ON CONFLICT (id)
       DO UPDATE SET
         shop_name = COALESCE($1, site_settings.shop_name),
         phone = COALESCE($2, site_settings.phone),
         working_hours = COALESCE($3, site_settings.working_hours),
+        telegram_group_url = CASE WHEN $5 THEN $4 ELSE site_settings.telegram_group_url END,
         updated_at = now()
-      RETURNING shop_name, phone, working_hours, updated_at
+      RETURNING shop_name, phone, working_hours, telegram_group_url, updated_at
       `,
       [
         hasShopName ? body.shopName!.trim() : null,
         hasPhone ? body.phone : null,
         hasWorkingHours ? body.workingHours : null,
+        hasTelegramGroupUrl ? body.telegramGroupUrl!.trim() || null : null,
+        hasTelegramGroupUrl,
       ]
     );
 
@@ -140,6 +146,7 @@ export async function PATCH(request: NextRequest) {
         shopName: row.shop_name,
         phone: row.phone,
         workingHours: row.working_hours,
+        telegramGroupUrl: row.telegram_group_url,
         updatedAt: row.updated_at,
       },
     });

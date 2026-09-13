@@ -38,9 +38,10 @@ import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star } from 'lucide-react';
+import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users } from 'lucide-react';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { getCarMakeByName } from '@/lib/carMakes';
+import { normalizePhone } from '@/lib/phoneNormalize';
 import GarageCard, { type GarageVehicle } from '@/components/GarageCard';
 import {
   TECH_BG,
@@ -149,6 +150,17 @@ interface CartItem {
 
 const PHONE_STORAGE_KEY = 'autokontur-customer-phone';
 const CART_STORAGE_KEY = 'autokontur-cart';
+
+// Юзернейм бота Telegram-сповіщень — той самий, що й
+// TELEGRAM_BOT_USERNAME у lib/telegramNotify.ts. Продубльований тут
+// окремою константою, а не імпортований звідти: той файл рахує
+// секрет вебхука через вбудований модуль Node "crypto", який не можна
+// підключати в клієнтський (браузерний) код
+const TELEGRAM_BOT_USERNAME = 'dominatorparts_orders_bot';
+
+function telegramConnectUrl(phone: string): string {
+  return `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${normalizePhone(phone)}`;
+}
 
 function setCustomerPhoneCookie(phone: string) {
   document.cookie = `${CUSTOMER_PHONE_COOKIE}=${encodeURIComponent(phone)}; path=/; max-age=31536000`;
@@ -338,6 +350,11 @@ export default function CustomerDashboard() {
   const [addressFormError, setAddressFormError] = useState<string | null>(null);
   const [busyAddressId, setBusyAddressId] = useState<string | null>(null);
 
+  // ---- Telegram-сповіщення ----
+  const [telegramLinked, setTelegramLinked] = useState<boolean | null>(null);
+  const [telegramUsername, setTelegramUsername] = useState<string | null>(null);
+  const [telegramGroupUrl, setTelegramGroupUrl] = useState<string | null>(null);
+
   // Відновлення "сесії" зі localStorage при відкритті сторінки
   useEffect(() => {
     try {
@@ -436,17 +453,41 @@ export default function CustomerDashboard() {
     }
   }, []);
 
+  const fetchTelegramStatus = useCallback(async (phone: string) => {
+    try {
+      const response = await fetch(`/api/customer/telegram-link?${new URLSearchParams({ phone }).toString()}`);
+      const data = await response.json();
+      if (data.success) {
+        setTelegramLinked(data.linked as boolean);
+        setTelegramUsername(data.username as string | null);
+      }
+    } catch {
+      // Статус просто не покажеться — не критично
+    }
+
+    try {
+      const response = await fetch('/api/site-settings');
+      const data = await response.json();
+      if (data.success) setTelegramGroupUrl(data.settings.telegramGroupUrl || null);
+    } catch {
+      // Посилання на групу просто не покажеться — не критично
+    }
+  }, []);
+
   useEffect(() => {
     if (!loggedInPhone || loadedTabs.has(activeTab)) return;
 
     if (activeTab === 'garage') fetchVehicles(loggedInPhone);
     if (activeTab === 'favorites') fetchFavorites(loggedInPhone);
-    if (activeTab === 'settings') fetchAddresses(loggedInPhone);
+    if (activeTab === 'settings') {
+      fetchAddresses(loggedInPhone);
+      fetchTelegramStatus(loggedInPhone);
+    }
 
     if (activeTab !== 'orders') {
       setLoadedTabs((prev) => new Set(prev).add(activeTab));
     }
-  }, [activeTab, loggedInPhone, loadedTabs, fetchVehicles, fetchFavorites, fetchAddresses]);
+  }, [activeTab, loggedInPhone, loadedTabs, fetchVehicles, fetchFavorites, fetchAddresses, fetchTelegramStatus]);
 
   // ВХІД
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -490,6 +531,9 @@ export default function CustomerDashboard() {
     setFavorites([]);
     setAddresses([]);
     setPricingRule(null);
+    setTelegramLinked(null);
+    setTelegramUsername(null);
+    setTelegramGroupUrl(null);
   };
 
   const toggleOrder = async (orderId: string) => {
@@ -1291,6 +1335,52 @@ export default function CustomerDashboard() {
                     <p className="mt-1 text-sm" style={{ fontFamily: TECH_MONO_FONT, color: '#fff' }}>
                       {loggedInPhone}
                     </p>
+                  </div>
+
+                  <div className="mb-6 rounded-2xl p-5" style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}>
+                    <h3 className="mb-1 text-sm font-semibold" style={{ color: '#fff' }}>
+                      Telegram-сповіщення
+                    </h3>
+                    <p className="mb-3 text-xs" style={{ color: TECH_MUTED }}>
+                      Отримуйте склад замовлення одразу після оформлення та номер ТТН, коли ми відправимо
+                      посилку.
+                    </p>
+
+                    {telegramLinked ? (
+                      <div
+                        className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
+                        style={{ background: TECH_GOOD_SOFT, color: TECH_GOOD }}
+                      >
+                        <Check className="h-3 w-3" />
+                        Підключено{telegramUsername ? ` · @${telegramUsername}` : ''}
+                      </div>
+                    ) : (
+                      <a
+                        href={telegramConnectUrl(loggedInPhone)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-shadow hover:shadow-glow"
+                        style={{ background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }}
+                      >
+                        <Send className="h-3.5 w-3.5" />
+                        Підключити Telegram-сповіщення
+                      </a>
+                    )}
+
+                    {telegramGroupUrl && (
+                      <div className="mt-3 pt-3" style={{ borderTop: `1px dashed ${TECH_BORDER}` }}>
+                        <a
+                          href={telegramGroupUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs font-medium transition-colors hover:text-white"
+                          style={{ color: TECH_ACCENT_BRIGHT }}
+                        >
+                          <Users className="h-3.5 w-3.5" />
+                          Приєднатися до нашої Telegram-спільноти
+                        </a>
+                      </div>
+                    )}
                   </div>
 
                   <div className="mb-3 flex items-center justify-between">

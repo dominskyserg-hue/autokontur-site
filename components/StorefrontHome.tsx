@@ -49,12 +49,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock, Warehouse, Lock } from 'lucide-react';
+import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock, Warehouse, Lock, Send } from 'lucide-react';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { FAQ_ITEMS } from '@/lib/faq';
 import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
+import { normalizePhone } from '@/lib/phoneNormalize';
 import { trackAddToCart, trackBeginCheckout, trackPurchase } from '@/lib/analytics';
 import NovaPoshtaAddressFields from '@/components/NovaPoshtaAddressFields';
 import CategoryGridSection from '@/components/CategoryGridSection';
@@ -2860,7 +2861,7 @@ function CartDrawer({
         </div>
 
         {orderStatus === 'success' ? (
-          <OrderSuccessScreen orderId={createdOrderId} onClose={onClose} />
+          <OrderSuccessScreen orderId={createdOrderId} customerPhone={customerPhone} onClose={onClose} />
         ) : cart.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
             <div style={{ color: TECH_BORDER_2 }}>
@@ -3252,7 +3253,22 @@ function CartRow({
 // админ-панели (см. shortId() в components/OrdersScreen.tsx) — так
 // менеджер сможет быстро найти этот заказ по номеру, который назовёт
 // клиент
-function OrderSuccessScreen({ orderId, onClose }: { orderId: string | null; onClose: () => void }) {
+// Юзернейм бота Telegram-сповіщень — той самий, що й
+// TELEGRAM_BOT_USERNAME у lib/telegramNotify.ts. Продубльований тут
+// окремою константою (не імпортований звідти): той файл рахує секрет
+// вебхука через вбудований модуль Node "crypto", який не можна
+// підключати в клієнтський (браузерний) код
+const TELEGRAM_BOT_USERNAME = 'dominatorparts_orders_bot';
+
+function OrderSuccessScreen({
+  orderId,
+  customerPhone,
+  onClose,
+}: {
+  orderId: string | null;
+  customerPhone: string;
+  onClose: () => void;
+}) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
       <div
@@ -3273,6 +3289,20 @@ function OrderSuccessScreen({ orderId, onClose }: { orderId: string | null; onCl
       <p className="mb-6 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
         Ми зв&apos;яжемося з вами найближчим часом.
       </p>
+
+      {customerPhone && (
+        <a
+          href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${normalizePhone(customerPhone)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mb-3 inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-white/5"
+          style={{ fontFamily: SANS_TECH, border: `1px solid ${TECH_BORDER_2}`, color: TECH_INK }}
+        >
+          <Send className="h-4 w-4" />
+          Отримувати сповіщення про замовлення в Telegram
+        </a>
+      )}
+
       <button
         type="button"
         onClick={onClose}

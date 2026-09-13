@@ -23,6 +23,7 @@ export default function ContactSettingsForm() {
   const [shopName, setShopName] = useState('');
   const [phone, setPhone] = useState('');
   const [workingHours, setWorkingHours] = useState('');
+  const [telegramGroupUrl, setTelegramGroupUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -42,6 +43,7 @@ export default function ContactSettingsForm() {
       setShopName(data.settings.shopName || '');
       setPhone(data.settings.phone || '');
       setWorkingHours(data.settings.workingHours || '');
+      setTelegramGroupUrl(data.settings.telegramGroupUrl || '');
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Ошибка сети при загрузке настроек');
     } finally {
@@ -68,7 +70,7 @@ export default function ContactSettingsForm() {
       const response = await fetch('/api/site-settings', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopName, phone, workingHours }),
+        body: JSON.stringify({ shopName, phone, workingHours, telegramGroupUrl }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -148,6 +150,26 @@ export default function ContactSettingsForm() {
             value={workingHours}
             onChange={(e) => setWorkingHours(e.target.value)}
           />
+        </div>
+
+        <div className="w-72">
+          <label htmlFor="settings-telegram-group" className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+            Ссылка на Telegram-группу
+          </label>
+          <input
+            id="settings-telegram-group"
+            type="text"
+            disabled={loading}
+            className="w-full px-3 py-2 text-sm rounded-md font-mono disabled:opacity-50"
+            style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+            placeholder="https://t.me/+abcdEFGH12345"
+            value={telegramGroupUrl}
+            onChange={(e) => setTelegramGroupUrl(e.target.value)}
+          />
+          <p className="text-[11px] mt-1" style={{ color: 'var(--ink-faint)' }}>
+            Группу создайте вручную в Telegram (бот сам создавать группы не умеет) и вставьте сюда
+            ссылку-приглашение — она появится в кабинете клиента.
+          </p>
         </div>
 
         <button

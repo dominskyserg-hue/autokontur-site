@@ -58,7 +58,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { sendTelegramMessage } from '@/lib/telegramNotify';
+import { sendTelegramMessage, sendTelegramMessageTo } from '@/lib/telegramNotify';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { computeCustomerPrice, type CustomerPricingRule } from '@/lib/customerPricing';
 
@@ -362,6 +362,37 @@ export async function POST(request: NextRequest) {
         .filter((line) => line !== null)
         .join('\n')
     );
+
+    // Персональне сповіщення САМОМУ ПОКУПЦЮ — тільки якщо він раніше
+    // підключив Telegram-сповіщення в кабінеті (customer_telegram_links,
+    // app/api/telegram/webhook/route.ts). Якщо не підключав — рядка
+    // просто немає, chatIdRow буде undefined, і сповіщення тихо не
+    // надсилається (як і скрізь тут: збій/відсутність сповіщення не
+    // повинні заважати оформленню замовлення)
+    void pool
+      .query('SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1', [normalizedPhone])
+      .then((chatResult) => {
+        const chatId = chatResult.rows[0]?.telegram_chat_id;
+        if (!chatId) return;
+
+        void sendTelegramMessageTo(
+          chatId,
+          [
+            `Дякуємо за замовлення, ${customerName}!`,
+            `Номер замовлення: №${orderId.slice(0, 8)}`,
+            '',
+            ...summaryLines,
+            '',
+            `Разом: ${totalAmount.toFixed(0)} грн`,
+            '',
+            `Доставка: ${city}, ${novaPoshtaAddress}`,
+            'Номер ТТН надішлемо тут одразу, як тільки відправимо посилку.',
+          ].join('\n')
+        );
+      })
+      .catch((error) => {
+        console.error('Ошибка при отправке личного Telegram-уведомления покупателю:', error);
+      });
 
     return NextResponse.json({ success: true, orderId });
   } catch (error) {
