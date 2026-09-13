@@ -5,8 +5,18 @@
 // Сюди Telegram надсилає КОЖНЕ повідомлення, написане боту
 // @dominatorparts_orders_bot (реєструється один раз через
 // https://api.telegram.org/bot<ТОКЕН>/setWebhook — див. коментар у
-// lib/telegramNotify.ts). Єдине, що нас тут цікавить — команда
-// "/start <телефон>", якою бот дізнається, ЧИЙ це chat_id.
+// lib/telegramNotify.ts). Тут два різних сценарії:
+//
+//   1. Команда "/start <телефон>" — якою бот дізнається, ЧИЙ це
+//      chat_id (детально нижче).
+//   2. БУДЬ-ЯКЕ інше текстове повідомлення — покупець написав боту
+//      напряму (кнопка "Telegram" у шапці сайту, components/
+//      StorefrontHome.tsx, веде саме на t.me/dominatorparts_orders_bot
+//      без жодного "/start"). Таке повідомлення пересилається в ТОЙ
+//      САМИЙ чат власника, куди й так приходять сповіщення про нові
+//      замовлення (sendTelegramMessage), щоб менеджер міг відповісти
+//      покупцю прямо з Telegram — окремого "живого" бота з
+//      підтримкою діалогу тут немає, це просто ретрансляція
 //
 // Звідки береться "/start <телефон>": особистий кабінет покупця
 // (components/CustomerDashboard.tsx) показує посилання-запрошення
@@ -28,7 +38,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { computeTelegramWebhookSecret, sendTelegramMessageTo } from '@/lib/telegramNotify';
+import { computeTelegramWebhookSecret, sendTelegramMessage, sendTelegramMessageTo } from '@/lib/telegramNotify';
 
 export const runtime = 'nodejs';
 
@@ -56,12 +66,28 @@ function extractStartPayload(text: string): string | null {
   return match[1] || null;
 }
 
+interface TelegramFrom {
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+}
+
 interface TelegramUpdate {
   message?: {
     chat: { id: number };
-    from?: { username?: string };
+    from?: TelegramFrom;
     text?: string;
   };
+}
+
+// Як підписати повідомлення в чаті власника (sendTelegramMessage), щоб
+// було зрозуміло, ХТО написав — юзернейм найзручніший (можна відкрити
+// профіль і відповісти напряму), якщо його немає — просто ім'я з
+// Telegram, а якщо і того немає — хоча б chat_id
+function formatSenderLabel(from: TelegramFrom | undefined, chatId: number): string {
+  if (from?.username) return `@${from.username}`;
+  const name = [from?.first_name, from?.last_name].filter(Boolean).join(' ');
+  return name || `chat_id ${chatId}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -86,20 +112,34 @@ export async function POST(request: NextRequest) {
   const message = update.message;
   const text = message?.text;
 
-  // Не /start (звичайний текст, стікер тощо) — нам тут його обробляти
-  // нема чим, Telegram все одно чекає 200 OK, інакше почне повторювати
-  // доставку цього ж апдейту
+  // Не текстове повідомлення (стікер, фото тощо) — нам тут його
+  // обробляти нема чим, Telegram все одно чекає 200 OK, інакше почне
+  // повторювати доставку цього ж апдейту
   if (!message || !text) {
     return NextResponse.json({ ok: true });
   }
 
   const chatId = message.chat.id;
+  const isStartCommand = /^\/start(?:@\w+)?/.test(text);
+
+  if (!isStartCommand) {
+    // Звичайне повідомлення (не команда "/start") — покупець написав
+    // боту напряму, найімовірніше через кнопку "Telegram" у шапці
+    // сайту. Пересилаємо в чат власника (той самий, куди приходять
+    // сповіщення про замовлення) і підтверджуємо покупцю, що його
+    // прочитають — сам бот діалог не веде, відповідає вже людина
+    const senderLabel = formatSenderLabel(message.from, chatId);
+    void sendTelegramMessage(`💬 Повідомлення від ${senderLabel} у Telegram-боті:\n\n${text}`);
+    await sendTelegramMessageTo(chatId, 'Дякуємо! Ваше повідомлення передано менеджеру, ми відповімо найближчим часом.');
+    return NextResponse.json({ ok: true });
+  }
+
   const payload = extractStartPayload(text);
 
   if (!payload) {
-    // "/start" без телефону (або взагалі не команда старту) — швидше
-    // за все, покупець написав боту напряму, а не через посилання з
-    // кабінету. Пояснюємо, як підключити сповіщення правильно
+    // "/start" без телефону — покупець відкрив бота напряму (не через
+    // посилання-запрошення з кабінету). Пояснюємо, як підключити
+    // сповіщення правильно
     await sendTelegramMessageTo(
       chatId,
       'Щоб отримувати сповіщення про свої замовлення тут, перейдіть у свій Особистий кабінет на сайті → «Налаштування» → «Підключити Telegram-сповіщення».'

@@ -49,7 +49,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock, Warehouse, Lock, Send } from 'lucide-react';
+import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock, Warehouse, Lock, Send, Users } from 'lucide-react';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { FAQ_ITEMS } from '@/lib/faq';
@@ -247,6 +247,11 @@ export default function StorefrontHome() {
   const [shopName, setShopName] = useState(DEFAULT_SHOP_NAME);
   const [phone, setPhone] = useState(DEFAULT_PHONE);
   const [workingHours, setWorkingHours] = useState(DEFAULT_WORKING_HOURS);
+  // Посилання на Telegram-групу магазину — адмін вставляє його в
+  // "Настройки" (components/ContactSettingsForm.tsx) вже ПІСЛЯ того,
+  // як сам створить групу (Bot API не вміє створювати групи). Поки
+  // не задано — null, і кнопка групи в шапці просто не показується
+  const [telegramGroupUrl, setTelegramGroupUrl] = useState<string | null>(null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   // ---- блок "Популярні товари" на головній (товари з фото, в наявності) ----
@@ -276,6 +281,7 @@ export default function StorefrontHome() {
           }
           if (data.settings.phone) setPhone(data.settings.phone);
           if (data.settings.workingHours) setWorkingHours(data.settings.workingHours);
+          if (data.settings.telegramGroupUrl) setTelegramGroupUrl(data.settings.telegramGroupUrl);
 
           // Оновлюємо кеш — щоб НАСТУПНЕ відкриття сайту вже одразу
           // показало ці (можливо, змінені) значення, не чекаючи мережі
@@ -1133,6 +1139,40 @@ export default function StorefrontHome() {
             </div>
 
             <div className="flex items-center gap-2.5">
+              {/* ---- Написати в Telegram ---- */}
+              {/* Відкриває чат із ботом @dominatorparts_orders_bot —
+                  будь-яке повідомлення, яке покупець там напише (НЕ
+                  "/start ..."), вебхук (app/api/telegram/webhook/route.ts)
+                  пересилає в той самий чат власника, куди й так приходять
+                  сповіщення про замовлення, тож менеджер відповідає
+                  покупцю прямо з Telegram */}
+              <a
+                href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-white/5 md:flex"
+                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+                title="Написати нам у Telegram"
+              >
+                <Send className="h-3.5 w-3.5" style={{ color: TECH_ACCENT_BRIGHT }} />
+                <span>Telegram</span>
+              </a>
+
+              {/* ---- Telegram-спільнота ---- */}
+              {telegramGroupUrl && (
+                <a
+                  href={telegramGroupUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-colors hover:bg-white/5 lg:flex"
+                  style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+                  title="Наша спільнота в Telegram"
+                >
+                  <Users className="h-3.5 w-3.5" style={{ color: TECH_ACCENT_BRIGHT }} />
+                  <span>Спільнота</span>
+                </a>
+              )}
+
               {/* ---- Категорії деталей ---- */}
               {/* Внутрішнє посилання на /category — потрібне не тільки
                   покупцю, а й Google: саме через такі посилання з
