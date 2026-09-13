@@ -822,16 +822,17 @@ export default function CustomerDashboard() {
                     {loggedInPhone}
                   </p>
                 </div>
-                {pricingRule && (
+                {/* Наценку (ruleType 'markup') клієнту навмисно НЕ показуємо —
+                    це внутрішнє комерційне правило, а не привілей, яким
+                    варто "хвалитися" перед покупцем. Бейдж бачать лише
+                    ті, кому призначена знижка */}
+                {pricingRule && pricingRule.ruleType === 'discount' && (
                   <div
                     className="mt-3 inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium"
-                    style={{
-                      background: pricingRule.ruleType === 'discount' ? TECH_GOOD_SOFT : TECH_HEAT_SOFT,
-                      color: pricingRule.ruleType === 'discount' ? TECH_GOOD : TECH_HEAT,
-                    }}
+                    style={{ background: TECH_GOOD_SOFT, color: TECH_GOOD }}
                   >
                     <Star className="h-3 w-3" fill="currentColor" />
-                    {pricingRule.ruleType === 'discount' ? `Знижка −${pricingRule.percent}%` : `Націнка +${pricingRule.percent}%`}
+                    Знижка −{pricingRule.percent}%
                   </div>
                 )}
               </div>
