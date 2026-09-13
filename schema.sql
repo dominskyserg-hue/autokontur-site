@@ -642,6 +642,16 @@ ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS shop_name TEXT;
 -- запрошення сюди через екран "Настройки"
 ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS telegram_group_url TEXT;
 
+-- chat_id закритої групи-форуму (тільки для власника/співробітників,
+-- НЕ та сама група, на яку посилається telegram_group_url вище) —
+-- туди бот автоматично створює окрему тему (Topic) на кожного покупця,
+-- що написав через кнопку "Telegram" у шапці сайту, щоб листування з
+-- різними покупцями не змішувалось в один потік. NULL, доки власник
+-- сам не зареєструє групу командою "/register_support" прямо в ній
+-- (app/api/telegram/webhook/route.ts) — вручну вводити сюди id ніде
+-- не потрібно, це не текстове поле в адмінці
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS telegram_staff_chat_id BIGINT;
+
 -- Заполняем единственную строку значениями по умолчанию, если её
 -- ещё нет — ON CONFLICT DO NOTHING делает эту вставку безопасной
 -- для повторного запуска скрипта
@@ -1352,6 +1362,36 @@ CREATE TABLE IF NOT EXISTS telegram_relay_messages (
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+
+-- ============================================================
+-- 25. ТАБЛИЦА telegram_support_topics — окрема тема форуму на
+--     кожного покупця
+-- ============================================================
+-- Коли власник зареєстрував закриту групу-форум командою
+-- "/register_support" (site_settings.telegram_staff_chat_id,
+-- app/api/telegram/webhook/route.ts), кожному НОВОМУ покупцю, що
+-- написав боту, автоматично створюється своя тема (Topic) у цій
+-- групі через Telegram API createForumTopic — і більше НЕ
+-- створюється повторно: наступні повідомлення того самого покупця
+-- йдуть у ЦЮ Ж тему (пошук по customer_chat_id тут). Це замінює
+-- собою "пласку" пересилку в один потік (telegram_relay_messages
+-- вище) — той механізм лишається як запасний варіант, якщо групу-
+-- форум ще не зареєстровано
+CREATE TABLE IF NOT EXISTS telegram_support_topics (
+  customer_chat_id BIGINT PRIMARY KEY,
+
+  -- id теми форуму — саме його передають у message_thread_id, коли
+  -- надсилають повідомлення В цю тему (і саме за ним впізнають, у
+  -- якій темі власник надрукував відповідь, щоб переслати покупцю)
+  message_thread_id BIGINT NOT NULL,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Пришвидшує зворотний пошук "власник написав у темі X — кому
+-- переслати відповідь" (app/api/telegram/webhook/route.ts)
+CREATE INDEX IF NOT EXISTS idx_telegram_support_topics_thread ON telegram_support_topics (message_thread_id);
 
 
 -- ============================================================

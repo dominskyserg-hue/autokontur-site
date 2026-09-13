@@ -56,7 +56,15 @@ export async function sendTelegramMessage(text: string): Promise<number | null> 
   return sendTelegramMessageTo(TELEGRAM_CHAT_ID, text);
 }
 
-export async function sendTelegramMessageTo(chatId: string | number, text: string): Promise<number | null> {
+// messageThreadId — необов'язковий id ТЕМИ форуму (supergroup із
+// увімкненими Topics), якщо повідомлення потрібно надіслати не в
+// загальний потік чату, а в конкретну тему — див. createForumTopic()
+// і "Мій Гараж підтримки" в app/api/telegram/webhook/route.ts
+export async function sendTelegramMessageTo(
+  chatId: string | number,
+  text: string,
+  messageThreadId?: number
+): Promise<number | null> {
   if (!TELEGRAM_BOT_TOKEN) return null;
 
   try {
@@ -70,6 +78,7 @@ export async function sendTelegramMessageTo(chatId: string | number, text: strin
       body: JSON.stringify({
         chat_id: chatId,
         text,
+        ...(messageThreadId ? { message_thread_id: messageThreadId } : {}),
       }),
     });
 
@@ -85,6 +94,42 @@ export async function sendTelegramMessageTo(chatId: string | number, text: strin
     // Збій відправки в Telegram НЕ повинен ламати оформлення замовлення —
     // це додаткове сповіщення, а не критична частина покупки
     console.error('Не вдалося відправити сповіщення в Telegram:', error);
+    return null;
+  }
+}
+
+// Створює нову тему форуму (Topic) у supergroup з увімкненими Topics —
+// один customer_chat_id отримує РІВНО одну тему, щоб листування з
+// різними покупцями не змішувалось в один потік (telegram_support_topics,
+// schema.sql). Група МАЄ бути supergroup з увімкненою опцією "Topics"
+// (Group Info → Edit → Topics у самому Telegram — Bot API це не вміє
+// увімкнути, лише користувач) і бот у ній — адміністратором із правом
+// "Manage Topics". Повертає message_thread_id нової теми або null, якщо
+// щось не так (немає прав, група не форум тощо) — виклик, що це
+// викликав, тоді сам вирішує, як діяти далі (зазвичай — відкат на
+// звичайну пересилку без теми)
+export async function createForumTopic(chatId: string | number, name: string): Promise<number | null> {
+  if (!TELEGRAM_BOT_TOKEN) return null;
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/createForumTopic`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // Telegram обмежує назву теми 128 символами — обрізаємо про всяк
+      // випадок, щоб довге ім'я/юзернейм покупця не завалило запит
+      body: JSON.stringify({ chat_id: chatId, name: name.slice(0, 128) }),
+    });
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      console.error('Telegram API повернув помилку при створенні теми форуму:', response.status, JSON.stringify(data));
+      return null;
+    }
+
+    return data?.result?.message_thread_id ?? null;
+  } catch (error) {
+    console.error('Не вдалося створити тему форуму в Telegram:', error);
     return null;
   }
 }

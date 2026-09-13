@@ -5,23 +5,29 @@
 // Сюди Telegram надсилає КОЖНЕ повідомлення, написане боту
 // @dominatorparts_orders_bot (реєструється один раз через
 // https://api.telegram.org/bot<ТОКЕН>/setWebhook — див. коментар у
-// lib/telegramNotify.ts). Тут три різних сценарії:
+// lib/telegramNotify.ts). Тут кілька різних сценаріїв:
 //
 //   1. Команда "/start <телефон>" — якою бот дізнається, ЧИЙ це
-//      chat_id (детально нижче).
-//   2. Звичайне повідомлення ВІД ПОКУПЦЯ — написав боту напряму
+//      chat_id, щоб надсилати покупцю персональні сповіщення про
+//      замовлення (детально нижче).
+//   2. Команда "/register_support" — власник магазину один раз
+//      надсилає її у СВОЮ ЗАКРИТУ групу-форум (Group Info → Edit →
+//      Topics), щоб бот запам'ятав: "ось куди створювати окрему тему
+//      на кожного покупця". Bot API не вміє САМ створити групу чи
+//      увімкнути Topics — це власник робить вручну в Telegram, а
+//      команда лише повідомляє боту вже готовий chat_id
+//   3. Звичайне повідомлення ВІД ПОКУПЦЯ — написав боту напряму
 //      (кнопка "Telegram" у шапці сайту, components/StorefrontHome.tsx,
 //      веде саме на t.me/dominatorparts_orders_bot без жодного
-//      "/start"). Пересилається в чат власника (той самий, куди
-//      приходять сповіщення про нові замовлення, sendTelegramMessage) —
-//      і ЗАПАМ'ЯТОВУЄТЬСЯ (telegram_relay_messages, schema.sql), щоб
-//      можна було розпізнати відповідь на нього, див. пункт 3
-//   3. Відповідь ВІД ВЛАСНИКА на пересилку з пункту 2 — власник
-//      натискає "Reply" на переслане повідомлення прямо в Telegram;
-//      апдейт приходить з заповненим message.reply_to_message.message_id,
-//      за яким у telegram_relay_messages знаходиться chat_id покупця —
-//      і текст відповіді летить ЙОМУ. Так оператор відповідає покупцю
-//      прямо з Telegram, не заходячи на сайт
+//      "/start"). Якщо групу-форум зареєстровано (крок 2) — бот
+//      створює покупцю ОКРЕМУ тему там (і надалі всі його
+//      повідомлення йдуть у ту саму тему, telegram_support_topics,
+//      schema.sql); якщо ні — запасний варіант: пласка пересилка в
+//      один спільний чат власника (telegram_relay_messages)
+//   4. Відповідь ВІД ВЛАСНИКА — або в темі покупця в групі-форумі
+//      (крок 3), або "Reply" на пересилку в запасному "пласкому"
+//      варіанті — текст відповіді летить відповідному покупцю. Так
+//      оператор відповідає покупцю прямо з Telegram, не заходячи на сайт
 //
 // Звідки береться "/start <телефон>": особистий кабінет покупця
 // (components/CustomerDashboard.tsx) показує посилання-запрошення
@@ -38,12 +44,22 @@
 // пізніше ТТН) почали б приходити ЙОМУ. Тому Telegram підписує кожен
 // реальний запит заголовком X-Telegram-Bot-Api-Secret-Token (значення
 // задається один раз при реєстрації вебхука) — звіряємо його з тим же
-// детермінованим хешем, що рахує computeTelegramWebhookSecret()
+// детермінованим хешем, що рахує computeTelegramWebhookSecret().
+// Так само "/register_support" приймається ЛИШЕ від власника (його
+// особистий Telegram user id збігається з TELEGRAM_CHAT_ID) — інакше
+// будь-хто, додавши бота у СВОЮ групу, міг би перехопити переписку
+// з усіма покупцями на себе
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { computeTelegramWebhookSecret, isOwnerChat, sendTelegramMessage, sendTelegramMessageTo } from '@/lib/telegramNotify';
+import {
+  computeTelegramWebhookSecret,
+  createForumTopic,
+  isOwnerChat,
+  sendTelegramMessage,
+  sendTelegramMessageTo,
+} from '@/lib/telegramNotify';
 
 export const runtime = 'nodejs';
 
@@ -72,6 +88,7 @@ function extractStartPayload(text: string): string | null {
 }
 
 interface TelegramFrom {
+  id: number;
   username?: string;
   first_name?: string;
   last_name?: string;
@@ -84,19 +101,79 @@ interface TelegramUpdate {
     text?: string;
     // Заповнене, коли це повідомлення — відповідь на інше (власник
     // натиснув "Reply" в Telegram). message_id — id ТОГО повідомлення,
-    // на яке відповіли
+    // на яке відповіли. Використовується лише в "пласкому" запасному
+    // варіанті (без групи-форуму)
     reply_to_message?: { message_id: number };
+    // Заповнене, коли повідомлення надіслано ВСЕРЕДИНІ теми форуму
+    // (не в "Загальну" тему) — саме за цим id знаходимо, якому
+    // покупцю адресована відповідь власника
+    message_thread_id?: number;
   };
 }
 
-// Як підписати повідомлення в чаті власника (sendTelegramMessage), щоб
-// було зрозуміло, ХТО написав — юзернейм найзручніший (можна відкрити
-// профіль і відповісти напряму), якщо його немає — просто ім'я з
-// Telegram, а якщо і того немає — хоча б chat_id
+// Як підписати повідомлення в чаті/темі власника, щоб було зрозуміло,
+// ХТО написав — юзернейм найзручніший (можна відкрити профіль),
+// якщо його немає — просто ім'я з Telegram, а якщо і того немає —
+// хоча б chat_id. Використовується і як підпис пересилки, і як назва
+// теми форуму (createForumTopic)
 function formatSenderLabel(from: TelegramFrom | undefined, chatId: number): string {
   if (from?.username) return `@${from.username}`;
   const name = [from?.first_name, from?.last_name].filter(Boolean).join(' ');
   return name || `chat_id ${chatId}`;
+}
+
+// chat_id закритої групи-форуму (site_settings.telegram_staff_chat_id) —
+// null, доки власник не надіслав туди "/register_support"
+async function getStaffChatId(): Promise<number | null> {
+  try {
+    const result = await pool.query<{ telegram_staff_chat_id: string | null }>(
+      'SELECT telegram_staff_chat_id FROM site_settings WHERE id = 1'
+    );
+    const raw = result.rows[0]?.telegram_staff_chat_id;
+    return raw ? Number(raw) : null;
+  } catch (error) {
+    console.error('Ошибка при чтении staff-группы для Telegram:', error);
+    return null;
+  }
+}
+
+// Повертає message_thread_id теми ЦЬОГО покупця в групі-форумі —
+// якщо тема вже була, бере готову з бази; якщо ні, створює нову
+// (createForumTopic) і зберігає. null — якщо створити не вдалось
+// (група не форум, бот не адмін тощо) — виклик тоді сам падає в
+// запасний "плаский" варіант
+async function findOrCreateSupportTopic(
+  staffChatId: number,
+  customerChatId: number,
+  topicName: string
+): Promise<number | null> {
+  try {
+    const existing = await pool.query<{ message_thread_id: string }>(
+      'SELECT message_thread_id FROM telegram_support_topics WHERE customer_chat_id = $1',
+      [customerChatId]
+    );
+    if (existing.rows[0]) return Number(existing.rows[0].message_thread_id);
+  } catch (error) {
+    console.error('Ошибка при поиске темы поддержки клиента:', error);
+  }
+
+  const topicId = await createForumTopic(staffChatId, topicName);
+  if (!topicId) return null;
+
+  try {
+    await pool.query(
+      `
+      INSERT INTO telegram_support_topics (customer_chat_id, message_thread_id)
+      VALUES ($1, $2)
+      ON CONFLICT (customer_chat_id) DO UPDATE SET message_thread_id = EXCLUDED.message_thread_id
+      `,
+      [customerChatId, topicId]
+    );
+  } catch (error) {
+    console.error('Ошибка при сохранении темы поддержки клиента:', error);
+  }
+
+  return topicId;
 }
 
 export async function POST(request: NextRequest) {
@@ -130,7 +207,52 @@ export async function POST(request: NextRequest) {
 
   const chatId = message.chat.id;
 
-  // ---- чат ВЛАСНИКА (той самий, куди приходять усі сповіщення) ----
+  // ---- "/register_support" — власник реєструє закриту групу-форум ----
+  // ЛИШЕ в груповому чаті (chatId < 0) і ЛИШЕ від самого власника —
+  // хтось інший, додавши бота у власну групу, не зможе перехопити
+  // переписку з покупцями на себе
+  if (/^\/register_support(?:@\w+)?$/.test(text)) {
+    if (chatId < 0 && message.from && isOwnerChat(message.from.id)) {
+      try {
+        await pool.query(
+          `
+          INSERT INTO site_settings (id, telegram_staff_chat_id)
+          VALUES (1, $1)
+          ON CONFLICT (id) DO UPDATE SET telegram_staff_chat_id = EXCLUDED.telegram_staff_chat_id
+          `,
+          [chatId]
+        );
+        await sendTelegramMessageTo(
+          chatId,
+          '✅ Цю групу зареєстровано як групу підтримки. Переконайтесь, що в ній увімкнено Topics (Редагувати групу → Topics) і бот доданий адміністратором із правом «Управління темами» — інакше теми на кожного покупця просто не створюватимуться.'
+        );
+      } catch (error) {
+        console.error('Ошибка при регистрации staff-группы для Telegram:', error);
+      }
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  const staffChatId = await getStaffChatId();
+
+  // ---- відповідь ВЛАСНИКА в темі покупця в групі-форумі ----
+  if (staffChatId && chatId === staffChatId && message.message_thread_id) {
+    try {
+      const topicResult = await pool.query<{ customer_chat_id: string }>(
+        'SELECT customer_chat_id FROM telegram_support_topics WHERE message_thread_id = $1',
+        [message.message_thread_id]
+      );
+      const customerChatId = topicResult.rows[0]?.customer_chat_id;
+      if (customerChatId) {
+        await sendTelegramMessageTo(customerChatId, text);
+      }
+    } catch (error) {
+      console.error('Ошибка при пересылке ответа оператора из темы клиенту:', error);
+    }
+    return NextResponse.json({ ok: true });
+  }
+
+  // ---- чат ВЛАСНИКА (запасний "плаский" варіант, без групи-форуму) ----
   // Тут нас цікавить ЛИШЕ "Reply" на пересилку від покупця — решту
   // повідомлень власника (нотатки собі, звичайне листування з ботом
   // без відповіді на конкретне повідомлення) ніяк не обробляємо й не
@@ -164,12 +286,20 @@ export async function POST(request: NextRequest) {
   if (!isStartCommand) {
     // Звичайне повідомлення (не команда "/start") — покупець написав
     // боту напряму, найімовірніше через кнопку "Telegram" у шапці
-    // сайту. Пересилаємо в чат власника (той самий, куди приходять
-    // сповіщення про замовлення), запам'ятовуємо message_id цієї
-    // пересилки (щоб розпізнати відповідь на неї вище) і підтверджуємо
-    // покупцю, що його прочитають — сам бот діалог не веде, відповідає
-    // вже людина, коли відповість "Reply" на пересилку в Telegram
+    // сайту. Якщо групу-форум зареєстровано — своя тема на покупця
+    // (findOrCreateSupportTopic); якщо ні (або створення теми не
+    // вдалось) — запасний "плаский" варіант, той самий, що й раніше
     const senderLabel = formatSenderLabel(message.from, chatId);
+
+    if (staffChatId) {
+      const topicId = await findOrCreateSupportTopic(staffChatId, chatId, senderLabel);
+      if (topicId) {
+        await sendTelegramMessageTo(staffChatId, text, topicId);
+        await sendTelegramMessageTo(chatId, 'Дякуємо! Ваше повідомлення передано менеджеру, ми відповімо найближчим часом.');
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     const relayedMessageId = await sendTelegramMessage(`💬 Повідомлення від ${senderLabel} у Telegram-боті:\n\n${text}`);
 
     if (relayedMessageId) {
