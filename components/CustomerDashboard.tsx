@@ -33,12 +33,12 @@
 // хуки (useState/useEffect) і працює з браузерним fetch/localStorage
 // ============================================================
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users } from 'lucide-react';
+import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { getCarMakeByName } from '@/lib/carMakes';
 import { normalizePhone } from '@/lib/phoneNormalize';
@@ -310,6 +310,44 @@ export default function CustomerDashboard() {
   // ---- активна вкладка ----
   const [activeTab, setActiveTab] = useState<TabKey>('garage');
   const [loadedTabs, setLoadedTabs] = useState<Set<TabKey>>(new Set());
+
+  // ---- мобільний рядок вкладок: чи є куди прокрутити ----
+  const mobileNavRef = useRef<HTMLElement>(null);
+  const [mobileNavScroll, setMobileNavScroll] = useState({ left: false, right: false });
+
+  const updateMobileNavScrollState = useCallback(() => {
+    const el = mobileNavRef.current;
+    if (!el) return;
+    setMobileNavScroll({
+      left: el.scrollLeft > 4,
+      right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4,
+    });
+  }, []);
+
+  useEffect(() => {
+    updateMobileNavScrollState();
+    window.addEventListener('resize', updateMobileNavScrollState);
+
+    // Шрифти (Space Grotesk тощо) довантажуються АСИНХРОННО й можуть
+    // трохи розширити текст вкладок вже ПІСЛЯ першого замірювання —
+    // подія "resize" вікна на це не реагує (сама сторінка не міняє
+    // розмір), тому без цього переміру градієнт-підказка іноді не
+    // з'являлась би, навіть коли рядок вкладок реально не влазить
+    document.fonts?.ready?.then(updateMobileNavScrollState).catch(() => {});
+
+    return () => window.removeEventListener('resize', updateMobileNavScrollState);
+  }, [updateMobileNavScrollState]);
+
+  // При виборі вкладки прокручуємо саме її кнопку у видиму область —
+  // так після кліку по краєвій вкладці (наприклад, "Налаштування")
+  // покупець одразу бачить, що саме вона активна, а не губиться за краєм
+  useEffect(() => {
+    const el = mobileNavRef.current;
+    if (!el) return;
+    const activeButton = el.querySelector<HTMLButtonElement>(`[data-tab-key="${activeTab}"]`);
+    activeButton?.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+    updateMobileNavScrollState();
+  }, [activeTab, updateMobileNavScrollState]);
 
   // ---- персональна знижка/наценка (бейдж у профілі) ----
   const [pricingRule, setPricingRule] = useState<PricingRule | null>(null);
@@ -912,32 +950,61 @@ export default function CustomerDashboard() {
           </aside>
 
           {/* ==================== МОБІЛЬНІ ВКЛАДКИ ==================== */}
-          <nav className="-mx-5 flex gap-1 overflow-x-auto px-5 pb-1 md:hidden">
-            {TABS.map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.key;
-              return (
-                <button
-                  key={tab.key}
-                  type="button"
-                  onClick={() => setActiveTab(tab.key)}
-                  className="relative flex flex-none items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-xs font-medium transition-colors"
-                  style={{ color: isActive ? '#fff' : TECH_MUTED }}
-                >
-                  {isActive && (
-                    <motion.span
-                      layoutId="dashboard-nav-thumb-mobile"
-                      className="absolute inset-0 -z-10 rounded-xl"
-                      style={{ background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.3)' }}
-                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
-                    />
-                  )}
-                  <Icon className="h-3.5 w-3.5" style={{ color: isActive ? TECH_ACCENT_BRIGHT : TECH_FAINT }} />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </nav>
+          {/* Усі 4 вкладки не влазять в екран телефону одразу, тому рядок
+              скролиться вбік — але БЕЗ жодного натяку на це покупець просто
+              не здогадувався прокрутити і не бачив "Налаштування" (звідти і
+              Telegram-сповіщення) взагалі. Тому: градієнтна "тінь" з боку,
+              куди ще можна прокрутити (canScrollLeft/canScrollRight), і
+              активна вкладка сама прокручується у видиму область при виборі */}
+          <div className="relative -mx-5 md:hidden">
+            <nav
+              ref={mobileNavRef}
+              onScroll={updateMobileNavScrollState}
+              className="flex gap-1 overflow-x-auto px-5 pb-1"
+            >
+              {TABS.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    data-tab-key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className="relative flex flex-none items-center gap-1.5 rounded-xl px-3.5 py-2.5 text-xs font-medium transition-colors"
+                    style={{ color: isActive ? '#fff' : TECH_MUTED }}
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="dashboard-nav-thumb-mobile"
+                        className="absolute inset-0 -z-10 rounded-xl"
+                        style={{ background: 'rgba(59,130,246,0.14)', border: '1px solid rgba(59,130,246,0.3)' }}
+                        transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                      />
+                    )}
+                    <Icon className="h-3.5 w-3.5" style={{ color: isActive ? TECH_ACCENT_BRIGHT : TECH_FAINT }} />
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+            {mobileNavScroll.left && (
+              <div
+                className="pointer-events-none absolute bottom-1 left-0 top-0 flex w-10 items-center justify-start"
+                style={{ background: `linear-gradient(90deg, ${TECH_BG} 40%, transparent)` }}
+              >
+                <ChevronLeft className="h-4 w-4" style={{ color: TECH_ACCENT_BRIGHT }} />
+              </div>
+            )}
+            {mobileNavScroll.right && (
+              <div
+                className="pointer-events-none absolute bottom-1 right-0 top-0 flex w-10 items-center justify-end"
+                style={{ background: `linear-gradient(270deg, ${TECH_BG} 40%, transparent)` }}
+              >
+                <ChevronRight className="h-4 w-4" style={{ color: TECH_ACCENT_BRIGHT }} />
+              </div>
+            )}
+          </div>
 
           {/* ==================== ВМІСТ ВКЛАДКИ ==================== */}
           <div className="min-w-0 md:col-start-2 md:row-start-1">
