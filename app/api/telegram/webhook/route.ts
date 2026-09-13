@@ -5,18 +5,23 @@
 // Сюди Telegram надсилає КОЖНЕ повідомлення, написане боту
 // @dominatorparts_orders_bot (реєструється один раз через
 // https://api.telegram.org/bot<ТОКЕН>/setWebhook — див. коментар у
-// lib/telegramNotify.ts). Тут два різних сценарії:
+// lib/telegramNotify.ts). Тут три різних сценарії:
 //
 //   1. Команда "/start <телефон>" — якою бот дізнається, ЧИЙ це
 //      chat_id (детально нижче).
-//   2. БУДЬ-ЯКЕ інше текстове повідомлення — покупець написав боту
-//      напряму (кнопка "Telegram" у шапці сайту, components/
-//      StorefrontHome.tsx, веде саме на t.me/dominatorparts_orders_bot
-//      без жодного "/start"). Таке повідомлення пересилається в ТОЙ
-//      САМИЙ чат власника, куди й так приходять сповіщення про нові
-//      замовлення (sendTelegramMessage), щоб менеджер міг відповісти
-//      покупцю прямо з Telegram — окремого "живого" бота з
-//      підтримкою діалогу тут немає, це просто ретрансляція
+//   2. Звичайне повідомлення ВІД ПОКУПЦЯ — написав боту напряму
+//      (кнопка "Telegram" у шапці сайту, components/StorefrontHome.tsx,
+//      веде саме на t.me/dominatorparts_orders_bot без жодного
+//      "/start"). Пересилається в чат власника (той самий, куди
+//      приходять сповіщення про нові замовлення, sendTelegramMessage) —
+//      і ЗАПАМ'ЯТОВУЄТЬСЯ (telegram_relay_messages, schema.sql), щоб
+//      можна було розпізнати відповідь на нього, див. пункт 3
+//   3. Відповідь ВІД ВЛАСНИКА на пересилку з пункту 2 — власник
+//      натискає "Reply" на переслане повідомлення прямо в Telegram;
+//      апдейт приходить з заповненим message.reply_to_message.message_id,
+//      за яким у telegram_relay_messages знаходиться chat_id покупця —
+//      і текст відповіді летить ЙОМУ. Так оператор відповідає покупцю
+//      прямо з Telegram, не заходячи на сайт
 //
 // Звідки береться "/start <телефон>": особистий кабінет покупця
 // (components/CustomerDashboard.tsx) показує посилання-запрошення
@@ -38,7 +43,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { computeTelegramWebhookSecret, sendTelegramMessage, sendTelegramMessageTo } from '@/lib/telegramNotify';
+import { computeTelegramWebhookSecret, isOwnerChat, sendTelegramMessage, sendTelegramMessageTo } from '@/lib/telegramNotify';
 
 export const runtime = 'nodejs';
 
@@ -77,6 +82,10 @@ interface TelegramUpdate {
     chat: { id: number };
     from?: TelegramFrom;
     text?: string;
+    // Заповнене, коли це повідомлення — відповідь на інше (власник
+    // натиснув "Reply" в Telegram). message_id — id ТОГО повідомлення,
+    // на яке відповіли
+    reply_to_message?: { message_id: number };
   };
 }
 
@@ -120,16 +129,64 @@ export async function POST(request: NextRequest) {
   }
 
   const chatId = message.chat.id;
+
+  // ---- чат ВЛАСНИКА (той самий, куди приходять усі сповіщення) ----
+  // Тут нас цікавить ЛИШЕ "Reply" на пересилку від покупця — решту
+  // повідомлень власника (нотатки собі, звичайне листування з ботом
+  // без відповіді на конкретне повідомлення) ніяк не обробляємо й не
+  // пересилаємо саме собі — раніше це давало безглузде "Дякуємо! Ваше
+  // повідомлення передано менеджеру" у відповідь на власні повідомлення
+  if (isOwnerChat(chatId)) {
+    const replyToId = message.reply_to_message?.message_id;
+    if (!replyToId) {
+      return NextResponse.json({ ok: true });
+    }
+
+    try {
+      const relayResult = await pool.query<{ customer_chat_id: string }>(
+        'SELECT customer_chat_id FROM telegram_relay_messages WHERE admin_message_id = $1',
+        [replyToId]
+      );
+      const customerChatId = relayResult.rows[0]?.customer_chat_id;
+      if (customerChatId) {
+        await sendTelegramMessageTo(customerChatId, text);
+      }
+    } catch (error) {
+      console.error('Ошибка при пересылке ответа оператора клиенту:', error);
+    }
+
+    return NextResponse.json({ ok: true });
+  }
+
+  // ---- усе, що нижче, — повідомлення ВІД ПОКУПЦЯ ----
   const isStartCommand = /^\/start(?:@\w+)?/.test(text);
 
   if (!isStartCommand) {
     // Звичайне повідомлення (не команда "/start") — покупець написав
     // боту напряму, найімовірніше через кнопку "Telegram" у шапці
     // сайту. Пересилаємо в чат власника (той самий, куди приходять
-    // сповіщення про замовлення) і підтверджуємо покупцю, що його
-    // прочитають — сам бот діалог не веде, відповідає вже людина
+    // сповіщення про замовлення), запам'ятовуємо message_id цієї
+    // пересилки (щоб розпізнати відповідь на неї вище) і підтверджуємо
+    // покупцю, що його прочитають — сам бот діалог не веде, відповідає
+    // вже людина, коли відповість "Reply" на пересилку в Telegram
     const senderLabel = formatSenderLabel(message.from, chatId);
-    void sendTelegramMessage(`💬 Повідомлення від ${senderLabel} у Telegram-боті:\n\n${text}`);
+    const relayedMessageId = await sendTelegramMessage(`💬 Повідомлення від ${senderLabel} у Telegram-боті:\n\n${text}`);
+
+    if (relayedMessageId) {
+      try {
+        await pool.query(
+          `
+          INSERT INTO telegram_relay_messages (admin_message_id, customer_chat_id)
+          VALUES ($1, $2)
+          ON CONFLICT (admin_message_id) DO UPDATE SET customer_chat_id = EXCLUDED.customer_chat_id
+          `,
+          [relayedMessageId, chatId]
+        );
+      } catch (error) {
+        console.error('Ошибка при сохранении пересылки сообщения от клиента:', error);
+      }
+    }
+
     await sendTelegramMessageTo(chatId, 'Дякуємо! Ваше повідомлення передано менеджеру, ми відповімо найближчим часом.');
     return NextResponse.json({ ok: true });
   }

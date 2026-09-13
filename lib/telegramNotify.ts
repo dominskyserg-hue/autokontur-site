@@ -42,13 +42,22 @@ const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 // без окремої змінної оточення
 export const TELEGRAM_BOT_USERNAME = 'dominatorparts_orders_bot';
 
-export async function sendTelegramMessage(text: string): Promise<void> {
-  if (!TELEGRAM_CHAT_ID) return;
-  await sendTelegramMessageTo(TELEGRAM_CHAT_ID, text);
+// Повертають id щойно надісланого повідомлення (або null, якщо
+// відправка не відбулась — немає токена/chat_id чи Telegram повернув
+// помилку). Потрібен app/api/telegram/webhook/route.ts: коли
+// покупець пише боту напряму, його повідомлення пересилається сюди ж
+// (sendTelegramMessage), і саме message_id ЦІЄЇ пересилки запам'ятовується
+// (telegram_relay_messages, schema.sql) — щоб згодом, коли власник
+// ВІДПОВІСТЬ на неї в Telegram (звичайною функцією "Reply"), бот зміг
+// зрозуміти, якому саме покупцю адресована відповідь, і переслати
+// текст саме йому
+export async function sendTelegramMessage(text: string): Promise<number | null> {
+  if (!TELEGRAM_CHAT_ID) return null;
+  return sendTelegramMessageTo(TELEGRAM_CHAT_ID, text);
 }
 
-export async function sendTelegramMessageTo(chatId: string | number, text: string): Promise<void> {
-  if (!TELEGRAM_BOT_TOKEN) return;
+export async function sendTelegramMessageTo(chatId: string | number, text: string): Promise<number | null> {
+  if (!TELEGRAM_BOT_TOKEN) return null;
 
   try {
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -64,15 +73,29 @@ export async function sendTelegramMessageTo(chatId: string | number, text: strin
       }),
     });
 
+    const data = await response.json().catch(() => null);
+
     if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('Telegram API повернув помилку при відправці сповіщення:', response.status, errorBody);
+      console.error('Telegram API повернув помилку при відправці сповіщення:', response.status, JSON.stringify(data));
+      return null;
     }
+
+    return data?.result?.message_id ?? null;
   } catch (error) {
     // Збій відправки в Telegram НЕ повинен ламати оформлення замовлення —
     // це додаткове сповіщення, а не критична частина покупки
     console.error('Не вдалося відправити сповіщення в Telegram:', error);
+    return null;
   }
+}
+
+// Чат власника (TELEGRAM_CHAT_ID) — той самий, куди приходять
+// сповіщення про замовлення і пересилки повідомлень від покупців.
+// Потрібен вебхуку, щоб відрізнити "власник відповідає на пересилку"
+// від "покупець написав боту" — це різні гілки обробки одного й того
+// самого апдейту (app/api/telegram/webhook/route.ts)
+export function isOwnerChat(chatId: number): boolean {
+  return TELEGRAM_CHAT_ID != null && String(chatId) === String(TELEGRAM_CHAT_ID);
 }
 
 // ------------------------------------------------------------
