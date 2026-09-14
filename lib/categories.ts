@@ -1073,6 +1073,115 @@ export const CATEGORIES: CategoryDef[] = [
     modelGroup: 'toyota-prado-120',
     modelLabel: 'Toyota Land Cruiser Prado 120',
   },
+
+  // ============================================================
+  // ХВИЛЯ 7 — Mitsubishi Lancer X, Nissan Qashqai J10, Nissan X-Trail
+  // T31, Mazda 3. Як і в хвилях 1-4 (і на відміну від хвилі 6), тут
+  // постачальники САМІ пишуть модель прямо в назві товару ("Mitsubishi
+  // Lancer 10", "Qashqai (J10)", "Mazda 3 BK") — тому модель шукається
+  // підрядком у matchGroups, а не через tecdocVehicle: у
+  // tecdoc_compatibility ці конкретні товари майже не заведені, з
+  // tecdocVehicle сторінки вийшли б порожніми. Перелік товарів під
+  // кожною сторінкою перевірено вручну прямим запитом до бойової бази
+  // перед деплоєм.
+  //
+  // Mitsubishi Lancer: попередня позначка залишку як "Lancer 9" була
+  // неточною — амортизаторів під Lancer 9 (Cedia, CS_A) у наявності
+  // немає взагалі (тільки опори/стійки кріплення, це інша деталь),
+  // реальний залишок — під Lancer X (10-е покоління, кузови CX/CY).
+  //
+  // Nissan X-Trail T31 "колодки ручника": окремої деталі під таким
+  // описом не існує — на T31 стоянкове гальмо механічно вбудоване в
+  // задній гальмівний супорт, тому відповідь на цей запит — звичайні
+  // задні гальмівні колодки (уточнення додано в metaDescription/intro).
+  //
+  // Mazda 3: свідомо БЕЗ розбивки по кузову (BK/BL/BM) — на відміну
+  // від Lancer/Qashqai/X-Trail тут покупець сам обирає потрібний рік
+  // зі списку товарів на сторінці, а не з назви/URL сторінки (як і на
+  // сторінках Suzuki SX4, Lexus RX350 вище). 'mazda 3 '/'mazda 3,' з
+  // пробілом чи комою одразу після цифри — щоб підрядок НЕ збігався з
+  // "Mazda 323" (інша, попередня модель).
+  // ============================================================
+  {
+    slug: 'lancer-x-amortyzatory-zadni',
+    name: 'Амортизатори задні Mitsubishi Lancer X',
+    h1: 'Амортизатори задні Mitsubishi Lancer X',
+    metaTitle: 'Амортизатори задні Lancer X від 1143 грн | DominatorParts',
+    metaDescription:
+      'Амортизатори задні Mitsubishi Lancer X (10-е покоління, 2007-2017) в наявності від 1143 грн (TASHIKO). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Задні амортизатори для Mitsubishi Lancer X (10-е покоління, кузови CX/CY, 2007-2017) — газові, в наявності декілька виробників.',
+    matchGroups: [['амортизатор '], ['зад'], ['lancer x', 'lancer 10', 'лансер x', 'лансер 10']],
+    hideFromIndex: true,
+    modelGroup: 'mitsubishi-lancer-x',
+    modelLabel: 'Mitsubishi Lancer X',
+    parentCategorySlug: 'amortyzatory',
+  },
+  {
+    slug: 'qashqai-j10-amortyzatory-peredni',
+    name: 'Амортизатори передні Nissan Qashqai J10',
+    h1: 'Амортизатори передні Nissan Qashqai J10',
+    metaTitle: 'Амортизатори передні Qashqai J10 від 1356 грн | DominatorParts',
+    metaDescription:
+      'Амортизатори передні Nissan Qashqai J10 (1-е покоління, 2007-2013) в наявності від 1356 грн (RAISO). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Передні амортизатори для Nissan Qashqai першого покоління (J10, 2007-2013) — газові, підходять і для X-Trail T31 та Renault Koleos з тією ж платформою.',
+    matchGroups: [['амортизатор '], ['перед'], ['qashqai', 'кашкай']],
+    hideFromIndex: true,
+    modelGroup: 'nissan-qashqai-j10',
+    modelLabel: 'Nissan Qashqai J10',
+    parentCategorySlug: 'amortyzatory',
+  },
+  {
+    slug: 'xtrail-t31-halmivni-kolodky-zadni',
+    name: 'Гальмівні колодки задні Nissan X-Trail T31',
+    h1: 'Гальмівні колодки задні Nissan X-Trail T31',
+    metaTitle: 'Колодки задні X-Trail T31 від 362 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки задні Nissan X-Trail T31 (2007-2013) в наявності від 362 грн (ASAM) — цей же супорт відповідає і за стоянкове гальмо (ручник). Доставка по Україні.',
+    intro:
+      'Задні гальмівні колодки для Nissan X-Trail T31 (2007-2013) — підходять і для Qashqai J10, Murano з тим самим заднім супортом. На T31 стоянкове гальмо (ручник) механічно вбудоване в задній супорт — окремої деталі "колодки ручника" не існує, саме ці колодки відповідають і за стоянкове гальмування.',
+    matchGroups: [['колодк'], ['зад'], ['x-trail', 'xtrail', 'x trail', 'х-трейл']],
+    hideFromIndex: true,
+    modelGroup: 'nissan-xtrail-t31',
+    modelLabel: 'Nissan X-Trail T31',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'mazda-3-amortyzatory-zadni',
+    name: 'Амортизатори задні Mazda 3',
+    h1: 'Амортизатори задні Mazda 3',
+    metaTitle: 'Амортизатори задні Mazda 3 від 646 грн | DominatorParts',
+    metaDescription:
+      'Амортизатори задні Mazda 3 (кузови BK, BL, BM) в наявності від 646 грн. Оберіть виробника і рік свого кузова зі списку товарів. Доставка по всій Україні.',
+    intro:
+      'Задні амортизатори для Mazda 3 всіх поколінь (BK 2003-2009, BL 2009-2013, BM 2013-) — уточнюйте кузов і рік вашого авто в описі товару перед покупкою.',
+    matchGroups: [['амортизатор '], ['зад'], ['mazda 3 ', 'mazda 3,', 'mazda 3/5', 'мазда 3 ', 'мазда 3,', 'мазда 3/5']],
+    hideFromIndex: true,
+    modelGroup: 'mazda-3',
+    modelLabel: 'Mazda 3',
+    parentCategorySlug: 'amortyzatory',
+  },
+  {
+    slug: 'mazda-3-stiyka-amortyzatora-peredni',
+    name: 'Стійки амортизатора передні Mazda 3',
+    h1: 'Стійки амортизатора передні Mazda 3',
+    metaTitle: 'Стійки амортизатора передні Mazda 3 від 1476 грн | DominatorParts',
+    metaDescription:
+      'Стійки амортизатора передні Mazda 3 (кузови BK, BL, BM) в наявності від 1476 грн (TASHIKO), ліва і права. Оберіть рік свого кузова зі списку товарів. Доставка по Україні.',
+    intro:
+      'Передні стійки амортизатора (газові) для Mazda 3 всіх поколінь — ліва і права сторона окремо, уточнюйте кузов і рік вашого авто перед покупкою.',
+    matchGroups: [
+      ['стійк'],
+      ['амортизатор'],
+      ['перед'],
+      ['mazda 3 ', 'mazda 3,', 'mazda 3/5', 'мазда 3 ', 'мазда 3,', 'мазда 3/5'],
+    ],
+    hideFromIndex: true,
+    modelGroup: 'mazda-3',
+    modelLabel: 'Mazda 3',
+    parentCategorySlug: 'amortyzatory',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
