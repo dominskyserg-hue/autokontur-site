@@ -1273,6 +1273,60 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Nissan Qashqai J11',
     parentCategorySlug: 'halmivni-kolodky',
   },
+
+  // ============================================================
+  // ХВИЛЯ 10 — Toyota Carina E і Mitsubishi Carisma. Кандидатів
+  // спершу знайдено по залишку (широке покриття категорій деталей —
+  // ознака "живої" моделі), потім усі 6 перевірено в тому ж
+  // Google Ads Планувальнику (акаунт DOMINATOR). Важливий нюанс:
+  // латиницею ("toyota carina e", "mitsubishi carisma") попит
+  // показував 0-10/міс — і тільки коли ввела ті самі запити
+  // кирилицею ("тойота каріна е", "мітсубісі карізма"), Планувальник
+  // сам розширив пошук і показав "10-100/міс, Високий" — тобто
+  // реальний попит є, просто люди шукають кирилицею, а не назвою
+  // бренду. Avensis T22, Primera P10 і Civic EJ/EK перевірені і
+  // латиницею, і кирилицею — 0-10/міс скрізь, сторінки НЕ створено.
+  //
+  // Обидва товари в основному приходять від постачальника з
+  // загальними назвами на кшталт "Тормозные колодки, дисковые" (без
+  // моделі авто в тексті) — тому, як і в хвилі 6/Qashqai J11,
+  // модель підбирається через tecdocVehicle, а не підрядком.
+  // ============================================================
+  {
+    slug: 'carina-e-halmivni-kolodky',
+    name: 'Гальмівні колодки Toyota Carina E',
+    h1: 'Гальмівні колодки Toyota Carina E',
+    metaTitle: 'Колодки гальмівні Carina E від 621 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки Toyota Carina E (1992-1997) в наявності від 621 грн (BENDIX). Дискові та барабанні, доставка по всій Україні.',
+    intro:
+      'Гальмівні колодки для Toyota Carina E (T19, 1992-1997) — дискові передні/задні та барабанні варіанти, підібрані за офіційним індексом сумісності запчастин TecDoc.',
+    matchGroups: [['колодк']],
+    tecdocVehicle: {
+      make: 'TOYOTA',
+      models: ['CARINA E Schrägheck (_T19_)', 'CARINA E Stufenheck (_T19_)', 'CARINA E Sportswagon (_T19_)'],
+    },
+    hideFromIndex: true,
+    modelGroup: 'toyota-carina-e',
+    modelLabel: 'Toyota Carina E',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'carisma-halmivni-kolodky',
+    name: 'Гальмівні колодки Mitsubishi Carisma',
+    h1: 'Гальмівні колодки Mitsubishi Carisma',
+    metaTitle: 'Колодки гальмівні Carisma від 566 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки Mitsubishi Carisma (1995-2004) в наявності від 566 грн (STELLOX). Передні та задні, доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Гальмівні колодки для Mitsubishi Carisma (DA_, 1995-2004) — передні та задні варіанти різних виробників, підходять і для Volvo S40/V40 з тією ж платформою.',
+    matchGroups: [['колодк']],
+    tecdocVehicle: { make: 'MITSUBISHI', models: ['CARISMA (DA_)', 'CARISMA Stufenheck (DA_)'] },
+    hideFromIndex: true,
+    modelGroup: 'mitsubishi-carisma',
+    modelLabel: 'Mitsubishi Carisma',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
