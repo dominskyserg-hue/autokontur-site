@@ -1182,6 +1182,41 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Mazda 3',
     parentCategorySlug: 'amortyzatory',
   },
+
+  // ============================================================
+  // ХВИЛЯ 8 — Toyota Avensis T25. Honda CR-V II (RD, 2001-2006) із
+  // цієї ж хвилі НЕ додана: весь наявний залишок амортизаторів Honda
+  // CR-V — це 1-е покоління (RD1/RD3, 1995-2002) або 3-4-5-е
+  // (перевірено і по назві товару, і окремо по tecdoc_compatibility
+  // для позицій без року в назві) — під 2-е покоління (RD4-RD7,
+  // 2003-2008), на яке є підтверджений попит, у наявності 0.
+  //
+  // Avensis T25: в наявності лише 3 задні амортизатори (рівно поріг),
+  // переднього під це покоління зараз немає — тому сторінка саме
+  // "задні", без переднього. Відсіяно Avensis Verso (інша модель),
+  // T22 (роки "97-03" — попереднє покоління) і T27 (2008-2018 —
+  // наступне). ZZT250 — заводський код кузова T25.
+  // ============================================================
+  {
+    slug: 'avensis-t25-amortyzatory-zadni',
+    name: 'Амортизатори задні Toyota Avensis T25',
+    h1: 'Амортизатори задні Toyota Avensis T25',
+    metaTitle: 'Амортизатори задні Avensis T25 від 856 грн | DominatorParts',
+    metaDescription:
+      'Амортизатори задні Toyota Avensis T25 (2003-2008) в наявності від 856 грн (RAISO). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Задні амортизатори для Toyota Avensis T25 (2003-2008, кузов ZZT250) — газові, в наявності декілька виробників.',
+    matchGroups: [
+      ['амортизатор '],
+      ['зад'],
+      ['avensis', 'авенсіс', 'авенсис'],
+      ['t25', 'zzt25', '03-08', '03-09', '2003-2008', '2003-2009'],
+    ],
+    hideFromIndex: true,
+    modelGroup: 'toyota-avensis-t25',
+    modelLabel: 'Toyota Avensis T25',
+    parentCategorySlug: 'amortyzatory',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
