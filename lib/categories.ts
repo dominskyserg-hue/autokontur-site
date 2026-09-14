@@ -1217,6 +1217,62 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Toyota Avensis T25',
     parentCategorySlug: 'amortyzatory',
   },
+
+  // ============================================================
+  // ХВИЛЯ 9 — Nissan Primera P11 і Nissan Qashqai J11. На відміну
+  // від хвиль 7-8, тут попит спершу перевірено безпосередньо в
+  // Google Ads Планувальнику ключових слів (акаунт DOMINATOR) — з
+  // 6 кандидатів, підібраних лише за залишком, попит підтвердився
+  // тільки в цих двох (решта — Subaru Impreza GC/GF, Nissan Sentra
+  // N16, Toyota Corolla E11 (старий кузов), Mitsubishi Galant E3_A —
+  // 0-10 запитів/міс за всіма формулюваннями, як і Honda Fit/Toyota
+  // Yaris в попередніх хвилях — сторінки НЕ створено).
+  //
+  // Qashqai J11: на відміну від J10 (хвиля 7, де TecDoc взагалі не
+  // має даних), для J11 TecDoc-покриття є — тому тут, як і в хвилі 6,
+  // модель підбирається через tecdocVehicle (join по бренду+артикулу),
+  // а matchGroups визначає лише тип деталі. Це навмисно ловить і
+  // товари з порожньою/загальною назвою на кшталт "Тормозные колодки,
+  // задние" — без tecdocVehicle такі товари взагалі не потрапили б на
+  // сторінку.
+  //
+  // Primera P11: навпаки, постачальники самі пишуть "Nissan Primera"
+  // в назві (tecdoc для частини цих SKU не заведений), тому модель —
+  // підрядком, як у хвилях 1-4/7-8. Деякі товари одночасно підходять
+  // і під P10 (спільна деталь на обидва кузови по каталогу
+  // виробника) — це нормальна крос-сумісність, а не помилка підбору.
+  // ============================================================
+  {
+    slug: 'primera-p11-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Nissan Primera P11',
+    h1: 'Гальмівні колодки передні Nissan Primera P11',
+    metaTitle: 'Колодки передні Primera P11 від 387 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Nissan Primera P11 (1996-2002) в наявності від 387 грн (NIPPON). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Передні гальмівні колодки для Nissan Primera P11 (1996-2002) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед'], ['primera', 'примера']],
+    hideFromIndex: true,
+    modelGroup: 'nissan-primera-p11',
+    modelLabel: 'Nissan Primera P11',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'qashqai-j11-halmivni-kolodky-zadni',
+    name: 'Гальмівні колодки задні Nissan Qashqai J11',
+    h1: 'Гальмівні колодки задні Nissan Qashqai J11',
+    metaTitle: 'Колодки задні Qashqai J11 від 686 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки задні Nissan Qashqai J11 (2013-2021) в наявності від 686 грн (JAPANPARTS). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Задні гальмівні колодки для Nissan Qashqai II (J11, 2013-2021) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['зад']],
+    tecdocVehicle: { make: 'NISSAN', models: ['QASHQAI (J11, J11_)'] },
+    hideFromIndex: true,
+    modelGroup: 'nissan-qashqai-j11',
+    modelLabel: 'Nissan Qashqai J11',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
