@@ -12,7 +12,7 @@
 // значение из адреса (/api/orders/ЗДЕСЬ) попадает в params.id
 // ============================================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { sendTelegramMessageTo } from '@/lib/telegramNotify';
@@ -264,27 +264,32 @@ export async function PATCH(
     // Персональне сповіщення покупцю про ТТН — лише коли номер реально
     // З'ЯВИВСЯ або ЗМІНИВСЯ (не при кожному збереженні картки заказу),
     // і лише якщо покупець раніше підключив Telegram-сповіщення
-    // (customer_telegram_links, app/api/telegram/webhook/route.ts)
+    // (customer_telegram_links, app/api/telegram/webhook/route.ts).
+    // Обгорнуто в after() з next/server — без цього "void"-виклик без
+    // await міг обірватись разом із заморожуванням serverless-функції
+    // одразу після return нижче, і сповіщення випадково не долітало б
+    // (той самий фікс, що і в app/api/orders/create/route.ts)
     if (row.ttn_number && row.ttn_number !== previousTtnNumber) {
-      void pool
-        .query(
-          `SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1`,
-          [normalizePhone(row.customer_phone)]
-        )
-        .then((chatResult) => {
-          const chatId = chatResult.rows[0]?.telegram_chat_id;
-          if (!chatId) return;
-          void sendTelegramMessageTo(
-            chatId,
-            [
-              `Ваше замовлення №${(row.id as string).slice(0, 8)} відправлено Новою Поштою!`,
-              `Номер ТТН: ${row.ttn_number}`,
-            ].join('\n')
+      after(async () => {
+        try {
+          const chatResult = await pool.query(
+            `SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1`,
+            [normalizePhone(row.customer_phone)]
           );
-        })
-        .catch((error) => {
+          const chatId = chatResult.rows[0]?.telegram_chat_id;
+          if (chatId) {
+            await sendTelegramMessageTo(
+              chatId,
+              [
+                `Ваше замовлення №${(row.id as string).slice(0, 8)} відправлено Новою Поштою!`,
+                `Номер ТТН: ${row.ttn_number}`,
+              ].join('\n')
+            );
+          }
+        } catch (error) {
           console.error('Ошибка при отправке Telegram-уведомления о ТТН:', error);
-        });
+        }
+      });
     }
 
     return NextResponse.json({

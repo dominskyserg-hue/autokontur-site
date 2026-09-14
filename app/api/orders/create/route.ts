@@ -56,7 +56,7 @@
 // единой позиции" из-за случайной ошибки посередине.
 // ============================================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { sendTelegramMessage, sendTelegramMessageTo } from '@/lib/telegramNotify';
 import { normalizePhone } from '@/lib/phoneNormalize';
@@ -340,59 +340,73 @@ export async function POST(request: NextRequest) {
     await client.query('COMMIT');
 
     // Telegram-сповіщення — навмисно ПІСЛЯ COMMIT (замовлення вже
-    // гарантовано збережене) і без await у виклику коду нижче по потоку
-    // немає, але сам sendTelegramMessage ніколи не кидає виняток —
-    // збій відправки не завадить віддати відповідь покупцю
-    void sendTelegramMessage(
-      [
-        `🛒 Нове замовлення`,
-        `${customerName} ${customerSurname}, ${customerPhone}`,
-        `${city}, ${novaPoshtaAddress}`,
-        comment ? `Коментар: ${comment}` : null,
-        pricingRule
-          ? pricingRule.ruleType === 'discount'
-            ? `Персональна знижка: -${pricingRule.percent}%`
-            : `Персональна націнка: +${pricingRule.percent}%`
-          : null,
-        '',
-        ...summaryLines,
-        '',
-        `Разом: ${totalAmount.toFixed(0)} грн`,
-      ]
-        .filter((line) => line !== null)
-        .join('\n')
-    );
-
-    // Персональне сповіщення САМОМУ ПОКУПЦЮ — тільки якщо він раніше
-    // підключив Telegram-сповіщення в кабінеті (customer_telegram_links,
-    // app/api/telegram/webhook/route.ts). Якщо не підключав — рядка
-    // просто немає, chatIdRow буде undefined, і сповіщення тихо не
-    // надсилається (як і скрізь тут: збій/відсутність сповіщення не
-    // повинні заважати оформленню замовлення)
-    void pool
-      .query('SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1', [normalizedPhone])
-      .then((chatResult) => {
-        const chatId = chatResult.rows[0]?.telegram_chat_id;
-        if (!chatId) return;
-
-        void sendTelegramMessageTo(
-          chatId,
+    // гарантовано збережене). Обгорнуто в after() з next/server (той
+    // самий прийом, що і у фоновому пошуку фото товарів,
+    // app/api/products/route.ts) — БЕЗ цього виклик "void
+    // sendTelegramMessage(...)" без await у serverless-функції на
+    // Vercel міг встигнути НЕ завершитись: як тільки нижче йде
+    // return NextResponse.json(...), Vercel має право одразу заморозити
+    // виконання функції, і "підвішений" fetch() до Telegram API
+    // просто обривається на півдорозі — сповіщення випадково не
+    // долітає, хоча сам код ніби відпрацював без помилок. after()
+    // гарантує, що ця робота довиконається вже ПІСЛЯ того, як відповідь
+    // пішла покупцю, а не обривається разом із нею
+    after(async () => {
+      try {
+        await sendTelegramMessage(
           [
-            `Дякуємо за замовлення, ${customerName}!`,
-            `Номер замовлення: №${orderId.slice(0, 8)}`,
+            `🛒 Нове замовлення`,
+            `${customerName} ${customerSurname}, ${customerPhone}`,
+            `${city}, ${novaPoshtaAddress}`,
+            comment ? `Коментар: ${comment}` : null,
+            pricingRule
+              ? pricingRule.ruleType === 'discount'
+                ? `Персональна знижка: -${pricingRule.percent}%`
+                : `Персональна націнка: +${pricingRule.percent}%`
+              : null,
             '',
             ...summaryLines,
             '',
             `Разом: ${totalAmount.toFixed(0)} грн`,
-            '',
-            `Доставка: ${city}, ${novaPoshtaAddress}`,
-            'Номер ТТН надішлемо тут одразу, як тільки відправимо посилку.',
-          ].join('\n')
+          ]
+            .filter((line) => line !== null)
+            .join('\n')
         );
-      })
-      .catch((error) => {
+      } catch (error) {
+        console.error('Ошибка при отправке Telegram-уведомления владельцу о заказе:', error);
+      }
+
+      // Персональне сповіщення САМОМУ ПОКУПЦЮ — тільки якщо він раніше
+      // підключив Telegram-сповіщення в кабінеті (customer_telegram_links,
+      // app/api/telegram/webhook/route.ts). Якщо не підключав — рядка
+      // просто немає, chatId буде undefined, і сповіщення тихо не
+      // надсилається (як і скрізь тут: збій/відсутність сповіщення не
+      // повинні заважати оформленню замовлення)
+      try {
+        const chatResult = await pool.query('SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1', [
+          normalizedPhone,
+        ]);
+        const chatId = chatResult.rows[0]?.telegram_chat_id;
+        if (chatId) {
+          await sendTelegramMessageTo(
+            chatId,
+            [
+              `Дякуємо за замовлення, ${customerName}!`,
+              `Номер замовлення: №${orderId.slice(0, 8)}`,
+              '',
+              ...summaryLines,
+              '',
+              `Разом: ${totalAmount.toFixed(0)} грн`,
+              '',
+              `Доставка: ${city}, ${novaPoshtaAddress}`,
+              'Номер ТТН надішлемо тут одразу, як тільки відправимо посилку.',
+            ].join('\n')
+          );
+        }
+      } catch (error) {
         console.error('Ошибка при отправке личного Telegram-уведомления покупателю:', error);
-      });
+      }
+    });
 
     return NextResponse.json({ success: true, orderId });
   } catch (error) {
