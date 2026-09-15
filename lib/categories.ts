@@ -1327,6 +1327,149 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Mitsubishi Carisma',
     parentCategorySlug: 'halmivni-kolodky',
   },
+
+  // ============================================================
+  // ХВИЛЯ 11 — німецько-чеська/французька група (Audi/Skoda/VW/
+  // Citroën), без перевірки попиту в Google Ads (пропущено за
+  // прямою вказівкою — "да делай" без окремого запиту на перевірку
+  // Планувальником, на відміну від хвиль 9/10).
+  //
+  // ВАЖЛИВИЙ НЮАНС, знайдений під час збору: майже всі товари тут —
+  // це ті самі універсальні BENDIX/STELLOX колодки, що фізично
+  // підходять одразу до десятків моделей платформи (наприклад,
+  // BENDIX 571984B одночасно "Audi A3, TT; Seat Leon; Skoda Octavia;
+  // VW Golf, Polo, Bora"). Це означає, що передні гальмівні колодки
+  // НЕ відрізняються між кузовами седан/універсал одного покоління —
+  // тому, на відміну від деяких попередніх хвиль, тут НЕ зроблено
+  // окремих сторінок на кожен кузов (це був би дублікат контенту
+  // з однаковим списком товарів під різним H1). Замість цього —
+  // один tecdocVehicle.models з обома кузовами разом, той самий
+  // підхід, що вже використано для CAMRY Stufenheck вище (кілька
+  // поколінь в одному масиві на одній сторінці).
+  {
+    slug: 'audi-a4-b5-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Audi A4 (B5)',
+    h1: 'Гальмівні колодки передні Audi A4 (B5)',
+    metaTitle: 'Колодки передні Audi A4 B5 від 621 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Audi A4 B5 (1994-2001, седан і універсал) в наявності від 621 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Передні гальмівні колодки для Audi A4 B5 (1994-2001) — підходять і на седан (Stufenheck), і на універсал (Avant), в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'AUDI', models: ['A4 Stufenheck (8D2, B5)', 'A4 Avant (8D5, B5)'] },
+    hideFromIndex: true,
+    modelGroup: 'audi-a4-b5',
+    modelLabel: 'Audi A4 (B5)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'audi-a6-c5-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Audi A6 (C5)',
+    h1: 'Гальмівні колодки передні Audi A6 (C5)',
+    metaTitle: 'Колодки передні Audi A6 C5 від 828 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Audi A6 C5 (1997-2005, седан і універсал) в наявності від 828 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Передні гальмівні колодки для Audi A6 C5 (1997-2005) — підходять і на седан (Stufenheck), і на універсал (Avant), в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'AUDI', models: ['A6 Stufenheck (4B2, C5)', 'A6 Avant (4B5, C5)'] },
+    hideFromIndex: true,
+    modelGroup: 'audi-a6-c5',
+    modelLabel: 'Audi A6 (C5)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'octavia-1u-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Škoda Octavia (1U)',
+    h1: 'Гальмівні колодки передні Škoda Octavia (1U)',
+    metaTitle: 'Колодки передні Octavia 1U від 828 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Škoda Octavia 1U (1996-2010, седан і Combi) в наявності від 828 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Передні гальмівні колодки для Škoda Octavia 1U (1996-2010) — підходять і на седан/хетчбек, і на Combi, в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'SKODA', models: ['OCTAVIA (1U2)', 'OCTAVIA Combi (1U5)'] },
+    hideFromIndex: true,
+    modelGroup: 'skoda-octavia-1u',
+    modelLabel: 'Škoda Octavia (1U)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'fabia-6y-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Škoda Fabia (6Y)',
+    h1: 'Гальмівні колодки передні Škoda Fabia (6Y)',
+    metaTitle: 'Колодки передні Fabia 6Y від 621 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Škoda Fabia 6Y (1999-2008, хетчбек і Combi) в наявності від 621 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Передні гальмівні колодки для Škoda Fabia 6Y (1999-2008) — підходять і на хетчбек, і на Combi, в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'SKODA', models: ['FABIA (6Y2)', 'FABIA Combi (6Y5)'] },
+    hideFromIndex: true,
+    modelGroup: 'skoda-fabia-6y',
+    modelLabel: 'Škoda Fabia (6Y)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'polo-9n-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні VW Polo (9N)',
+    h1: 'Гальмівні колодки передні VW Polo (9N)',
+    metaTitle: 'Колодки передні Polo 9N від 438 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні VW Polo 9N (2001-2012) в наявності від 438 грн (STELLOX). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Передні гальмівні колодки для VW Polo 9N (2001-2012) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'VW', models: ['POLO (9N_)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-polo-9n',
+    modelLabel: 'VW Polo (9N)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'jetta-4-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні VW Jetta IV',
+    h1: 'Гальмівні колодки передні VW Jetta IV',
+    metaTitle: 'Колодки передні Jetta IV від 880 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні VW Jetta IV (1998-2005) в наявності від 880 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Передні гальмівні колодки для VW Jetta IV (1998-2005) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'VW', models: ['JETTA IV (1J2)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-jetta-4',
+    modelLabel: 'VW Jetta IV',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'berlingo-mf-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Citroën Berlingo (MF)',
+    h1: 'Гальмівні колодки передні Citroën Berlingo (MF)',
+    metaTitle: 'Колодки передні Berlingo MF від 530 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Citroën Berlingo MF (1996-2005) в наявності від 530 грн (STELLOX). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Передні гальмівні колодки для Citroën Berlingo MF (1996-2005) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'CITROËN', models: ['BERLINGO (MF)'] },
+    hideFromIndex: true,
+    modelGroup: 'citroen-berlingo-mf',
+    modelLabel: 'Citroën Berlingo (MF)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'xsara-n1-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Citroën Xsara (N1)',
+    h1: 'Гальмівні колодки передні Citroën Xsara (N1)',
+    metaTitle: 'Колодки передні Xsara N1 від 530 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Citroën Xsara N1 (1997-2005) в наявності від 530 грн (STELLOX). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Передні гальмівні колодки для Citroën Xsara N1 (1997-2005) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'CITROËN', models: ['XSARA (N1)'] },
+    hideFromIndex: true,
+    modelGroup: 'citroen-xsara-n1',
+    modelLabel: 'Citroën Xsara (N1)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
