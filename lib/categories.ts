@@ -1581,6 +1581,86 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Opel Vectra C',
     parentCategorySlug: 'halmivni-kolodky',
   },
+
+  // ============================================================
+  // ХВИЛЯ 13 — без перевірки Google Ads. Цього разу під час підбору
+  // ДВІЧІ спрацювало правило "спершу звірити товарний список,
+  // а вже потім будувати сторінку": Subaru Legacy II (BD, BG) і
+  // Mercedes C-Class Stufenheck (W202) відсіяні — обидва показали
+  // повний піднабір того самого товарного списку, що вже є на
+  // опублікованих сторінках Subaru Impreza (хвиля 12) і Mercedes
+  // E-Class Coupe C124 (хвиля 12) відповідно — тобто були б чистим
+  // дублікатом контенту з іншим H1. Причина та сама, що й з
+  // Opel/Vauxhall/Saab/Mazda Telstar у хвилі 11-12: один запчастинний
+  // пул під кількома назвами моделі в TecDoc.
+  {
+    slug: 'nissan-sentra-n15-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Nissan Sentra (N15)',
+    h1: 'Гальмівні колодки передні Nissan Sentra (N15)',
+    metaTitle: 'Колодки передні Nissan Sentra N15 від 621 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Nissan Sentra N15 в наявності від 621 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Передні гальмівні колодки для Nissan Sentra N15 — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'NISSAN', models: ['SENTRA I (N15)'] },
+    hideFromIndex: true,
+    modelGroup: 'nissan-sentra-n15',
+    modelLabel: 'Nissan Sentra (N15)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'nissan-sentra-n16-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Nissan Sentra (N16)',
+    h1: 'Гальмівні колодки передні Nissan Sentra (N16)',
+    metaTitle: 'Колодки передні Nissan Sentra N16 від 673 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Nissan Sentra N16 в наявності від 673 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Передні гальмівні колодки для Nissan Sentra N16 — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'NISSAN', models: ['SENTRA II (N16)'] },
+    hideFromIndex: true,
+    modelGroup: 'nissan-sentra-n16',
+    modelLabel: 'Nissan Sentra (N16)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'touareg-halmivni-kolodky-zadni',
+    name: 'Гальмівні колодки задні VW Touareg',
+    h1: 'Гальмівні колодки задні VW Touareg',
+    metaTitle: 'Колодки задні VW Touareg від 1139 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки задні VW Touareg (перше покоління) в наявності від 1139 грн (BENDIX). Доставка по всій Україні.',
+    intro: 'Задні гальмівні колодки для VW Touareg (7L) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['зад']],
+    tecdocVehicle: { make: 'VW', models: ['TOUAREG (7LA, 7L6, 7L7)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-touareg',
+    modelLabel: 'VW Touareg',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'sprinter-lt-halmivni-kolodky-zadni',
+    name: 'Гальмівні колодки задні Mercedes-Benz Sprinter / VW LT',
+    h1: 'Гальмівні колодки задні Mercedes-Benz Sprinter / VW LT',
+    metaTitle: 'Колодки задні Sprinter / VW LT від 777 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки задні Mercedes-Benz Sprinter / VW LT (1995-2006, усі вантажопідйомності й кузови) в наявності від 777 грн (BENDIX). Доставка по всій Україні.',
+    intro:
+      'Задні гальмівні колодки для Mercedes-Benz Sprinter та VW LT (1995-2006) — обидва фургони збудовані на одній платформі й використовують ті самі колодки, незалежно від вантажопідйомності (2-4т) чи кузова (Bus/Kasten/Pritsche).',
+    matchGroups: [['колодк'], ['зад']],
+    tecdocVehicle: {
+      make: 'MERCEDES-BENZ',
+      models: [
+        'SPRINTER 2-t Bus (901, 902)', 'SPRINTER 2-t Kasten (901, 902)', 'SPRINTER 2-t Pritsche/Fahrgestell (901, 902)',
+        'SPRINTER 3-t Bus (903)', 'SPRINTER 3-t Kasten (903)', 'SPRINTER 3-t Pritsche/Fahrgestell (903)',
+        'SPRINTER 4-t Bus (904)', 'SPRINTER 4-t Kasten (904)',
+      ],
+    },
+    hideFromIndex: true,
+    modelGroup: 'mercedes-sprinter-vw-lt',
+    modelLabel: 'Mercedes-Benz Sprinter / VW LT',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
