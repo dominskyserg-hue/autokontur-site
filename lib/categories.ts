@@ -1470,6 +1470,117 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Citroën Xsara (N1)',
     parentCategorySlug: 'halmivni-kolodky',
   },
+
+  // ============================================================
+  // ХВИЛЯ 12 — не-VAG моделі (Subaru/Mitsubishi/Ford/Mercedes/Mazda/
+  // Opel), знову без перевірки Google Ads. На цей раз навмисно
+  // обрано моделі ПОЗА платформою Audi/Skoda/VW/Seat з хвилі 11 —
+  // там частина "кандидатів" виявилась тими самими BENDIX-колодками,
+  // що й уже опубліковані сторінки (реальний дублікат контенту).
+  // Тут перевірено окремо: жодна модель нижче не показує той самий
+  // набір товарів, що інша модель з цієї чи попередніх хвиль.
+  //
+  // Kolodky TEIKIN (поршні) навмисно ПРОПУЩЕНО за прямою вказівкою:
+  // бренд відсутній у tecdoc_compatibility взагалі (жодного рядка),
+  // а в назвах товару моделі/двигуна майже завжди немає — коректно
+  // підібрати сторінку під конкретну модель зараз неможливо.
+  {
+    slug: 'subaru-impreza-gc-gf-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Subaru Impreza (GC/GF)',
+    h1: 'Гальмівні колодки передні Subaru Impreza (GC/GF)',
+    metaTitle: 'Колодки передні Subaru Impreza від 430 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Subaru Impreza GC/GF (1992-2000, седан і універсал) в наявності від 430 грн (STELLOX). Доставка по всій Україні.',
+    intro:
+      'Передні гальмівні колодки для Subaru Impreza GC/GF (1992-2000) — підходять і на седан, і на універсал, в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'SUBARU', models: ['IMPREZA Stufenheck (GC)', 'IMPREZA Station Wagon (GF)'] },
+    hideFromIndex: true,
+    modelGroup: 'subaru-impreza-gc-gf',
+    modelLabel: 'Subaru Impreza (GC/GF)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'mitsubishi-l400-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Mitsubishi L400 / Space Gear',
+    h1: 'Гальмівні колодки передні Mitsubishi L400 / Space Gear',
+    metaTitle: 'Колодки передні Mitsubishi L400 від 556 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Mitsubishi L400 / Space Gear (1995-2005) в наявності від 556 грн (STELLOX). Доставка по всій Україні.',
+    intro:
+      'Передні гальмівні колодки для мікроавтобуса Mitsubishi L400 / Space Gear (1995-2005) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: {
+      make: 'MITSUBISHI',
+      models: ['L 400 / SPACE GEAR Bus (PD_W, PC_W, PA_V, PB_V)', 'L 400 Kasten (PD_W, PC_W, PB_V, PA_W, PA_V)'],
+    },
+    hideFromIndex: true,
+    modelGroup: 'mitsubishi-l400',
+    modelLabel: 'Mitsubishi L400 / Space Gear',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'ford-sierra-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Ford Sierra',
+    h1: 'Гальмівні колодки передні Ford Sierra',
+    metaTitle: 'Колодки передні Ford Sierra від 414 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Ford Sierra (1982-1987) в наявності від 414 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Передні гальмівні колодки для Ford Sierra (1982-1987) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'FORD', models: ['SIERRA Schrägheck (GBC)'] },
+    hideFromIndex: true,
+    modelGroup: 'ford-sierra',
+    modelLabel: 'Ford Sierra',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'mercedes-e-class-c124-halmivni-kolodky-zadni',
+    name: 'Гальмівні колодки задні Mercedes-Benz E-Class Coupe (C124)',
+    h1: 'Гальмівні колодки задні Mercedes-Benz E-Class Coupe (C124)',
+    metaTitle: 'Колодки задні E-Class C124 від 673 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки задні Mercedes-Benz E-Class Coupe C124 (1993-1997) в наявності від 673 грн (BENDIX). Доставка по всій Україні.',
+    intro:
+      'Задні гальмівні колодки для Mercedes-Benz E-Class Coupe C124 (1993-1997) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['зад']],
+    tecdocVehicle: { make: 'MERCEDES-BENZ', models: ['E-CLASS Coupe (C124)'] },
+    hideFromIndex: true,
+    modelGroup: 'mercedes-e-class-c124',
+    modelLabel: 'Mercedes-Benz E-Class Coupe (C124)',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'mazda-626-mk3-halmivni-kolodky-zadni',
+    name: 'Гальмівні колодки задні Mazda 626 Mk III',
+    h1: 'Гальмівні колодки задні Mazda 626 Mk III',
+    metaTitle: 'Колодки задні Mazda 626 від 629 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки задні Mazda 626 Mk III (1987-1997, кузови GD/GV) в наявності від 629 грн (ABE). Доставка по всій Україні.',
+    intro:
+      'Задні гальмівні колодки для Mazda 626 Mk III (1987-1997) — підходять на купе (GD) і комбі (GV), в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['зад']],
+    tecdocVehicle: { make: 'MAZDA', models: ['626 Mk III Coupe (GD)', '626 Mk III Kombi (GV)'] },
+    hideFromIndex: true,
+    modelGroup: 'mazda-626-mk3',
+    modelLabel: 'Mazda 626 Mk III',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
+  {
+    slug: 'opel-vectra-c-halmivni-kolodky-zadni',
+    name: 'Гальмівні колодки задні Opel Vectra C',
+    h1: 'Гальмівні колодки задні Opel Vectra C',
+    metaTitle: 'Колодки задні Opel Vectra C від 739 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки задні Opel Vectra C (2002-2008) в наявності від 739 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Задні гальмівні колодки для Opel Vectra C (2002-2008) — в наявності декілька постачальників.',
+    matchGroups: [['колодк'], ['зад']],
+    tecdocVehicle: { make: 'OPEL', models: ['VECTRA C'] },
+    hideFromIndex: true,
+    modelGroup: 'opel-vectra-c',
+    modelLabel: 'Opel Vectra C',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
