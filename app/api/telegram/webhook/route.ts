@@ -125,14 +125,22 @@ function formatSenderLabel(from: TelegramFrom | undefined, chatId: number): stri
   return name || `chat_id ${chatId}`;
 }
 
-// ---- пошук деталі за текстом повідомлення покупця (марка/модель/рік/
-// об'єм + що шукає) ----
-// Той самий движок, що й пошук на сайті (lib/productSearch.ts,
-// "ремінь грм на мазду 626 1992 року") — покупцю не потрібно знати
-// точний артикул, досить написати боту звичайним текстом. Топ-5
-// найдешевших в наявності, з прямим посиланням на картку товару.
-// Результат пошуку НЕ замінює пересилку оператору (нижче за кодом) —
-// вона відбувається однаково, щоб менеджер міг перевірити/уточнити
+// ============================================================
+// МОДЕЛЬ АВТОМАТИЧНИХ ВІДПОВІДЕЙ ПОКУПЦЮ — усе, що бот сам (без участі
+// оператора) відповідає на ЗВИЧАЙНЕ повідомлення (не команду), звірене
+// з тим, що реально сталось із запитом:
+//
+//   1. Пошук (searchProductsForBot нижче) ЩОСЬ ЗНАЙШОВ — покупець
+//      одразу бачить готові варіанти (formatBotSearchReply). Це ОДНЕ
+//      повідомлення, без додаткового "дякуємо, передано менеджеру" —
+//      воно вже й так відповідає на запит, дублювати нема сенсу.
+//   2. Пошук НІЧОГО не знайшов (NOT_FOUND_REPLY) — окремий текст,
+//      чесний про те, що сталось ("не знайшла одразу"), а не той
+//      самий безликий "дякуємо", що і при вдалому пошуку.
+// В обох випадках повідомлення покупця ОДНАКОВО йде оператору (тема
+// форуму чи пласка пересилка) — бот не підмінює живу підтримку, лише
+// пришвидшує відповідь, коли може
+// ============================================================
 const BOT_SEARCH_LIMIT = 5;
 
 function formatBotSearchReply(results: BotSearchResult[], totalCount: number): string {
@@ -148,8 +156,11 @@ function formatBotSearchReply(results: BotSearchResult[], totalCount: number): s
       ? `🔍 Знайшла ${totalCount} варіантів, ось найкращі ${results.length}:`
       : `🔍 Знайшла ${totalCount === 1 ? 'варіант' : 'варіанти'}:`;
 
-  return `${header}\n\n${lines.join('\n\n')}\n\nПередаю ваше повідомлення менеджеру — він перевірить і уточнить деталі.`;
+  return `${header}\n\n${lines.join('\n\n')}\n\nЯкщо потрібна допомога з вибором — оператор також бачить ваше повідомлення і підключиться за потреби.`;
 }
+
+const NOT_FOUND_REPLY =
+  'Поки що не знайшла точного варіанту автоматично — передала ваше повідомлення менеджеру, він перевірить наявність і підбере деталь вручну. Відповімо найближчим часом.';
 
 // chat_id закритої групи-форуму (site_settings.telegram_staff_chat_id) —
 // null, доки власник не надіслав туди "/register_support"
@@ -319,14 +330,22 @@ export async function POST(request: NextRequest) {
     // варіанти одразу, не чекаючи на менеджера. Помилка пошуку (напр.
     // тимчасова недоступність бази) НЕ повинна ламати звичайну
     // пересилку повідомлення нижче — тому обгорнуто в try/catch
+    let searchFound = false;
     try {
       const { results, totalCount } = await searchProductsForBot(pool, text, BOT_SEARCH_LIMIT);
       if (results.length > 0) {
+        searchFound = true;
         await sendTelegramMessageTo(chatId, formatBotSearchReply(results, totalCount));
       }
     } catch (error) {
       console.error('Ошибка при поиске товара по сообщению клиента в Telegram-боте:', error);
     }
+
+    // Автовідповідь покупцю ПРО ПЕРЕСИЛКУ — лише якщо пошук нічого не
+    // показав: якщо показав (searchFound), formatBotSearchReply вище
+    // вже й так відповів по суті, другого "дякуємо" не потрібно (див.
+    // коментар "МОДЕЛЬ АВТОМАТИЧНИХ ВІДПОВІДЕЙ" вище)
+    const autoReplyText = searchFound ? null : NOT_FOUND_REPLY;
 
     // Звичайне повідомлення (не команда "/start") — покупець написав
     // боту напряму, найімовірніше через кнопку "Telegram" у шапці
@@ -339,7 +358,7 @@ export async function POST(request: NextRequest) {
       const topicId = await findOrCreateSupportTopic(staffChatId, chatId, senderLabel);
       if (topicId) {
         await sendTelegramMessageTo(staffChatId, text, topicId);
-        await sendTelegramMessageTo(chatId, 'Дякуємо! Ваше повідомлення передано менеджеру, ми відповімо найближчим часом.');
+        if (autoReplyText) await sendTelegramMessageTo(chatId, autoReplyText);
         return NextResponse.json({ ok: true });
       }
     }
@@ -361,7 +380,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await sendTelegramMessageTo(chatId, 'Дякуємо! Ваше повідомлення передано менеджеру, ми відповімо найближчим часом.');
+    if (autoReplyText) await sendTelegramMessageTo(chatId, autoReplyText);
     return NextResponse.json({ ok: true });
   }
 
