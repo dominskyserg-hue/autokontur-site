@@ -28,6 +28,12 @@
 //      (крок 3), або "Reply" на пересилку в запасному "пласкому"
 //      варіанті — текст відповіді летить відповідному покупцю. Так
 //      оператор відповідає покупцю прямо з Telegram, не заходячи на сайт
+//   5. Кнопки ГОЛОВНОГО МЕНЮ (reply-клавіатура під полем вводу, див.
+//      MAIN_MENU_KEYBOARD нижче) — "Пошук за авто", "Пошук за
+//      артикулом", "Мої замовлення", "Зв'язок з оператором". Дві
+//      кнопки пошуку лише підказують, що написати далі (сам пошук —
+//      той самий, що і в кроці 3), "Мої замовлення" читає замовлення
+//      покупця з тієї ж бази, що й Особистий кабінет на сайті
 //
 // Звідки береться "/start <телефон>": особистий кабінет покупця
 // (components/CustomerDashboard.tsx) показує посилання-запрошення
@@ -59,6 +65,7 @@ import {
   isOwnerChat,
   sendTelegramMessage,
   sendTelegramMessageTo,
+  type TelegramReplyKeyboard,
 } from '@/lib/telegramNotify';
 import { searchProductsForBot, type BotSearchResult } from '@/lib/productSearch';
 import { SITE_URL } from '@/lib/siteConfig';
@@ -123,6 +130,95 @@ function formatSenderLabel(from: TelegramFrom | undefined, chatId: number): stri
   if (from?.username) return `@${from.username}`;
   const name = [from?.first_name, from?.last_name].filter(Boolean).join(' ');
   return name || `chat_id ${chatId}`;
+}
+
+// ============================================================
+// ГОЛОВНЕ МЕНЮ БОТА — reply-клавіатура з 4 кнопками, у стилі сайту
+// (ті самі розділи, що й у шапці/Особистому кабінеті: пошук за
+// автомобілем, пошук за артикулом, "Мої замовлення", зв'язок з
+// підтримкою). Прикріплюється до КОЖНОГО повідомлення покупцю в цьому
+// файлі — Telegram-клієнт лишає кнопки під полем вводу постійно,
+// тому не важливо, з якого повідомлення покупець почав діалог
+// (з "/start", з кнопки "Telegram" на сайті чи просто написав напряму).
+//
+// Дві кнопки пошуку ("за авто" і "за артикулом") НЕ заводять окремої
+// гілки логіки — обидві лише підказують покупцю, що написати ДАЛІ
+// звичайним повідомленням, а сам пошук (searchProductsForBot нижче)
+// однаково розуміє і "Тойота Королла 2015 колодки передні", і голий
+// артикул "0986424815" в одному й тому самому запиті. Розділ на дві
+// кнопки — це підказка покупцю, а не два різних алгоритми
+const BTN_SEARCH_CAR = '🔍 Пошук за авто';
+const BTN_SEARCH_ARTICLE = '🔢 Пошук за артикулом';
+const BTN_ORDERS = '📦 Мої замовлення';
+const BTN_OPERATOR = '💬 Зв\'язок з оператором';
+
+const MAIN_MENU_KEYBOARD: TelegramReplyKeyboard = {
+  keyboard: [
+    [BTN_SEARCH_CAR, BTN_SEARCH_ARTICLE],
+    [BTN_ORDERS, BTN_OPERATOR],
+  ],
+  resize_keyboard: true,
+};
+
+const STATUS_LABELS: Record<string, string> = {
+  new: 'Новий',
+  processing: 'В обробці',
+  awaiting_parts: 'Очікує запчастини',
+  ready: 'Готовий до видачі',
+  cancelled: 'Скасовано',
+};
+
+// "Мої замовлення" — той самий принцип пошуку заказів за телефоном,
+// що й в Особистому кабінеті (app/api/customer/orders/route.ts), лише
+// телефон тут беремо не з форми входу, а з уже збереженої прив'язки
+// chat_id → телефон (customer_telegram_links, заповнюється при
+// "/start <телефон>" нижче). Один chat_id теоретично може бути
+// прив'язаний до кількох телефонів (якщо покупець оформлював
+// замовлення під різними номерами) — тому IN (...), а не "=" один
+async function fetchOrdersForChat(
+  chatId: number
+): Promise<Array<{ id: string; status: string; itemsCount: number; totalAmount: number; createdAt: string }>> {
+  const result = await pool.query(
+    `
+    SELECT o.id, o.status, o.created_at,
+      COUNT(oi.id) AS items_count,
+      COALESCE(SUM(oi.price * oi.quantity), 0) AS total_amount
+    FROM orders o
+    LEFT JOIN order_items oi ON oi.order_id = o.id
+    WHERE RIGHT(regexp_replace(o.customer_phone, '\\D', '', 'g'), 9) IN (
+      SELECT phone FROM customer_telegram_links WHERE telegram_chat_id = $1
+    )
+    GROUP BY o.id
+    ORDER BY o.created_at DESC
+    LIMIT 10
+    `,
+    [chatId]
+  );
+
+  return result.rows.map((row) => ({
+    id: row.id,
+    status: row.status,
+    itemsCount: parseInt(row.items_count, 10),
+    totalAmount: parseFloat(row.total_amount),
+    createdAt: row.created_at,
+  }));
+}
+
+function formatOrdersReply(orders: Array<{ id: string; status: string; itemsCount: number; totalAmount: number; createdAt: string }>): string {
+  if (orders.length === 0) {
+    return 'Замовлень поки не знайдено. Якщо ви вже оформлювали замовлення на сайті — переконайтесь, що Telegram підключений до того самого номера телефону (Особистий кабінет → «Налаштування» → «Підключити Telegram-сповіщення»).';
+  }
+
+  const lines = orders.map((o) => {
+    const date = new Date(o.createdAt).toLocaleDateString('uk-UA');
+    const statusLabel = STATUS_LABELS[o.status] || o.status;
+    // Короткий id (перші 8 символів UUID) — те саме, що показує сайт
+    // у списку замовлень, повний UUID покупцю ні до чого
+    const shortId = o.id.slice(0, 8);
+    return `№${shortId} від ${date} — ${statusLabel}\n   ${o.itemsCount} поз. на ${o.totalAmount} грн`;
+  });
+
+  return `📦 Ваші останні замовлення:\n\n${lines.join('\n\n')}\n\nПовна інформація й склад кожного замовлення — в Особистому кабінеті: ${SITE_URL}/account`;
 }
 
 // ============================================================
@@ -324,6 +420,60 @@ export async function POST(request: NextRequest) {
   const isStartCommand = /^\/start(?:@\w+)?/.test(text);
 
   if (!isStartCommand) {
+    // ---- кнопки головного меню ----
+    // Reply-кнопка, коли на неї натискають, приходить сюди як ЗВИЧАЙНЕ
+    // текстове повідомлення з текстом самої кнопки — тому просто
+    // звіряємо text з підписами кнопок. Обидві кнопки пошуку і кнопка
+    // "Зв'язок з оператором" нічого не шукають і нікуди не пересилають
+    // самі по собі — це лише підказка, що написати ДАЛІ; той наступний
+    // текст покупця вже піде звичайним шляхом нижче (пошук і/або
+    // пересилка оператору)
+    if (text === BTN_SEARCH_CAR) {
+      await sendTelegramMessageTo(
+        chatId,
+        'Напишіть одним повідомленням марку, модель, рік і яку деталь шукаєте — наприклад: «Тойота Королла 2015 колодки передні». Я одразу покажу, що є в наявності.',
+        undefined,
+        MAIN_MENU_KEYBOARD
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === BTN_SEARCH_ARTICLE) {
+      await sendTelegramMessageTo(
+        chatId,
+        'Напишіть артикул деталі (свій або крос-номер іншого виробника) — знайду точну відповідність і аналоги.',
+        undefined,
+        MAIN_MENU_KEYBOARD
+      );
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === BTN_ORDERS) {
+      try {
+        const orders = await fetchOrdersForChat(chatId);
+        await sendTelegramMessageTo(chatId, formatOrdersReply(orders), undefined, MAIN_MENU_KEYBOARD);
+      } catch (error) {
+        console.error('Ошибка при получении заказов клиента в Telegram-боте:', error);
+        await sendTelegramMessageTo(
+          chatId,
+          'Не вдалося перевірити замовлення — спробуйте, будь ласка, трохи пізніше або загляньте в Особистий кабінет на сайті.',
+          undefined,
+          MAIN_MENU_KEYBOARD
+        );
+      }
+      return NextResponse.json({ ok: true });
+    }
+
+    if (text === BTN_OPERATOR) {
+      await sendTelegramMessageTo(
+        chatId,
+        'Напишіть, будь ласка, ваше питання одним повідомленням — одразу передам менеджеру.',
+        undefined,
+        MAIN_MENU_KEYBOARD
+      );
+      return NextResponse.json({ ok: true });
+    }
+
     // Спершу пробуємо знайти деталь по тексту самого повідомлення —
     // якщо покупець написав щось на кшталт "колодки передні мазда 6
     // 2008 2.0" чи просто назву запчастини, показуємо йому готові
@@ -335,7 +485,7 @@ export async function POST(request: NextRequest) {
       const { results, totalCount } = await searchProductsForBot(pool, text, BOT_SEARCH_LIMIT);
       if (results.length > 0) {
         searchFound = true;
-        await sendTelegramMessageTo(chatId, formatBotSearchReply(results, totalCount));
+        await sendTelegramMessageTo(chatId, formatBotSearchReply(results, totalCount), undefined, MAIN_MENU_KEYBOARD);
       }
     } catch (error) {
       console.error('Ошибка при поиске товара по сообщению клиента в Telegram-боте:', error);
@@ -358,7 +508,7 @@ export async function POST(request: NextRequest) {
       const topicId = await findOrCreateSupportTopic(staffChatId, chatId, senderLabel);
       if (topicId) {
         await sendTelegramMessageTo(staffChatId, text, topicId);
-        if (autoReplyText) await sendTelegramMessageTo(chatId, autoReplyText);
+        if (autoReplyText) await sendTelegramMessageTo(chatId, autoReplyText, undefined, MAIN_MENU_KEYBOARD);
         return NextResponse.json({ ok: true });
       }
     }
@@ -380,7 +530,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    if (autoReplyText) await sendTelegramMessageTo(chatId, autoReplyText);
+    if (autoReplyText) await sendTelegramMessageTo(chatId, autoReplyText, undefined, MAIN_MENU_KEYBOARD);
     return NextResponse.json({ ok: true });
   }
 
@@ -389,10 +539,13 @@ export async function POST(request: NextRequest) {
   if (!payload) {
     // "/start" без телефону — покупець відкрив бота напряму (не через
     // посилання-запрошення з кабінету). Пояснюємо, як підключити
-    // сповіщення правильно
+    // сповіщення правильно, і одразу показуємо головне меню — бот
+    // корисний і без прив'язки телефону (пошук за авто/артикулом)
     await sendTelegramMessageTo(
       chatId,
-      'Щоб отримувати сповіщення про свої замовлення тут, перейдіть у свій Особистий кабінет на сайті → «Налаштування» → «Підключити Telegram-сповіщення».'
+      'Вітаю! Я можу одразу підказати, що є в наявності — скористайтесь кнопками нижче.\n\nЩоб отримувати сповіщення про свої замовлення тут, перейдіть у свій Особистий кабінет на сайті → «Налаштування» → «Підключити Telegram-сповіщення».',
+      undefined,
+      MAIN_MENU_KEYBOARD
     );
     return NextResponse.json({ ok: true });
   }
@@ -402,7 +555,12 @@ export async function POST(request: NextRequest) {
   // й порівнюються телефони скрізь у кабінеті покупця
   const phoneTail = payload.replace(/\D/g, '').slice(-9);
   if (phoneTail.length < 9) {
-    await sendTelegramMessageTo(chatId, 'Не вдалося розпізнати номер телефону. Спробуйте перейти за посиланням із кабінету ще раз.');
+    await sendTelegramMessageTo(
+      chatId,
+      'Не вдалося розпізнати номер телефону. Спробуйте перейти за посиланням із кабінету ще раз.',
+      undefined,
+      MAIN_MENU_KEYBOARD
+    );
     return NextResponse.json({ ok: true });
   }
 
@@ -419,7 +577,9 @@ export async function POST(request: NextRequest) {
 
     await sendTelegramMessageTo(
       chatId,
-      'Готово! Тепер сюди приходитимуть сповіщення про ваші замовлення на DominatorParts — склад замовлення одразу після оформлення та номер ТТН Нової Пошти, коли ми відправимо посилку.'
+      'Готово! Тепер сюди приходитимуть сповіщення про ваші замовлення на DominatorParts — склад замовлення одразу після оформлення та номер ТТН Нової Пошти, коли ми відправимо посилку. А кнопками нижче можна одразу перевірити наявність деталі чи свої замовлення.',
+      undefined,
+      MAIN_MENU_KEYBOARD
     );
   } catch (error) {
     console.error('Ошибка при сохранении привязки Telegram-чата покупателя:', error);

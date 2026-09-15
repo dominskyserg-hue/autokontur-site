@@ -56,16 +56,36 @@ export async function sendTelegramMessage(text: string): Promise<number | null> 
   return sendTelegramMessageTo(TELEGRAM_CHAT_ID, text);
 }
 
+// Reply-клавіатура з кнопками головного меню бота (див. коментар
+// "ГОЛОВНЕ МЕНЮ БОТА" в app/api/telegram/webhook/route.ts) —
+// resize_keyboard: true означає, що Telegram-клієнт лишає ці кнопки
+// під полем вводу постійно, а не ховає одразу після одного натискання.
+// keyboard тут — рядки для зручності виклику (MAIN_MENU_KEYBOARD пишеться
+// простим масивом підписів кнопок); у сам HTTP-запит до Telegram кожен
+// рядок перетворюється на об'єкт { text: рядок } нижче — сирий Bot API
+// (на відміну від деяких SDK) приймає лише таку форму, голий рядок
+// замість об'єкта Telegram просто відхилить разом з усім повідомленням
+export interface TelegramReplyKeyboard {
+  keyboard: string[][];
+  resize_keyboard: true;
+}
+
 // messageThreadId — необов'язковий id ТЕМИ форуму (supergroup із
 // увімкненими Topics), якщо повідомлення потрібно надіслати не в
 // загальний потік чату, а в конкретну тему — див. createForumTopic()
-// і "Мій Гараж підтримки" в app/api/telegram/webhook/route.ts
+// і "Мій Гараж підтримки" в app/api/telegram/webhook/route.ts.
+// replyMarkup — необов'язкова reply-клавіатура (кнопки головного меню)
 export async function sendTelegramMessageTo(
   chatId: string | number,
   text: string,
-  messageThreadId?: number
+  messageThreadId?: number,
+  replyMarkup?: TelegramReplyKeyboard
 ): Promise<number | null> {
   if (!TELEGRAM_BOT_TOKEN) return null;
+
+  const wireReplyMarkup = replyMarkup
+    ? { keyboard: replyMarkup.keyboard.map((row) => row.map((label) => ({ text: label }))), resize_keyboard: true }
+    : undefined;
 
   try {
     const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
@@ -79,6 +99,7 @@ export async function sendTelegramMessageTo(
         chat_id: chatId,
         text,
         ...(messageThreadId ? { message_thread_id: messageThreadId } : {}),
+        ...(wireReplyMarkup ? { reply_markup: wireReplyMarkup } : {}),
       }),
     });
 
