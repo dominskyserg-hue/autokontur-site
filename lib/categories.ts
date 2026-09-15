@@ -1709,6 +1709,243 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Seat Ibiza Mk II / Cordoba',
     parentCategorySlug: 'halmivni-kolodky',
   },
+
+  // ============================================================
+  // ХВИЛЯ 15 — перший вихід за межі гальмівних колодок: сайлентблоки
+  // важеля, втулки стабілізатора, кульові опори, підшипники маточини
+  // (за прямою вказівкою). Підшипники маточини не дали жодного
+  // нового кандидата з порогом "≥3 SKU і ≥15 шт" — розділ пропущено.
+  //
+  // Тут виявився ще жорсткіший варіант проблеми з хвиль 11-14:
+  // одні й ті самі артикули (переважно TRW/DELPHI/FEBEST/GSP/YAMATO)
+  // повторюються НЕ ТІЛЬКИ між кузовами однієї моделі, а й між
+  // РІЗНИМИ БРЕНДАМИ одразу (наприклад, Renault Clio III і Nissan
+  // Micra K12 показують ідентичний товарний список — очевидно,
+  // це узагальнені "автомобільні" сайлентблоки одного постачальника,
+  // а не щось специфічне для конкретної моделі). Це не привід
+  // відмовитись від сторінки — покупець з конкретним авто шукає
+  // саме свою марку/модель, а не постачальника деталі — але це
+  // привід ОБ'ЄДНАТИ кузови/бейджі однієї й тієї ж фізичної моделі
+  // в одну сторінку, як і в попередніх хвилях:
+  //   - Nissan Micra C+C і March III — одна модель (K12) під двома
+  //     назвами (JDM "March" = експортна "Micra");
+  //   - Renault Clio III (седан/хетчбек) і Clio Grandtour (універсал)
+  //     — той самий кузов-платформа;
+  //   - Toyota Vitz (SCP1_/NLP1_/NCP1_) і Echo Verso — той самий
+  //     Vitz-платформ мінівен під іншою назвою для деяких ринків;
+  //   - Mitsubishi Legnum VI і Aspire VI — той самий кузов EA_ під
+  //     різними бейджами.
+  // Nissan Armada (R51) і Nissan NP300 (D40) відсіяні повністю —
+  // обидва показали 100% той самий список, що вже опублікований
+  // Nissan Frontier (D40) нижче.
+  {
+    slug: 'nissan-micra-march-k12-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Nissan Micra / March (K12)',
+    h1: 'Сайлентблоки важеля Nissan Micra / March (K12)',
+    metaTitle: 'Сайлентблоки Nissan Micra / March K12 від 192 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Nissan Micra / March K12 (2003-2010) в наявності від 192 грн (DELPHI). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Nissan Micra / March K12 (2003-2010, одна й та сама модель під різними назвами) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'NISSAN', models: ['MICRA C+C (K12)', 'MARCH III (K12)'] },
+    hideFromIndex: true,
+    modelGroup: 'nissan-micra-march-k12',
+    modelLabel: 'Nissan Micra / March (K12)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'renault-clio-3-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Renault Clio III',
+    h1: 'Сайлентблоки важеля Renault Clio III',
+    metaTitle: 'Сайлентблоки Renault Clio III від 192 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Renault Clio III (2005-2010, хетчбек і універсал) в наявності від 192 грн (DELPHI). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Renault Clio III (2005-2010) — підходять і на хетчбек, і на універсал (Grandtour), в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'RENAULT', models: ['EURO CLIO III (BR0/1, CR0/1)', 'CLIO Grandtour (KR0/1_)'] },
+    hideFromIndex: true,
+    modelGroup: 'renault-clio-3',
+    modelLabel: 'Renault Clio III',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'renault-modus-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Renault Modus',
+    h1: 'Сайлентблоки важеля Renault Modus',
+    metaTitle: 'Сайлентблоки Renault Modus від 192 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Renault Modus / Grand Modus (з 2004) в наявності від 192 грн (DELPHI). Доставка по всій Україні.',
+    intro: 'Сайлентблоки важеля підвіски для Renault Modus / Grand Modus (з 2004) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'RENAULT', models: ['MODUS / GRAND MODUS (F/JP0_)'] },
+    hideFromIndex: true,
+    modelGroup: 'renault-modus',
+    modelLabel: 'Renault Modus',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'nissan-murano-z51-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Nissan Murano (Z51)',
+    h1: 'Сайлентблоки важеля Nissan Murano (Z51)',
+    metaTitle: 'Сайлентблоки Nissan Murano Z51 від 326 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Nissan Murano Z51 (з 2007) в наявності від 326 грн (FEBEST). Доставка по всій Україні.',
+    intro: 'Сайлентблоки важеля підвіски для Nissan Murano Z51 (з 2007) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'NISSAN', models: ['MURANO (Z51)'] },
+    hideFromIndex: true,
+    modelGroup: 'nissan-murano-z51',
+    modelLabel: 'Nissan Murano (Z51)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'nissan-quest-e52-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Nissan Quest (E52)',
+    h1: 'Сайлентблоки важеля Nissan Quest (E52)',
+    metaTitle: 'Сайлентблоки Nissan Quest E52 від 326 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Nissan Quest E52 (з 2010) в наявності від 326 грн (FEBEST). Доставка по всій Україні.',
+    intro: 'Сайлентблоки важеля підвіски для Nissan Quest E52 (з 2010) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'NISSAN', models: ['QUEST (E52)'] },
+    hideFromIndex: true,
+    modelGroup: 'nissan-quest-e52',
+    modelLabel: 'Nissan Quest (E52)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'nissan-maxima-j32-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Nissan Maxima (J32)',
+    h1: 'Сайлентблоки важеля Nissan Maxima (J32)',
+    metaTitle: 'Сайлентблоки Nissan Maxima J32 від 1043 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Nissan Maxima J32 (з 2008, у СНД також відома як Teana) в наявності від 1043 грн (FEBEST). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Nissan Maxima J32 (з 2008; той самий кузов на деяких ринках продавався як Nissan Teana) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'NISSAN', models: ['MAXIMA V (J32)'] },
+    hideFromIndex: true,
+    modelGroup: 'nissan-maxima-j32',
+    modelLabel: 'Nissan Maxima (J32)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'mitsubishi-galant-4-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Mitsubishi Galant Mk IV',
+    h1: 'Сайлентблоки важеля Mitsubishi Galant Mk IV',
+    metaTitle: 'Сайлентблоки Mitsubishi Galant IV від 167 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Mitsubishi Galant Mk IV (1987-1992) в наявності від 167 грн (YAMATO). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Mitsubishi Galant Mk IV (1987-1992, той самий кузов продавався в Японії і як Mitsubishi Eterna) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'MITSUBISHI', models: ['GALANT Mk IV Stufenheck (E3_A)', 'ETERNA IV (E3_A)'] },
+    hideFromIndex: true,
+    modelGroup: 'mitsubishi-galant-4',
+    modelLabel: 'Mitsubishi Galant Mk IV',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'toyota-vitz-echo-verso-vtulky-stabilizatora',
+    name: 'Втулки стабілізатора Toyota Vitz / Echo Verso',
+    h1: 'Втулки стабілізатора Toyota Vitz / Echo Verso',
+    metaTitle: 'Втулки стабілізатора Toyota Vitz від 51 грн | DominatorParts',
+    metaDescription:
+      'Втулки стабілізатора Toyota Vitz / Echo Verso (1999-2005) в наявності від 51 грн (GSP). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Втулки стабілізатора поперечної стійкості для Toyota Vitz / Echo Verso (1999-2005, спільна платформа) — в наявності декілька виробників.',
+    matchGroups: [['втулк'], ['стабіліз', 'стабилиз']],
+    tecdocVehicle: { make: 'TOYOTA', models: ['VITZ (SCP1_, NLP1_, NCP1_)', 'ECHO VERSO (_NLP2_, _NCP2_)'] },
+    hideFromIndex: true,
+    modelGroup: 'toyota-vitz-echo-verso',
+    modelLabel: 'Toyota Vitz / Echo Verso',
+    parentCategorySlug: 'vtulky-stabilizatora',
+  },
+  {
+    slug: 'toyota-vitz-2-vtulky-stabilizatora',
+    name: 'Втулки стабілізатора Toyota Vitz (2 покоління)',
+    h1: 'Втулки стабілізатора Toyota Vitz (2 покоління)',
+    metaTitle: 'Втулки стабілізатора Toyota Vitz від 62 грн | DominatorParts',
+    metaDescription:
+      'Втулки стабілізатора Toyota Vitz 2 покоління (з 2005) в наявності від 62 грн (YAMATO). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Втулки стабілізатора поперечної стійкості для Toyota Vitz 2 покоління (з 2005) — в наявності декілька виробників.',
+    matchGroups: [['втулк'], ['стабіліз', 'стабилиз']],
+    tecdocVehicle: { make: 'TOYOTA', models: ['VITZ (SCP9_, NSP9_, KSP9_, NCP9_, ZSP9_)'] },
+    hideFromIndex: true,
+    modelGroup: 'toyota-vitz-2',
+    modelLabel: 'Toyota Vitz (2 покоління)',
+    parentCategorySlug: 'vtulky-stabilizatora',
+  },
+  {
+    slug: 'mitsubishi-legnum-aspire-vtulky-stabilizatora',
+    name: 'Втулки стабілізатора Mitsubishi Legnum / Aspire',
+    h1: 'Втулки стабілізатора Mitsubishi Legnum / Aspire',
+    metaTitle: 'Втулки стабілізатора Mitsubishi Legnum від 90 грн | DominatorParts',
+    metaDescription:
+      'Втулки стабілізатора Mitsubishi Legnum / Aspire (1996-2003) в наявності від 90 грн (GSP). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Втулки стабілізатора поперечної стійкості для Mitsubishi Legnum / Aspire (1996-2003, той самий кузов під різними бейджами) — в наявності декілька виробників.',
+    matchGroups: [['втулк'], ['стабіліз', 'стабилиз']],
+    tecdocVehicle: { make: 'MITSUBISHI', models: ['LEGNUM VI Station Wagon (EA_)', 'ASPIRE VI (EA_)'] },
+    hideFromIndex: true,
+    modelGroup: 'mitsubishi-legnum-aspire',
+    modelLabel: 'Mitsubishi Legnum / Aspire',
+    parentCategorySlug: 'vtulky-stabilizatora',
+  },
+  {
+    slug: 'honda-edix-vtulky-stabilizatora',
+    name: 'Втулки стабілізатора Honda Edix',
+    h1: 'Втулки стабілізатора Honda Edix',
+    metaTitle: 'Втулки стабілізатора Honda Edix від 69 грн | DominatorParts',
+    metaDescription:
+      'Втулки стабілізатора Honda Edix (2004-2006) в наявності від 69 грн (GSP). Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Втулки стабілізатора поперечної стійкості для Honda Edix (2004-2006) — в наявності декілька виробників.',
+    matchGroups: [['втулк'], ['стабіліз', 'стабилиз']],
+    tecdocVehicle: { make: 'HONDA', models: ['EDIX (BE)'] },
+    hideFromIndex: true,
+    modelGroup: 'honda-edix',
+    modelLabel: 'Honda Edix',
+    parentCategorySlug: 'vtulky-stabilizatora',
+  },
+  {
+    slug: 'nissan-frontier-d40-kulovi-opory',
+    name: 'Кульові опори Nissan Frontier (D40)',
+    h1: 'Кульові опори Nissan Frontier (D40)',
+    metaTitle: 'Кульова опора Nissan Frontier D40 від 707 грн | DominatorParts',
+    metaDescription:
+      'Кульові опори підвіски Nissan Frontier / Navara D40 (2004-2008) в наявності від 707 грн (MOOG). Доставка по всій Україні.',
+    intro:
+      'Кульові опори підвіски для Nissan Frontier / Navara D40 (2004-2008; той самий пікап продавався і як Nissan NP300) — в наявності декілька виробників.',
+    matchGroups: [
+      ['куль', 'шаров'],
+      ['опор'],
+    ],
+    tecdocVehicle: { make: 'NISSAN', models: ['CAMIONES / FRONTIER (D40)', 'NP300 Pritsche/Fahrgestell (D40)'] },
+    hideFromIndex: true,
+    modelGroup: 'nissan-frontier-d40',
+    modelLabel: 'Nissan Frontier (D40)',
+    parentCategorySlug: 'kulovi-opory',
+  },
+  {
+    slug: 'lexus-ls-kulovi-opory',
+    name: 'Кульові опори Lexus LS',
+    h1: 'Кульові опори Lexus LS',
+    metaTitle: 'Кульова опора Lexus LS від 1144 грн | DominatorParts',
+    metaDescription:
+      'Кульові опори підвіски Lexus LS (з 2006) в наявності від 1144 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Кульові опори підвіски для Lexus LS (з 2006) — в наявності декілька виробників.',
+    matchGroups: [
+      ['куль', 'шаров'],
+      ['опор'],
+    ],
+    tecdocVehicle: { make: 'LEXUS', models: ['LS Stufenheck (UVF4_, USF4_)'] },
+    hideFromIndex: true,
+    modelGroup: 'lexus-ls',
+    modelLabel: 'Lexus LS',
+    parentCategorySlug: 'kulovi-opory',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
