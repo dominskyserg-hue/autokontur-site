@@ -1661,6 +1661,54 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Mercedes-Benz Sprinter / VW LT',
     parentCategorySlug: 'halmivni-kolodky',
   },
+
+  // ============================================================
+  // ХВИЛЯ 14 — лише 1 сторінка. Це навмисно: цього разу перевірка
+  // на дублікат контенту (за реальним списком артикулів, а не на
+  // око) відсіяла майже всіх кандидатів:
+  //   - VW Jetta III (1H2) — усі 9 товарів уже показані на сторінках
+  //     Seat Ibiza Mk II/Cordoba (ця хвиля) і Audi A4 B5 (хвиля 11);
+  //   - VW Polo (6N1) — усі 6 товарів уже на сторінках Ibiza Mk II
+  //     і Fabia/Polo 9N (хвиля 11);
+  //   - Seat Cordoba Stufenheck (6K1, 6K2) — точний піднабір Seat
+  //     Ibiza Mk II (той самий кузов-платформа), тому об'єднано
+  //     в одну сторінку нижче, а не дубльовано;
+  //   - Opel/Vauxhall Vectra Mk II (C), Signum, Saab 9-3 — той
+  //     самий запчастинний пул, що вже опублікований Opel Vectra C
+  //     (хвиля 12);
+  //   - Mazda Telstar III/IV, 323 IV, Etude IV — той самий пул, що
+  //     Mazda 626 Mk III (хвиля 12);
+  //   - Mercedes C-Class Stufenheck (W202) — той самий пул, що
+  //     E-Class Coupe C124 (хвиля 12, вже відсіяно раніше);
+  //   - BMW 3 E90/E91 (стійки амортизатора передні) — формально
+  //     3 SKU, але фактично лише ОДНА пара стійок KYB (ліва+права)
+  //     плюс одна опора амортизатора, яка підходить одразу на 6
+  //     різних поколінь BMW E46-E61 — це не "вибір з кількох
+  //     виробників", а один товар у двох частинах, сторінку не
+  //     зроблено;
+  //   - Dodge Caliber (амортизатори передні) — 3 SKU, але дуже
+  //     дорогі (6825 грн+) і нішеві для України, попит малоймовірний.
+  //
+  // Категорії "Повітряний/Салонний/Оливний фільтр" на порозі
+  // "≥3 SKU і ≥15 шт в наявності" взагалі не дали жодної нової
+  // моделі — фільтри в цьому каталозі не концентруються навколо
+  // конкретних моделей так само щільно, як колодки.
+  {
+    slug: 'seat-ibiza-2-cordoba-halmivni-kolodky-peredni',
+    name: 'Гальмівні колодки передні Seat Ibiza Mk II / Cordoba',
+    h1: 'Гальмівні колодки передні Seat Ibiza Mk II / Cordoba',
+    metaTitle: 'Колодки передні Seat Ibiza / Cordoba від 363 грн | DominatorParts',
+    metaDescription:
+      'Гальмівні колодки передні Seat Ibiza Mk II / Cordoba (1993-1999) в наявності від 363 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
+    intro:
+      'Передні гальмівні колодки для Seat Ibiza Mk II та Cordoba (1993-1999, спільна платформа) — в наявності декілька виробників.',
+    matchGroups: [['колодк'], ['перед']],
+    tecdocVehicle: { make: 'SEAT', models: ['IBIZA Mk II (6K1)', 'CORDOBA Stufenheck (6K1, 6K2)'] },
+    hideFromIndex: true,
+    modelGroup: 'seat-ibiza-2-cordoba',
+    modelLabel: 'Seat Ibiza Mk II / Cordoba',
+    parentCategorySlug: 'halmivni-kolodky',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
