@@ -53,13 +53,11 @@
 
 import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
-import { loadSynonymDictionary, expandSearchQuery, buildSynonymWhereClause } from '@/lib/searchSynonyms';
 import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline';
 import { resolveMakeDbValues } from '@/lib/carMakes';
-import { detectCategoryInText, buildCategoryWhereClause } from '@/lib/categories';
-import { extractCarReference } from '@/lib/searchCarText';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import { buildTextSearchClause } from '@/lib/productSearch';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -94,23 +92,6 @@ const pool =
   });
 
 globalThis.pgPool = pool;
-
-// ------------------------------------------------------------
-// ОЧИСТКА АРТИКУЛА ДЛЯ ПОИСКА
-// ------------------------------------------------------------
-// Та же самая функция, что и в app/api/suppliers/parse-excel/route.ts —
-// ею чистятся артикулы ПЕРЕД сохранением в базу (см. cleanArticle()
-// там же), поэтому и поисковый запрос нужно чистить точно так же:
-// иначе "AB-123" никогда не найдёт "AB123", уже сохранённый в базе
-function cleanArticle(rawValue: unknown): string {
-  if (rawValue === null || rawValue === undefined) return '';
-
-  return String(rawValue)
-    .toUpperCase()
-    .trim()
-    .replace(/[\s\-_./\\]+/g, '')
-    .replace(/[^A-Z0-9А-Я]/g, '');
-}
 
 // ------------------------------------------------------------
 // ПРОВЕРКА, ЧТО СТРОКА — НАСТОЯЩИЙ UUID
@@ -203,154 +184,14 @@ export async function GET(request: NextRequest) {
     const values: unknown[] = [];
 
     if (search) {
-      // cleanArticle() приводит поисковый запрос к тому же виду, в
-      // котором артикул хранится в базе (см. комментарий у функции
-      // выше) — ищем его по подстроке (ILIKE), поэтому "AB1" найдёт
-      // и "AB123". По бренду и марке/модели авто ищем тем же текстом,
-      // но БЕЗ очистки от спецсимволов — эти поля не проходят через
-      // cleanArticle при сохранении, значит и искать их нужно как
-      // обычный текст. Так запрос "Toyota" находит все запчасти для
-      // Toyota, даже если сам текст запроса не похож на артикул
-      // Кросс-номер ("0986424815" от Bosch, OEM-номер автопроизводителя
-      // и т.п.) ищем той же очищенной строкой, что и обычный артикул —
-      // он нормализуется точно так же при сохранении (см.
-      // app/api/products/cross-references/import/route.ts). Модель —
-      // "группы взаимозаменяемости" (cross_reference_groups /
-      // cross_reference_members, см. schema.sql): товар p попадает в
-      // выдачу, если СРЕДИ УЧАСТНИКОВ ЕГО ЖЕ ГРУППЫ (mine.product_id =
-      // p.id) есть хоть один (other) с подходящим номером — включая
-      // саму запись mine, если у p ещё нет группы. JOIN, а не просто
-      // проверка part_number = p.article — потому что нужно найти
-      // товар ПО ЧУЖОМУ кросс-номеру, а не только по своему
-      const cleanedArticle = cleanArticle(search);
-      values.push(`%${cleanedArticle}%`, `%${search}%`, cleanedArticle);
-      const articlePlaceholder = `$${values.length - 2}`;
-      const textPlaceholder = `$${values.length - 1}`;
-      // Точний (без ILIKE-підстановки з %) — для пошуку по tecdoc_crosses
-      // нижче: там ЗАВЖДИ порівняння на РІВНІСТЬ з уже очищеним
-      // article_a, щоб запит міг скористатись індексом
-      // idx_tecdoc_crosses_article_a замість повного сканування 1,8 млн
-      // рядків при кожному пошуку на сайті
-      const exactArticlePlaceholder = `$${values.length}`;
-
-      const orParts = [
-        `p.article ILIKE ${articlePlaceholder}`,
-        `p.brand ILIKE ${textPlaceholder}`,
-        `p.car_make ILIKE ${textPlaceholder}`,
-        `p.car_model ILIKE ${textPlaceholder}`,
-        `EXISTS (
-          SELECT 1
-          FROM cross_reference_members mine
-          JOIN cross_reference_members other ON other.group_id = mine.group_id
-          WHERE mine.product_id = p.id AND other.part_number ILIKE ${articlePlaceholder}
-        )`,
-        // Масовий SEO-індекс TecDoc (tecdoc_crosses, scripts/tecdoc/) —
-        // окрема від cross_reference_members таблиця (курована модель
-        // вище). Кожен зв'язок записаний ОБОМА напрямками при імпорті
-        // (див. коментар у schema.sql), тому досить одного простого
-        // порівняння: "чи є рядок, де введений покупцем номер — це
-        // article_a, а article_b — це артикул САМЕ ЦЬОГО товару". Так
-        // покупець, що вводить чужий кросс/OEM-номер (напр. "KL0111312"),
-        // знаходить товар з нашим власним артикулом ("19035165B"), а не
-        // отримує "нічого не знайдено"
-        `EXISTS (
-          SELECT 1 FROM tecdoc_crosses tc
-          WHERE tc.article_a = ${exactArticlePlaceholder} AND tc.article_b = p.article
-        )`,
-      ];
-
-      // Пошук за КЛЮЧОВИМИ СЛОВАМИ з назви товару, з урахуванням
-      // багатомовного словника синонімів (search_synonym_groups) —
-      // "гальмівні колодки rav 4" знайде товар з назвою "brake pads
-      // rav4" чи "тормозные колодки RAV4". Див. lib/searchSynonyms.ts
-      const dictionary = await loadSynonymDictionary(pool);
-      const expanded = expandSearchQuery(search, dictionary);
-      const synonymClause = buildSynonymWhereClause(expanded, values.length + 1);
-      if (synonymClause) {
-        orParts.push(`(${synonymClause.clause})`);
-        values.push(...synonymClause.params);
-      }
-
-      // Розумний пошук "деталь + авто одним реченням" — покупець не
-      // знає точний артикул і просто пише "ремінь грм на мазду 626
-      // 1992 року" чи "колодки на лексус gs". Розпізнаємо марку/рік/
-      // модель авто у тексті запиту (lib/searchCarText.ts) і, якщо
-      // марку знайдено, додаємо ще одну гілку через OR: назва товару
-      // підходить під розпізнану категорію деталі (якщо вона теж
-      // впізнана, lib/categories.ts) І авто підходить під розпізнані
-      // марку/модель/рік — за тією ж схемою "власні поля товару АБО
-      // tecdoc_compatibility", що й у "Підбір за автомобілем" нижче.
-      // Це СУТО ДОДАТКОВА гілка (просто ще один OR): якщо марку авто
-      // в тексті не розпізнано, поведінка запиту не змінюється взагалі
-      const carRef = extractCarReference(expanded.leftoverRaw || search);
-      if (carRef) {
-        const detectedCategory = detectCategoryInText(search);
-        let categoryClauseSql: string | null = null;
-        if (detectedCategory) {
-          const categoryClause = buildCategoryWhereClause(detectedCategory, values.length + 1);
-          values.push(...categoryClause.params);
-          categoryClauseSql = `(${categoryClause.clause})`;
-        }
-
-        // Умова сумісності з авто — марка ЗАВЖДИ обов'язкова, модель і
-        // рік додаються, лише якщо includeModel/carRef.year передбачають
-        // це. Викликається ДВІЧІ нижче: спершу "точна" версія (з
-        // моделлю), потім, якщо підказка моделі є, ще й "м'яка" —
-        // без моделі, про причину див. коментар нижче
-        const buildCarCompatSql = (includeModel: boolean): string => {
-          values.push(carRef!.makeDbValues);
-          const ownParts = [`UPPER(p.car_make) = ANY($${values.length}::text[])`];
-          values.push(carRef!.makeDbValues);
-          const tecdocParts = [`UPPER(tc2.make) = ANY($${values.length}::text[])`];
-
-          if (includeModel && carRef!.modelHint) {
-            values.push(`%${carRef!.modelHint}%`);
-            ownParts.push(`p.car_model ILIKE $${values.length}`);
-            values.push(`%${carRef!.modelHint}%`);
-            tecdocParts.push(`tc2.model ILIKE $${values.length}`);
-          }
-
-          if (carRef!.year) {
-            values.push(`%${carRef!.year}%`);
-            ownParts.push(`p.car_year ILIKE $${values.length}`);
-            values.push(carRef!.year);
-            tecdocParts.push(
-              `$${values.length}::int BETWEEN COALESCE(tc2.year_from, 1900) AND COALESCE(tc2.year_to, 2100)`
-            );
-          }
-
-          return `(
-            (${ownParts.join(' AND ')})
-            OR EXISTS (
-              SELECT 1 FROM tecdoc_compatibility tc2
-              WHERE tc2.brand = p.brand AND tc2.article = p.article
-              AND ${tecdocParts.join(' AND ')}
-            )
-          )`;
-        };
-
-        const preciseParts: string[] = [];
-        if (categoryClauseSql) preciseParts.push(categoryClauseSql);
-        preciseParts.push(buildCarCompatSql(true));
-        orParts.push(`(${preciseParts.join('\n            AND ')})`);
-
-        // М'який запасний варіант: підказка моделі — це слово так, як
-        // його написав покупець кирилицею ("камрі", "пассат", "х5"), а
-        // в базі модель зазвичай записана латиницею ("Camry", "Passat",
-        // "X5") — підрядок просто не збіжиться. Замість "нічого не
-        // знайдено" в такому випадку показуємо деталі під розпізнану
-        // марку (і категорію, якщо вона теж впізнана) БЕЗ фільтра по
-        // моделі — це те саме, що обрати в "Підбір за автомобілем"
-        // тільки марку, без моделі
-        if (carRef.modelHint) {
-          const fallbackParts: string[] = [];
-          if (categoryClauseSql) fallbackParts.push(categoryClauseSql);
-          fallbackParts.push(buildCarCompatSql(false));
-          orParts.push(`(${fallbackParts.join('\n            AND ')})`);
-        }
-      }
-
-      conditions.push(`(${orParts.join('\n          OR ')})`);
+      // Уся логіка текстового пошуку (артикул/бренд/кросс-номер/
+      // синоніми/"деталь + авто одним реченням") винесена у
+      // lib/productSearch.ts — той самий код тепер використовує і
+      // Telegram-бот (app/api/telegram/webhook/route.ts), щоб пошук
+      // там не розходився з пошуком на сайті
+      const searchClause = await buildTextSearchClause(pool, search, values.length + 1);
+      values.push(...searchClause.params);
+      conditions.push(searchClause.clause);
     }
 
     if (supplierId) {

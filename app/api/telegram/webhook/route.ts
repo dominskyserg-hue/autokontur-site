@@ -60,6 +60,9 @@ import {
   sendTelegramMessage,
   sendTelegramMessageTo,
 } from '@/lib/telegramNotify';
+import { searchProductsForBot, type BotSearchResult } from '@/lib/productSearch';
+import { SITE_URL } from '@/lib/siteConfig';
+import { buildProductPath } from '@/lib/slug';
 
 export const runtime = 'nodejs';
 
@@ -120,6 +123,32 @@ function formatSenderLabel(from: TelegramFrom | undefined, chatId: number): stri
   if (from?.username) return `@${from.username}`;
   const name = [from?.first_name, from?.last_name].filter(Boolean).join(' ');
   return name || `chat_id ${chatId}`;
+}
+
+// ---- пошук деталі за текстом повідомлення покупця (марка/модель/рік/
+// об'єм + що шукає) ----
+// Той самий движок, що й пошук на сайті (lib/productSearch.ts,
+// "ремінь грм на мазду 626 1992 року") — покупцю не потрібно знати
+// точний артикул, досить написати боту звичайним текстом. Топ-5
+// найдешевших в наявності, з прямим посиланням на картку товару.
+// Результат пошуку НЕ замінює пересилку оператору (нижче за кодом) —
+// вона відбувається однаково, щоб менеджер міг перевірити/уточнити
+const BOT_SEARCH_LIMIT = 5;
+
+function formatBotSearchReply(results: BotSearchResult[], totalCount: number): string {
+  const lines = results.map((r, i) => {
+    const url = `${SITE_URL}${buildProductPath(r.id, { brand: r.brand, article: r.article, name: r.name })}`;
+    const stockLabel = r.stock > 0 ? 'в наявності' : 'під замовлення';
+    const title = [r.brand, r.name].filter(Boolean).join(' — ') || r.article;
+    return `${i + 1}. ${title}\n   Артикул: ${r.article} · ${r.retailPrice} грн · ${stockLabel}\n   ${url}`;
+  });
+
+  const header =
+    totalCount > results.length
+      ? `🔍 Знайшла ${totalCount} варіантів, ось найкращі ${results.length}:`
+      : `🔍 Знайшла ${totalCount === 1 ? 'варіант' : 'варіанти'}:`;
+
+  return `${header}\n\n${lines.join('\n\n')}\n\nПередаю ваше повідомлення менеджеру — він перевірить і уточнить деталі.`;
 }
 
 // chat_id закритої групи-форуму (site_settings.telegram_staff_chat_id) —
@@ -284,6 +313,21 @@ export async function POST(request: NextRequest) {
   const isStartCommand = /^\/start(?:@\w+)?/.test(text);
 
   if (!isStartCommand) {
+    // Спершу пробуємо знайти деталь по тексту самого повідомлення —
+    // якщо покупець написав щось на кшталт "колодки передні мазда 6
+    // 2008 2.0" чи просто назву запчастини, показуємо йому готові
+    // варіанти одразу, не чекаючи на менеджера. Помилка пошуку (напр.
+    // тимчасова недоступність бази) НЕ повинна ламати звичайну
+    // пересилку повідомлення нижче — тому обгорнуто в try/catch
+    try {
+      const { results, totalCount } = await searchProductsForBot(pool, text, BOT_SEARCH_LIMIT);
+      if (results.length > 0) {
+        await sendTelegramMessageTo(chatId, formatBotSearchReply(results, totalCount));
+      }
+    } catch (error) {
+      console.error('Ошибка при поиске товара по сообщению клиента в Telegram-боте:', error);
+    }
+
     // Звичайне повідомлення (не команда "/start") — покупець написав
     // боту напряму, найімовірніше через кнопку "Telegram" у шапці
     // сайту. Якщо групу-форум зареєстровано — своя тема на покупця
