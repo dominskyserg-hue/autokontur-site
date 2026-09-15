@@ -57,6 +57,7 @@ import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { trackAddToCart, trackBeginCheckout, trackPurchase } from '@/lib/analytics';
+import { getStoredAttribution } from '@/lib/attribution';
 import NovaPoshtaAddressFields from '@/components/NovaPoshtaAddressFields';
 import CategoryGridSection from '@/components/CategoryGridSection';
 
@@ -831,6 +832,13 @@ export default function StorefrontHome() {
         ? `VIN для перевірки сумісності: ${vinProtectCode.trim()}. ${comment.trim()}`.trim()
         : comment.trim();
 
+    // Атрибуция первого визита (UTM-метки/gclid/referrer) — то, что
+    // components/AttributionCapture.tsx сохранил в localStorage при
+    // первом заходе покупателя на сайт (см. lib/attribution.ts). Если
+    // покупатель пришёл напрямую (без UTM/gclid/внешнего referrer) —
+    // все поля объекта будут null, и это нормально
+    const attribution = getStoredAttribution();
+
     try {
       const response = await fetch('/api/orders/create', {
         method: 'POST',
@@ -855,6 +863,13 @@ export default function StorefrontHome() {
             article: item.article,
             brand: item.brand,
           })),
+          utmSource: attribution.utmSource,
+          utmMedium: attribution.utmMedium,
+          utmCampaign: attribution.utmCampaign,
+          utmTerm: attribution.utmTerm,
+          utmContent: attribution.utmContent,
+          gclid: attribution.gclid,
+          referrer: attribution.referrer,
         }),
       });
 

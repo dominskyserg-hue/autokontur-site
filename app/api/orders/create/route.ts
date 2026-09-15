@@ -19,11 +19,21 @@
 //     "items": [
 //       { "id": "3fa85f64-...", "count": 2 },
 //       { "id": "7c9e6679-...", "count": 1 }
-//     ]
+//     ],
+//     "utmSource": "google", "utmMedium": "cpc", "utmCampaign": "tochnyi_artikul",
+//     "utmTerm": null, "utmContent": null, "gclid": "Cj0KCQ...", "referrer": null
 //   }
 //
 // customerName, customerSurname, customerPhone, city, novaPoshtaAddress
-// обязательны; comment — необязательное поле (пожелание по доставке)
+// обязательны; comment — необязательное поле (пожелание по доставке).
+//
+// utmSource/utmMedium/utmCampaign/utmTerm/utmContent/gclid/referrer —
+// сквозная атрибуция заказа (откуда пришёл покупатель), тоже все
+// необязательные. Фронтенд берёт их не из текущего URL, а из
+// localStorage (components/StorefrontHome.tsx вызывает
+// getStoredAttribution() из lib/attribution.ts) — там сохраняется
+// самое ПЕРВОЕ посещение сайта этим браузером (first-touch), а не то,
+// с какой страницы покупатель оформляет заказ прямо сейчас
 //
 // ВАЖНО про цену/артикул/бренд/название: фронтенд ПЕРЕДАЁТ их в теле
 // запроса (retailPrice/article/brand/name — так исторически сложилось
@@ -109,6 +119,16 @@ function isValidPhone(value: string): boolean {
   return digitsOnly.length >= 9 && digitsOnly.length <= 13;
 }
 
+// Приводит необязательное строковое поле атрибуции (utm_*, gclid,
+// referrer) к виду, в котором оно ляжет в базу: обрезает пробелы,
+// а пустую строку/undefined/null превращает в null — та же логика,
+// что и у comment чуть ниже, только вынесена в функцию, потому что
+// здесь таких полей сразу семь
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  const trimmed = (value || '').trim();
+  return trimmed || null;
+}
+
 // ------------------------------------------------------------
 // ТИПЫ ТЕЛА ЗАПРОСА
 // ------------------------------------------------------------
@@ -134,6 +154,18 @@ interface OrderCreateRequestBody {
   novaPoshtaAddress?: string;
   comment?: string;
   items?: OrderCreateItemInput[];
+  // Атрибуция первого визита (см. lib/attribution.ts) — откуда
+  // пришёл покупатель. Все поля необязательные: при обычном прямом
+  // заходе (без UTM-меток, без gclid, без стороннего referrer)
+  // фронтенд присылает их как null, и это нормальная, ожидаемая
+  // ситуация, а не ошибка
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  utmTerm?: string | null;
+  utmContent?: string | null;
+  gclid?: string | null;
+  referrer?: string | null;
 }
 
 // Строка из products, актуальная на момент оформления заказа — то,
@@ -170,6 +202,20 @@ export async function POST(request: NextRequest) {
   // пустая строка превращается в null, а не сохраняется как есть,
   // чтобы в базе не копились строки из одних пробелов
   const comment = (body.comment || '').trim() || null;
+
+  // Атрибуция первого визита — откуда пришёл покупатель (см.
+  // lib/attribution.ts). Все семь полей необязательные и никак не
+  // проверяются: это данные для аналитики, а не для логики заказа,
+  // поэтому даже если фронтенд прислал что-то странное — заказ всё
+  // равно должен оформиться. normalizeOptionalText превращает пустые
+  // строки/undefined в null, чтобы в базе не копился "мусор"
+  const utmSource = normalizeOptionalText(body.utmSource);
+  const utmMedium = normalizeOptionalText(body.utmMedium);
+  const utmCampaign = normalizeOptionalText(body.utmCampaign);
+  const utmTerm = normalizeOptionalText(body.utmTerm);
+  const utmContent = normalizeOptionalText(body.utmContent);
+  const gclid = normalizeOptionalText(body.gclid);
+  const referrer = normalizeOptionalText(body.referrer);
 
   if (!customerName) {
     return NextResponse.json({ error: "Вкажіть ваше ім'я." }, { status: 400 });
@@ -270,11 +316,28 @@ export async function POST(request: NextRequest) {
     // может только админ на экране "Заказы" (PATCH /api/orders/[id])
     const orderResult = await client.query<{ id: string }>(
       `
-      INSERT INTO orders (customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment, status)
-      VALUES ($1, $2, $3, $4, $5, $6, 'new')
+      INSERT INTO orders (
+        customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment, status,
+        utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid, referrer
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, 'new', $7, $8, $9, $10, $11, $12, $13)
       RETURNING id
       `,
-      [customerName, customerSurname, customerPhone, city, novaPoshtaAddress, comment]
+      [
+        customerName,
+        customerSurname,
+        customerPhone,
+        city,
+        novaPoshtaAddress,
+        comment,
+        utmSource,
+        utmMedium,
+        utmCampaign,
+        utmTerm,
+        utmContent,
+        gclid,
+        referrer,
+      ]
     );
     const orderId = orderResult.rows[0].id;
 

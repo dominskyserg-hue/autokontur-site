@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Script from 'next/script';
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import VinRequestButton from '@/components/VinRequestButton';
+import AttributionCapture from '@/components/AttributionCapture';
 import './globals.css';
 
 // Друга пара шрифтів — ТІЛЬКИ для нового розділу "Tech Premium"
@@ -149,6 +150,14 @@ export default function RootLayout({
 
         {children}
         {modal}
+
+        {/* Захоплення UTM-міток/gclid/referrer першого візиту (сквозна
+            атрибуція замовлень) — нічого не рендерить, лише зберігає дані
+            в localStorage при першому заході. На КОЖНІЙ сторінці сайту з
+            тієї ж причини, що і VinRequestButton нижче: покупець може
+            вперше потрапити відразу на сторінку товару чи категорії, а не
+            обов'язково на Головну. Див. lib/attribution.ts */}
+        <AttributionCapture />
 
         {/* Плаваюча кнопка "Не знайшли, що шукали?" — на КОЖНІЙ сторінці
             сайту (сама ховає себе під /admin, див. components/VinRequestButton.tsx) */}

@@ -1395,6 +1395,43 @@ CREATE INDEX IF NOT EXISTS idx_telegram_support_topics_thread ON telegram_suppor
 
 
 -- ============================================================
+-- 26. МІГРАЦІЯ — атрибуція замовлень (звідки прийшов покупець)
+-- ============================================================
+-- До цього моменту в orders не було жодних даних про те, з якого
+-- каналу (Google Ads, органічний пошук, соцмережі, реферальне
+-- посилання, прямий захід) прийшов покупець. Значення записує
+-- браузер покупця при першому візиті на сайт (lib/attribution.ts,
+-- components/AttributionCapture.tsx — first-touch, зберігається в
+-- localStorage) і передає їх на сервер app/api/orders/create/route.ts
+-- разом з рештою полів форми замовлення при оформленні.
+--
+-- Усі сім колонок NULLABLE і без DEFAULT — так ALTER безпечний для
+-- вже існуючих рядків orders (просто залишаться NULL), і так само
+-- лишаться NULL для замовлень без жодної UTM-мітки (прямий захід) —
+-- жоден покупець не побачить помилку через ці нові поля.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS utm_source TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS utm_medium TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS utm_campaign TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS utm_term TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS utm_content TEXT;
+
+-- gclid — унікальний ідентифікатор кліку, який Google Ads сам
+-- підставляє в посилання оголошення (автотегування "Auto-tagging",
+-- увімкнене за замовчуванням, без ручного налаштування UTM) — за ним
+-- можна звірити конкретний клік і конверсію напряму в кабінеті
+-- Google Ads
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS gclid TEXT;
+
+-- referrer — адреса сторінки, з якої перейшли на сайт, якщо UTM-міток
+-- і gclid не було, але сам referrer є і веде НЕ з нашого ж домену
+-- (реферальний трафік — наприклад, стороння стаття чи форум). Якщо
+-- немає ні UTM/gclid, ні зовнішнього referrer (прямий захід або
+-- покупець просто ввів адресу в браузері) — усі сім колонок так і
+-- лишаються NULL, і це нормальний, очікуваний результат
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS referrer TEXT;
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не
