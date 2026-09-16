@@ -1,8 +1,76 @@
 // Главная страница витрины интернет-магазина — то, что видит
 // покупатель. Админ-панель переехала под /admin (см. app/admin/page.tsx)
 import type { Metadata } from 'next';
+import { Pool } from 'pg';
 import StorefrontHome from '@/components/StorefrontHome';
 import { FAQ_ITEMS } from '@/lib/faq';
+
+// Захист від спроби зібрати сторінку заздалегідь під час білда на
+// Vercel (де немає доступу до бази) — той самий прийом, що й у
+// app/category/[slug]/page.tsx
+export const dynamic = 'force-dynamic';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var pgPool: Pool | undefined;
+}
+
+const pool =
+  globalThis.pgPool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 3,
+  });
+
+globalThis.pgPool = pool;
+
+// ------------------------------------------------------------
+// НАЛАШТУВАННЯ САЙТУ (телефон/назва/години) — ЗАВАНТАЖУЄМО НА СЕРВЕРІ
+// ------------------------------------------------------------
+// Раніше StorefrontHome (клієнтський компонент) сам ходив за ними в
+// /api/site-settings ПІСЛЯ монтування — перший же кадр на екрані
+// покупця завжди показував телефон-заглушку DEFAULT_PHONE ("+38 (050)
+// 123-45-67", ніколи не існуючий номер), а вже за мить, коли
+// відповідав fetch, номер "стрибав" на справжній. Локальний кеш у
+// StorefrontHome (SITE_SETTINGS_CACHE_KEY) прибирав стрибок ТІЛЬКИ
+// коли він відбувався в client-side переходах — на звичайному
+// оновленні сторінки браузер завжди спершу малює ту саму
+// server-rendered розмітку, а вона однаково містила заглушку,
+// незалежно від кешу.
+//
+// Тепер справжні значення читаються тут, на сервері, ПРИ КОЖНОМУ
+// запиті (dynamic = 'force-dynamic' вище) — і одразу йдуть у перший
+// же HTML, який бачить браузер. StorefrontHome і далі підвантажує їх
+// самостійно в useEffect (лишили як є) — це вже просто фонове
+// оновлення про всяк випадок (наприклад, якщо адмін змінив телефон
+// саме в ту секунду), а не боротьба з видимим стрибком
+interface InitialSiteSettings {
+  shopName: string | null;
+  phone: string | null;
+  workingHours: string | null;
+  telegramGroupUrl: string | null;
+}
+
+async function getInitialSiteSettings(): Promise<InitialSiteSettings> {
+  try {
+    const result = await pool.query(
+      'SELECT shop_name, phone, working_hours, telegram_group_url FROM site_settings WHERE id = 1'
+    );
+    const row = result.rows[0];
+    return {
+      shopName: row?.shop_name ?? null,
+      phone: row?.phone ?? null,
+      workingHours: row?.working_hours ?? null,
+      telegramGroupUrl: row?.telegram_group_url ?? null,
+    };
+  } catch (error) {
+    // Збій підключення до бази НЕ повинен валити всю Головну — просто
+    // повертаємось до старої поведінки (заглушки, які StorefrontHome
+    // підмінить сам у useEffect)
+    console.error('Ошибка при получении настроек сайта для SSR Головной:', error);
+    return { shopName: null, phone: null, workingHours: null, telegramGroupUrl: null };
+  }
+}
 
 // Власний metadata на рівні сторінки (а не тільки загальний з
 // app/layout.tsx) — свідомо під головні високочастотні запити
@@ -42,11 +110,13 @@ function FaqStructuredData() {
   );
 }
 
-export default function Home() {
+export default async function Home() {
+  const initialSettings = await getInitialSiteSettings();
+
   return (
     <>
       <FaqStructuredData />
-      <StorefrontHome />
+      <StorefrontHome initialSettings={initialSettings} />
     </>
   );
 }

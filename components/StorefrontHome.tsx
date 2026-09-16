@@ -106,18 +106,21 @@ interface CartItem {
 
 const CART_STORAGE_KEY = 'autokontur-cart';
 const VIEW_MODE_STORAGE_KEY = 'autokontur-view-mode';
-// Кеш останніх завантажених контактів магазину — щоб при повторному
-// відкритті сайту в шапці одразу показувався РЕАЛЬНИЙ телефон, а не
-// заглушка DEFAULT_PHONE, поки не відповість /api/site-settings.
-// Без цього кешу покупець на кожному оновленні сторінки бачив
-// помітний "стрибок" номера: спочатку заглушка, за секунду-дві —
-// справжній телефон
+// Кеш останніх завантажених контактів магазину. Головний захист від
+// "стрибка" номера телефону (заглушка → справжній) тепер — це проп
+// initialSettings, завантажений на сервері ДО першого рендеру
+// (app/page.tsx): він усуває стрибок при звичайному оновленні
+// сторінки, бо перший же HTML вже містить справжній телефон. Цей кеш
+// лишився як другий рубіж — на випадок, якщо сервер віддав заглушку
+// (наприклад, DB була недоступна саме в момент SSR): тоді щонайменше
+// клієнтський кеш підставить останнє відоме РЕАЛЬНЕ значення швидше,
+// ніж встигне відповісти /api/site-settings
 const SITE_SETTINGS_CACHE_KEY = 'autokontur-site-settings-cache';
 
-// Значения по умолчанию — показываются, пока /api/site-settings ещё
-// не ответил (или если админ ни разу не менял их через "Настройки"),
-// и пока в SITE_SETTINGS_CACHE_KEY ещё нет ни одного сохранённого
-// значения (самый первый визит на сайт в этом браузере)
+// Останній рубіж заглушок — показуються, лише якщо і сервер (SSR),
+// і клієнтський кеш одночасно не змогли віддати реальні значення
+// (перший візит на сайт у цьому браузері ЗБІГСЯ зі збоєм бази під
+// час SSR — украй рідкісний випадок)
 const DEFAULT_SHOP_NAME = 'DominatorParts';
 const DEFAULT_PHONE = '+38 (050) 123-45-67';
 const DEFAULT_WORKING_HOURS = 'Щодня 9:00–19:00';
@@ -243,16 +246,34 @@ const DISPLAY_FONT = "'Bebas Neue', 'Rajdhani', sans-serif";
 const LABEL_FONT = "'Rajdhani', sans-serif";
 const BODY_FONT = "'Barlow', sans-serif";
 
-export default function StorefrontHome() {
+interface InitialSiteSettings {
+  shopName: string | null;
+  phone: string | null;
+  workingHours: string | null;
+  telegramGroupUrl: string | null;
+}
+
+interface StorefrontHomeProps {
+  // Значення, завантажені на сервері ДО першого рендеру (app/page.tsx) —
+  // усувають "стрибок" телефону/назви магазину при кожному оновленні
+  // сторінки: без них перший кадр завжди показував заглушку
+  // DEFAULT_PHONE, а вже за мить, коли відповідав /api/site-settings,
+  // номер змінювався на справжній. Необов'язковий проп (а не жорстка
+  // вимога) — щоб компонент не падав, якщо колись викликатиметься без
+  // серверних даних
+  initialSettings?: InitialSiteSettings | null;
+}
+
+export default function StorefrontHome({ initialSettings }: StorefrontHomeProps = {}) {
   // ---- магазин, контакты и объявления (настраиваются в админке /admin/settings) ----
-  const [shopName, setShopName] = useState(DEFAULT_SHOP_NAME);
-  const [phone, setPhone] = useState(DEFAULT_PHONE);
-  const [workingHours, setWorkingHours] = useState(DEFAULT_WORKING_HOURS);
+  const [shopName, setShopName] = useState(initialSettings?.shopName || DEFAULT_SHOP_NAME);
+  const [phone, setPhone] = useState(initialSettings?.phone || DEFAULT_PHONE);
+  const [workingHours, setWorkingHours] = useState(initialSettings?.workingHours || DEFAULT_WORKING_HOURS);
   // Посилання на Telegram-групу магазину — адмін вставляє його в
   // "Настройки" (components/ContactSettingsForm.tsx) вже ПІСЛЯ того,
   // як сам створить групу (Bot API не вміє створювати групи). Поки
   // не задано — null, і кнопка групи в шапці просто не показується
-  const [telegramGroupUrl, setTelegramGroupUrl] = useState<string | null>(null);
+  const [telegramGroupUrl, setTelegramGroupUrl] = useState<string | null>(initialSettings?.telegramGroupUrl || null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
   // ---- блок "Популярні товари" на головній (товари з фото, в наявності) ----
