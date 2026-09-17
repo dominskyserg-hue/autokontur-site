@@ -141,6 +141,17 @@ ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS delivery_time TEXT;
 -- работать, отдельно включать её не нужно
 ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS email_auto_import_enabled BOOLEAN NOT NULL DEFAULT true;
 
+-- Прямая ссылка на Excel-прайс поставщика (например,
+-- "http://postavshik.com/price.xls") — альтернатива автозагрузке по
+-- почте (см. email_auto_import_enabled выше) для тех поставщиков, кто
+-- просто держит актуальный прайс по одному и тому же адресу, а не
+-- присылает его письмом. См. lib/urlPriceImport.ts и
+-- app/api/cron/import-supplier-urls. Отдельного переключателя
+-- "включено/выключено" для этого способа нет — сам факт, что поле
+-- заполнено, уже означает "подхватывать прайс отсюда"; чтобы
+-- выключить — достаточно очистить поле. NULL — способ не настроен
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS price_url TEXT;
+
 -- А колонку exchange_rate, наоборот, теперь УДАЛЯЕМ: курс переехал
 -- из поставщика в отдельную таблицу global_exchange_rates (см. выше
 -- в этом же файле). DROP COLUMN IF EXISTS безопасен и для тех, у
@@ -1145,6 +1156,41 @@ CREATE TABLE IF NOT EXISTS email_import_log (
 -- Ускоряет и "последние N писем для панели в админке" (ORDER BY
 -- processed_at DESC), и проверку "письмо с таким Message-ID уже есть?"
 CREATE INDEX IF NOT EXISTS idx_email_import_log_processed_at ON email_import_log (processed_at DESC);
+
+
+-- ============================================================
+-- 19. ТАБЛИЦА url_import_log — журнал автозагрузки прайсов по прямой ссылке
+-- ============================================================
+-- Тот же смысл, что и у email_import_log выше, только для поставщиков,
+-- которые вместо письма просто держат актуальный Excel-прайс по одному
+-- и тому же URL (suppliers.price_url) — см. lib/urlPriceImport.ts и
+-- app/api/cron/import-supplier-urls. Дедупликации писем здесь не нужно
+-- (у каждого поставщика максимум одна строка "последняя проверка" по
+-- смыслу), поэтому, в отличие от email_import_log, никакого
+-- message_id/UNIQUE тут нет — просто плоский журнал попыток
+CREATE TABLE IF NOT EXISTS url_import_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- ON DELETE SET NULL и supplier_name-"снимок" — та же идея, что и в
+  -- email_import_log: если поставщика потом удалят, старая запись
+  -- журнала не пропадёт, просто потеряет ссылку
+  supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
+  supplier_name TEXT,
+  price_url TEXT NOT NULL,
+
+  -- imported — файл по ссылке успешно скачан, разобран и сохранён
+  -- error    — ссылка не открылась, файл не читается как Excel, или
+  --            разбор/сохранение упали (см. error_message)
+  status TEXT NOT NULL CHECK (status IN ('imported', 'error')),
+
+  added_count INTEGER NOT NULL DEFAULT 0,
+  updated_count INTEGER NOT NULL DEFAULT 0,
+  error_message TEXT,
+
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_url_import_log_processed_at ON url_import_log (processed_at DESC);
 
 
 -- ============================================================

@@ -59,6 +59,7 @@ interface Supplier {
   currency: string;
   isActive: boolean;
   emailAutoImportEnabled: boolean;
+  priceUrl: string | null;
   deliveryTime: string | null;
   createdAt: string;
   lastSyncedAt: string | null;
@@ -175,6 +176,10 @@ interface FormState {
   // смысл, только если заполнен email, но сам переключатель доступен
   // всегда, чтобы можно было заранее подготовить настройку
   emailAutoImportEnabled: boolean;
+  // Прямая ссылка на Excel-прайс поставщика — альтернатива автозагрузке
+  // по почте (см. components/UrlImportPanel.tsx и lib/urlPriceImport.ts).
+  // Отдельного переключателя нет: пустое поле = способ не используется
+  priceUrl: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -197,6 +202,7 @@ const EMPTY_FORM: FormState = {
   currency: LOCAL_CURRENCY,
   deliveryTime: '',
   emailAutoImportEnabled: true,
+  priceUrl: '',
 };
 
 // ------------------------------------------------------------
@@ -401,6 +407,7 @@ export default function SupplierMappingScreen() {
         currency: selectedSupplier.currency,
         deliveryTime: selectedSupplier.deliveryTime || '',
         emailAutoImportEnabled: selectedSupplier.emailAutoImportEnabled,
+        priceUrl: selectedSupplier.priceUrl || '',
       });
     }
     setSelectedFile(null);
@@ -450,6 +457,7 @@ export default function SupplierMappingScreen() {
           currency: form.currency,
           deliveryTime: form.deliveryTime,
           emailAutoImportEnabled: form.emailAutoImportEnabled,
+          priceUrl: form.priceUrl,
           mapping: hasAnyMappingField
             ? {
                 article: form.article,
@@ -502,6 +510,7 @@ export default function SupplierMappingScreen() {
           email: supplier.email || undefined,
           currency: supplier.currency,
           deliveryTime: supplier.deliveryTime || undefined,
+          priceUrl: supplier.priceUrl || undefined,
           isActive: !supplier.isActive,
           // mapping не передаём — существующие настройки маппинга
           // остаются нетронутыми (см. app/api/suppliers/route.ts)
@@ -849,6 +858,24 @@ export default function SupplierMappingScreen() {
                   Автозагрузка прайса из писем с этого email (см. панель «Автозагрузка прайсов по email»
                   в Настройках)
                 </label>
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                    Ссылка на прайс (необязательно)
+                  </label>
+                  <input
+                    type="url"
+                    className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                    placeholder="http://postavshik.com/price.xls"
+                    value={form.priceUrl}
+                    onChange={(e) => setForm({ ...form, priceUrl: e.target.value })}
+                  />
+                  <p className="text-[11px] mt-1" style={{ color: 'var(--ink-faint)' }}>
+                    Если поставщик держит актуальный Excel-прайс по одному и тому же адресу — укажите его
+                    здесь, и он будет подхватываться автоматически (см. панель «Автозагрузка прайсов по
+                    ссылке» в Настройках), без писем и ручной загрузки.
+                  </p>
+                </div>
               </div>
             </div>
 

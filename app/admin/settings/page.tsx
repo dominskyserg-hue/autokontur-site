@@ -6,6 +6,7 @@
 import AdminLayout from '@/components/AdminLayout';
 import GlobalRatesWidget from '@/components/GlobalRatesWidget';
 import EmailImportPanel from '@/components/EmailImportPanel';
+import UrlImportPanel from '@/components/UrlImportPanel';
 import ContactSettingsForm from '@/components/ContactSettingsForm';
 import AnnouncementsManager from '@/components/AnnouncementsManager';
 import SitePagesManager from '@/components/SitePagesManager';
@@ -25,6 +26,7 @@ export default function SettingsPage() {
 
       <GlobalRatesWidget />
       <EmailImportPanel />
+      <UrlImportPanel />
       <ContactSettingsForm />
       <SitePagesManager />
       <AnnouncementsManager />
