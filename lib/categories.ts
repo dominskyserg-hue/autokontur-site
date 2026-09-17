@@ -1946,6 +1946,348 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Lexus LS',
     parentCategorySlug: 'kulovi-opory',
   },
+
+  // ============================================================
+  // ХВИЛЯ 16 — сайлентблоки для рекламної кампанії Google Ads.
+  // На відміну від хвилі 15 (нішеві моделі), тут — марки з
+  // найбільшим реальним залишком по сайлентблокам: VW, SEAT, BMW,
+  // AUDI, SKODA, FORD (перевірено прямим SQL-запитом по складу).
+  // Причина: рекламу на ці марки без своєї сторінки довелось би
+  // вести на загальний каталожний розділ без згадки конкретної
+  // марки — та сама помилка, що вже знайдена в кампанії на гальмівні
+  // колодки Brembo/Ferodo.
+  //
+  // Дублі об'єднано за тим самим правилом, що і в попередніх
+  // хвилях: кузови/покоління з ідентичним або підмножинним списком
+  // артикулів — одна сторінка; різні модельні назви (навіть на
+  // спільній платформі) — окремі сторінки.
+  {
+    slug: 'vw-golf-4-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля VW Golf IV',
+    h1: 'Сайлентблоки важеля VW Golf IV',
+    metaTitle: 'Сайлентблоки VW Golf IV від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски VW Golf IV (1997-2006, хетчбек і універсал) в наявності від 157 грн. Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Volkswagen Golf IV (1997-2006) — підходять і на хетчбек, і на універсал, в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-golf-4',
+    modelLabel: 'VW Golf IV',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'vw-jetta-4-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля VW Jetta IV',
+    h1: 'Сайлентблоки важеля VW Jetta IV',
+    metaTitle: 'Сайлентблоки VW Jetta IV від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски VW Jetta IV (1998-2005, седан і універсал) в наявності від 157 грн. Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Volkswagen Jetta IV / Bora (1998-2005) — підходять і на седан, і на універсал, в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'VW', models: ['JETTA IV (1J2)', 'JETTA IV Wagon (1J6)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-jetta-4',
+    modelLabel: 'VW Jetta IV',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'vw-golf-3-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля VW Golf III',
+    h1: 'Сайлентблоки важеля VW Golf III',
+    metaTitle: 'Сайлентблоки VW Golf III від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски VW Golf III (1991-1997) в наявності від 157 грн (LEMFORDER). Доставка по всій Україні.',
+    intro: 'Сайлентблоки важеля підвіски для Volkswagen Golf III (1991-1997) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'VW', models: ['GOLF Mk III (1H1)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-golf-3',
+    modelLabel: 'VW Golf III',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'vw-polo-sedan-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля VW Polo Classic (седан)',
+    h1: 'Сайлентблоки важеля VW Polo Classic (седан)',
+    metaTitle: 'Сайлентблоки VW Polo Classic від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски VW Polo Classic седан (1995-2002) в наявності від 157 грн (LEMFORDER). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Volkswagen Polo Classic седан (1995-2002, кузов 6KV2) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'VW', models: ['POLO Stufenheck (6KV2)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-polo-sedan',
+    modelLabel: 'VW Polo Classic (седан)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'vw-touareg-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля VW Touareg',
+    h1: 'Сайлентблоки важеля VW Touareg',
+    metaTitle: 'Сайлентблоки VW Touareg від 321 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски VW Touareg (2002-2010) в наявності від 321 грн (LEMFORDER). Доставка по всій Україні.',
+    intro: 'Сайлентблоки важеля підвіски для Volkswagen Touareg (2002-2010) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'VW', models: ['TOUAREG (7LA, 7L6, 7L7)'] },
+    hideFromIndex: true,
+    modelGroup: 'vw-touareg',
+    modelLabel: 'VW Touareg',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'seat-ibiza-2-cordoba-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Seat Ibiza Mk II / Cordoba',
+    h1: 'Сайлентблоки важеля Seat Ibiza Mk II / Cordoba',
+    metaTitle: 'Сайлентблоки Seat Ibiza / Cordoba від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Seat Ibiza Mk II / Cordoba (1993-2002) в наявності від 157 грн (LEMFORDER). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Seat Ibiza Mk II та Cordoba (1993-2002, спільна платформа) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'SEAT', models: ['IBIZA Mk II (6K1)', 'IBIZA Mk III (6K1)', 'CORDOBA Stufenheck (6K1, 6K2)', 'CORDOBA (6K2)'] },
+    hideFromIndex: true,
+    modelGroup: 'seat-ibiza-2-cordoba',
+    modelLabel: 'Seat Ibiza Mk II / Cordoba',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'seat-leon-1-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Seat Leon I',
+    h1: 'Сайлентблоки важеля Seat Leon I',
+    metaTitle: 'Сайлентблоки Seat Leon I від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Seat Leon I (1999-2006) в наявності від 157 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Сайлентблоки важеля підвіски для Seat Leon I (1999-2006) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'SEAT', models: ['LEON (1M1)'] },
+    hideFromIndex: true,
+    modelGroup: 'seat-leon-1',
+    modelLabel: 'Seat Leon I',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'seat-toledo-2-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Seat Toledo II',
+    h1: 'Сайлентблоки важеля Seat Toledo II',
+    metaTitle: 'Сайлентблоки Seat Toledo II від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Seat Toledo II (1998-2006) в наявності від 157 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Сайлентблоки важеля підвіски для Seat Toledo II (1998-2006) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'SEAT', models: ['TOLEDO Mk II (1M2)'] },
+    hideFromIndex: true,
+    modelGroup: 'seat-toledo-2',
+    modelLabel: 'Seat Toledo II',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'bmw-5-e39-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля BMW 5-Series (E39)',
+    h1: 'Сайлентблоки важеля BMW 5-Series (E39)',
+    metaTitle: 'Сайлентблоки BMW 5 E39 від 530 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски BMW 5-Series E39 (1995-2004, седан і Touring) в наявності від 530 грн (DELPHI). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для BMW 5-Series E39 (1995-2004) — підходять і на седан, і на універсал Touring, в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'BMW', models: ['5 Stufenheck (E39)', '5 Touring (E39)'] },
+    hideFromIndex: true,
+    modelGroup: 'bmw-5-e39',
+    modelLabel: 'BMW 5-Series (E39)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'bmw-7-e38-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля BMW 7-Series (E38)',
+    h1: 'Сайлентблоки важеля BMW 7-Series (E38)',
+    metaTitle: 'Сайлентблоки BMW 7 E38 від 530 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски BMW 7-Series E38 (1994-2001) в наявності від 530 грн (DELPHI). Доставка по всій Україні.',
+    intro: 'Сайлентблоки важеля підвіски для BMW 7-Series E38 (1994-2001) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'BMW', models: ['7 Stufenheck (E38)'] },
+    hideFromIndex: true,
+    modelGroup: 'bmw-7-e38',
+    modelLabel: 'BMW 7-Series (E38)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'bmw-5-e60-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля BMW 5-Series (E60/E61)',
+    h1: 'Сайлентблоки важеля BMW 5-Series (E60/E61)',
+    metaTitle: 'Сайлентблоки BMW 5 E60 від 530 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски BMW 5-Series E60/E61 (2003-2010, седан і Touring) в наявності від 530 грн. Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для BMW 5-Series E60/E61 (2003-2010) — підходять і на седан, і на універсал Touring, в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'BMW', models: ['5 Stufenheck (E60)', '5 Touring (E61)'] },
+    hideFromIndex: true,
+    modelGroup: 'bmw-5-e60',
+    modelLabel: 'BMW 5-Series (E60/E61)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'bmw-7-e65-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля BMW 7-Series (E65/E66)',
+    h1: 'Сайлентблоки важеля BMW 7-Series (E65/E66)',
+    metaTitle: 'Сайлентблоки BMW 7 E65 від 530 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски BMW 7-Series E65/E66/E67 (2001-2008) в наявності від 530 грн. Доставка по всій Україні.',
+    intro: 'Сайлентблоки важеля підвіски для BMW 7-Series E65/E66/E67 (2001-2008) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'BMW', models: ['7 Stufenheck (E65, E66, E67)'] },
+    hideFromIndex: true,
+    modelGroup: 'bmw-7-e65',
+    modelLabel: 'BMW 7-Series (E65/E66)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'bmw-x5-e53-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля BMW X5 (E53)',
+    h1: 'Сайлентблоки важеля BMW X5 (E53)',
+    metaTitle: 'Сайлентблоки BMW X5 E53 від 244 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски BMW X5 E53 (1999-2006) в наявності від 244 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Сайлентблоки важеля підвіски для BMW X5 E53 (1999-2006) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'BMW', models: ['X5 (E53)'] },
+    hideFromIndex: true,
+    modelGroup: 'bmw-x5-e53',
+    modelLabel: 'BMW X5 (E53)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'audi-a3-8p-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Audi A3 (8P)',
+    h1: 'Сайлентблоки важеля Audi A3 (8P)',
+    metaTitle: 'Сайлентблоки Audi A3 8P від 245 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Audi A3 8P (2003-2012, хетчбек, Sportback і кабріолет) в наявності від 245 грн (LEMFORDER). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Audi A3 8P (2003-2012) — підходять на всі кузови покоління: хетчбек, Sportback і кабріолет, в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'AUDI', models: ['A3 Sportback (8PA)', 'A3 (8P1)', 'A3 Cabriolet (8P7)'] },
+    hideFromIndex: true,
+    modelGroup: 'audi-a3-8p',
+    modelLabel: 'Audi A3 (8P)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'audi-q7-4l-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Audi Q7 (4L)',
+    h1: 'Сайлентблоки важеля Audi Q7 (4L)',
+    metaTitle: 'Сайлентблоки Audi Q7 від 321 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Audi Q7 4L (2005-2015) в наявності від 321 грн (LEMFORDER). Доставка по всій Україні.',
+    intro: 'Сайлентблоки важеля підвіски для Audi Q7 4L (2005-2015) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'AUDI', models: ['Q7 (4L)'] },
+    hideFromIndex: true,
+    modelGroup: 'audi-q7-4l',
+    modelLabel: 'Audi Q7 (4L)',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'audi-a1-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Audi A1',
+    h1: 'Сайлентблоки важеля Audi A1',
+    metaTitle: 'Сайлентблоки Audi A1 від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Audi A1 (2010-2018, 3-дверний і Sportback) в наявності від 157 грн. Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Audi A1 (2010-2018) — підходять і на 3-дверний хетчбек, і на Sportback, в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'AUDI', models: ['A1 (8X1, 8XF)', 'A1 Sportback (8XA, 8XK)'] },
+    hideFromIndex: true,
+    modelGroup: 'audi-a1',
+    modelLabel: 'Audi A1',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'skoda-octavia-1-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Skoda Octavia I',
+    h1: 'Сайлентблоки важеля Skoda Octavia I',
+    metaTitle: 'Сайлентблоки Skoda Octavia I від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Skoda Octavia I (1996-2010, хетчбек і Combi) в наявності від 157 грн. Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Skoda Octavia I (1996-2010) — підходять і на хетчбек, і на універсал Combi, в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'SKODA', models: ['OCTAVIA Combi (1U5)', 'OCTAVIA (1U2)'] },
+    hideFromIndex: true,
+    modelGroup: 'skoda-octavia-1',
+    modelLabel: 'Skoda Octavia I',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'skoda-octavia-2-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Skoda Octavia II',
+    h1: 'Сайлентблоки важеля Skoda Octavia II',
+    metaTitle: 'Сайлентблоки Skoda Octavia II від 245 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Skoda Octavia II Combi (2004-2013) в наявності від 245 грн (LEMFORDER). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Skoda Octavia II Combi (2004-2013; на деяких ринках продавалась як Skoda Laura) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'SKODA', models: ['OCTAVIA Combi (1Z5)'] },
+    hideFromIndex: true,
+    modelGroup: 'skoda-octavia-2',
+    modelLabel: 'Skoda Octavia II',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'skoda-superb-2-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Skoda Superb II',
+    h1: 'Сайлентблоки важеля Skoda Superb II',
+    metaTitle: 'Сайлентблоки Skoda Superb II від 245 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Skoda Superb II (2008-2015) в наявності від 245 грн. Доставка по всій Україні, оплата при отриманні.',
+    intro: 'Сайлентблоки важеля підвіски для Skoda Superb II (2008-2015) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'SKODA', models: ['SUPERB (3T4)'] },
+    hideFromIndex: true,
+    modelGroup: 'skoda-superb-2',
+    modelLabel: 'Skoda Superb II',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'skoda-fabia-praktik-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Skoda Fabia / Praktik',
+    h1: 'Сайлентблоки важеля Skoda Fabia / Praktik',
+    metaTitle: 'Сайлентблоки Skoda Fabia від 157 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Skoda Fabia / Praktik (2000-2014) в наявності від 157 грн. Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Skoda Fabia та фургона Praktik на її базі (2000-2014, спільна платформа) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'SKODA', models: ['FABIA', 'PRAKTIK (5J)'] },
+    hideFromIndex: true,
+    modelGroup: 'skoda-fabia-praktik',
+    modelLabel: 'Skoda Fabia / Praktik',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
+  {
+    slug: 'ford-focus-2-cmax-sailentbloky-vazhelia',
+    name: 'Сайлентблоки важеля Ford Focus II / C-MAX',
+    h1: 'Сайлентблоки важеля Ford Focus II / C-MAX',
+    metaTitle: 'Сайлентблоки Ford Focus II від 436 грн | DominatorParts',
+    metaDescription:
+      'Сайлентблоки важеля підвіски Ford Focus II / C-MAX (2004-2011) в наявності від 436 грн (LEMFORDER). Доставка по всій Україні.',
+    intro:
+      'Сайлентблоки важеля підвіски для Ford Focus II (хетчбек, універсал) та компактвена C-MAX на його базі (2004-2011) — в наявності декілька виробників.',
+    matchGroups: [['сайлентблок']],
+    tecdocVehicle: { make: 'FORD', models: ['FOCUS II (DA_)', 'FOCUS II Station Wagon (DA_)', 'FOCUS C-MAX', 'C-MAX (DM2)'] },
+    hideFromIndex: true,
+    modelGroup: 'ford-focus-2-cmax',
+    modelLabel: 'Ford Focus II / C-MAX',
+    parentCategorySlug: 'sailentbloky-vazhelia',
+  },
 ];
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
@@ -2067,7 +2409,7 @@ export function buildCategoryWhereClause(
     conditions.push(`
       EXISTS (
         SELECT 1 FROM tecdoc_compatibility tc
-        WHERE UPPER(tc.brand) = UPPER(p.brand) AND tc.article = p.article
+        WHERE UPPER(translate(tc.brand, 'ÄÖÜäöüÉÈéè', 'AOUaoueEee')) = UPPER(p.brand) AND tc.article = p.article
           AND tc.make = $${makeParamIdx} AND tc.model = ANY($${modelsParamIdx}::text[])
       )
     `);

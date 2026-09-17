@@ -269,7 +269,7 @@ export async function GET(request: NextRequest) {
         (${ownMatchSql})
         OR EXISTS (
           SELECT 1 FROM tecdoc_compatibility tc
-          WHERE tc.brand = p.brand AND tc.article = p.article
+          WHERE UPPER(translate(tc.brand, 'ÄÖÜäöüÉÈéè', 'AOUaoueEee')) = UPPER(p.brand) AND tc.article = p.article
           ${tecdocWhereSql}
         )
       )`);
