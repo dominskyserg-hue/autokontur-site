@@ -268,6 +268,16 @@ export interface TecdocCompatibilityItem {
   // types.TYP_LITRES/TYP_CCM (див. scripts/tecdoc/import-dump.ts).
   // Порожній рядок, якщо TecDoc для цієї модифікації його не вказав
   engine: string;
+  // null — звичайний рядок з офіційного дампа TecDoc для САМЕ ЦЬОГО
+  // бренду/артикула. Текст (напр. "за крос-номером OPTIMAL 12192") —
+  // застосовність визначена НЕ напряму, а через таблицю кросс-номерів
+  // (tecdoc_crosses): у власника цього товару даних TecDoc немає, але
+  // під тим самим номером в іншого бренду вони є, і ми вважаємо це
+  // тим самим фізичним товаром. Для гальмівних колодок (та інших
+  // деталей безпеки) це ЗАВЖДИ повинно бути видно покупцю прямо на
+  // сторінці, а не подаватись як офіційний каталог виробника — див.
+  // schema.sql, розділ 27
+  sourceNote: string | null;
 }
 
 const TECDOC_CROSSES_LIMIT = 30;
@@ -339,7 +349,7 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
 ): Promise<TecdocCompatibilityItem[]> {
   const result = await pool.query(
     `
-    SELECT DISTINCT make, model, year_from, year_to, engine
+    SELECT DISTINCT make, model, year_from, year_to, engine, source_note
     FROM tecdoc_compatibility
     WHERE article = $1
     ORDER BY make, year_from
@@ -366,6 +376,7 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
       yearFrom: row.year_from,
       yearTo: row.year_to,
       engine: row.engine || '',
+      sourceNote: row.source_note || null,
     };
   });
 

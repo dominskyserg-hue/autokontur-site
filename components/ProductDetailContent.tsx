@@ -418,22 +418,42 @@ function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
   // Дужки-примітка: рік і об'єм двигуна разом, напр. "(1997–2003, 1.6)"
   const note = [yearRange, item.engine ? `${item.engine} л` : ''].filter(Boolean).join(', ');
 
+  // Застосовність визначена не напряму з дампа TecDoc для цього
+  // бренду/артикула, а через крос-номер іншого виробника (schema.sql,
+  // розділ 27) — видима позначка "· аналог" ЗАВЖДИ поруч із текстом
+  // (не лише в title при наведенні — на телефоні навести нема як), а
+  // пунктирна рамка додатково відрізняє такий бейдж від звичайного
+  const isCrossReference = Boolean(item.sourceNote);
+  const badgeStyle = {
+    fontFamily: BODY_FONT,
+    border: `1px ${isCrossReference ? 'dashed' : 'solid'} ${BORDER_SOFT}`,
+  };
+  const title = isCrossReference ? `Визначено ${item.sourceNote} — не офіційний каталог виробника` : undefined;
+
+  const content = (
+    <>
+      {label}
+      {note ? ` (${note})` : ''}
+      {isCrossReference ? ' · аналог' : ''}
+    </>
+  );
+
   return item.makeSlug ? (
     <Link
       href={`/marky/${item.makeSlug}`}
       className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
-      style={{ fontFamily: BODY_FONT, border: `1px solid ${BORDER_SOFT}`, color: ACCENT }}
+      style={{ ...badgeStyle, color: ACCENT }}
+      title={title}
     >
-      {label}
-      {note ? ` (${note})` : ''}
+      {content}
     </Link>
   ) : (
     <span
       className="rounded-full px-3 py-1.5 text-xs font-medium"
-      style={{ fontFamily: BODY_FONT, border: `1px solid ${BORDER_SOFT}`, color: FAINT }}
+      style={{ ...badgeStyle, color: FAINT }}
+      title={title}
     >
-      {label}
-      {note ? ` (${note})` : ''}
+      {content}
     </span>
   );
 }
