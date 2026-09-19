@@ -49,10 +49,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock, Warehouse, Lock, Send, Users } from 'lucide-react';
+import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, SearchX, Clock, Warehouse, Lock, Send, Users, Star } from 'lucide-react';
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { FAQ_ITEMS } from '@/lib/faq';
+import { TESTIMONIALS, TESTIMONIALS_SOURCE_URL, TESTIMONIALS_RATING, TESTIMONIALS_COUNT_PER_YEAR } from '@/lib/testimonials';
 import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
 import { normalizePhone } from '@/lib/phoneNormalize';
@@ -2404,6 +2405,79 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                 Детальніше про підбір запчастин за VIN-кодом →
               </Link>
             </p>
+          </div>
+
+          {/* ==================== ВІДГУКИ ==================== */}
+          {/* Це відгуки не про сам dominatorparts.com.ua (замовлень тут
+              поки замало, щоб назбирати власні — порожній розділ шкодив
+              би довірі більше, ніж його відсутність), а реальні, публічно
+              перевірювані відгуки з профілю продавця того самого власника
+              на маркетплейсі Avto.pro (working з 2019 року) — див.
+              lib/testimonials.ts для джерела й пояснення */}
+          <div className="max-w-6xl mx-auto px-5 md:px-8 pb-10" style={{ borderTop: `1px solid ${TECH_BORDER}`, paddingTop: 40 }}>
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                  Нам довіряють
+                </p>
+                <h2 className="text-xl" style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, color: '#fff' }}>
+                  Відгуки покупців
+                </h2>
+              </div>
+
+              <a
+                href={TESTIMONIALS_SOURCE_URL}
+                target="_blank"
+                rel="noopener noreferrer nofollow"
+                className="flex items-center gap-2.5 rounded-xl px-4 py-2.5 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+                style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
+              >
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star
+                      key={i}
+                      size={14}
+                      fill={i < Math.round(TESTIMONIALS_RATING) ? '#FBBF24' : 'none'}
+                      style={{ color: '#FBBF24' }}
+                    />
+                  ))}
+                </div>
+                <span style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 15, color: '#fff' }}>
+                  {TESTIMONIALS_RATING}
+                </span>
+                <span className="text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                  · {TESTIMONIALS_COUNT_PER_YEAR} відгуків за рік на Avto.pro →
+                </span>
+              </a>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {TESTIMONIALS.map((item, index) => (
+                <div
+                  key={index}
+                  className="flex flex-col gap-2.5 rounded-xl p-4"
+                  style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
+                >
+                  <div className="flex items-center gap-0.5">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} size={12} fill="#FBBF24" style={{ color: '#FBBF24' }} />
+                    ))}
+                  </div>
+                  {item.text ? (
+                    <p className="text-sm leading-snug" style={{ fontFamily: SANS_TECH, color: TECH_INK }}>
+                      «{item.text}»
+                    </p>
+                  ) : (
+                    <p className="text-sm leading-snug" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                      {item.tags.join(' · ')}
+                    </p>
+                  )}
+                  <p className="mt-auto text-xs" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                    {item.author} · {item.date}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* ==================== ПОПУЛЯРНІ ТОВАРИ ==================== */}
