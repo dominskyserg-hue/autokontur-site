@@ -18,6 +18,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import AdminLayout from './AdminLayout';
 
 // ------------------------------------------------------------
@@ -514,14 +515,23 @@ export default function OrdersScreen() {
 
   return (
     <AdminLayout active="orders">
-      <header className="mb-7">
-        <p className="text-xs mb-1.5" style={{ color: 'var(--ink-faint)' }}>
-          Админ-панель / Заказы
-        </p>
-        <h1 className="text-2xl font-semibold mb-1.5">Заказы</h1>
-        <p className="text-sm" style={{ color: 'var(--ink-muted)' }}>
-          Все заказы клиентов. Найдено: {pagination ? pagination.totalCount : '—'}.
-        </p>
+      <header className="mb-7 flex items-start justify-between gap-4">
+        <div>
+          <p className="text-xs mb-1.5" style={{ color: 'var(--ink-faint)' }}>
+            Админ-панель / Заказы
+          </p>
+          <h1 className="text-2xl font-semibold mb-1.5">Заказы</h1>
+          <p className="text-sm" style={{ color: 'var(--ink-muted)' }}>
+            Все заказы клиентов. Найдено: {pagination ? pagination.totalCount : '—'}.
+          </p>
+        </div>
+        <Link
+          href="/admin/orders/new"
+          className="shrink-0 px-4 py-2.5 rounded-md text-sm font-medium"
+          style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+        >
+          + Новый заказ
+        </Link>
       </header>
 
       {/* ==================== ПОИСК И ФИЛЬТР ПО СТАТУСУ ==================== */}
