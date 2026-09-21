@@ -89,6 +89,31 @@ interface OrderListItem {
   updatedAt: string;
 }
 
+// Статус ОТДЕЛЬНОЙ позиции в закупочном цикле (секция 28 schema.sql) —
+// независим от статуса самого заказа: пока хотя бы одна позиция не
+// 'in_stock', заказ целиком нельзя отгрузить (см. shipOrder в
+// app/api/orders/[id]/route.ts). Управляется с экрана "Закупки"
+// (components/ProcurementScreen.tsx), здесь только отображается
+type OrderItemStatus = 'pending' | 'ordered_from_supplier' | 'in_stock' | 'shipped' | 'cancelled' | 'returned';
+
+const ITEM_STATUS_LABELS: Record<OrderItemStatus, string> = {
+  pending: 'Ожидает закупки',
+  ordered_from_supplier: 'Заказано у поставщика',
+  in_stock: 'На складе',
+  shipped: 'Отгружено',
+  cancelled: 'Отменено',
+  returned: 'Возвращено',
+};
+
+const ITEM_STATUS_COLORS: Record<OrderItemStatus, { bg: string; fg: string }> = {
+  pending: { bg: '#3A2A16', fg: '#F2A65A' },
+  ordered_from_supplier: { bg: '#2B1F4A', fg: '#B79CFF' },
+  in_stock: { bg: '#173A3A', fg: '#4FD1D1' },
+  shipped: { bg: '#0F2E1A', fg: '#34D399' },
+  cancelled: { bg: '#3A1E22', fg: '#F2635F' },
+  returned: { bg: '#3A1E22', fg: '#F2635F' },
+};
+
 interface OrderItem {
   id: string;
   article: string;
@@ -98,6 +123,7 @@ interface OrderItem {
   quantity: number;
   supplierId: string | null;
   supplierName: string | null;
+  status: OrderItemStatus;
 }
 
 // Для выпадающего списка "сменить поставщика" нужны только id и
@@ -855,7 +881,15 @@ export default function OrdersScreen() {
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
-                              <p className="truncate">{item.name || 'Без названия'}</p>
+                              <p className="truncate flex items-center gap-1.5">
+                                {item.name || 'Без названия'}
+                                <span
+                                  className="text-[10px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
+                                  style={{ background: ITEM_STATUS_COLORS[item.status].bg, color: ITEM_STATUS_COLORS[item.status].fg }}
+                                >
+                                  {ITEM_STATUS_LABELS[item.status]}
+                                </span>
+                              </p>
                               <p className="text-xs font-mono mt-0.5" style={{ color: 'var(--ink-faint)' }}>
                                 {item.article}
                                 {item.brand ? ` · ${item.brand}` : ''}

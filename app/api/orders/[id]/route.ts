@@ -77,6 +77,14 @@ function isValidUuid(value: string): boolean {
 // бренд и название сохранены прямо в order_items, а не читаются из
 // текущего каталога products — так старый заказ не "поплывёт", даже
 // если товар потом подорожает или его переименуют)
+// ITEM_STATUS_VALUES — статус ОТДЕЛЬНОЙ позиции заказа в закупочном
+// цикле (секция 28.3 schema.sql), независим от status самого заказа:
+// одна деталь уже на складе, другая ещё едет от поставщика. Используется
+// на экране "Закупки" (components/ProcurementScreen.tsx) и в панели
+// деталей заказа, чтобы менеджер видел, чего в заказе ещё не хватает
+const ITEM_STATUS_VALUES = ['pending', 'ordered_from_supplier', 'in_stock', 'shipped', 'cancelled', 'returned'] as const;
+type OrderItemStatus = (typeof ITEM_STATUS_VALUES)[number];
+
 interface OrderItemResponse {
   id: string;
   article: string;
@@ -86,6 +94,7 @@ interface OrderItemResponse {
   quantity: number;
   supplierId: string | null;
   supplierName: string | null;
+  status: OrderItemStatus;
 }
 
 interface OrderDetailsResponse {
@@ -138,7 +147,7 @@ export async function GET(
     // добавления, чтобы порядок в списке не "прыгал" между обновлениями
     const itemsResult = await pool.query(
       `
-      SELECT id, article, brand, name, price, quantity, supplier_id, supplier_name
+      SELECT id, article, brand, name, price, quantity, supplier_id, supplier_name, status
       FROM order_items
       WHERE order_id = $1
       ORDER BY created_at ASC
@@ -157,6 +166,7 @@ export async function GET(
       quantity: row.quantity,
       supplierId: row.supplier_id,
       supplierName: row.supplier_name,
+      status: row.status,
     }));
 
     // Общая сумма считается здесь же, в коде, из уже полученных
@@ -188,6 +198,156 @@ export async function GET(
       { error: 'Не удалось получить заказ: ' + message },
       { status: 500 }
     );
+  }
+}
+
+// ------------------------------------------------------------
+// ФИНАЛЬНАЯ ОТГРУЗКА ЗАКАЗА — шаг 3 закупочного цикла (секция 28
+// schema.sql). Вынесена из общей PATCH-логики ниже в отдельную функцию
+// со своей транзакцией, потому что, в отличие от простой смены статуса,
+// здесь сразу несколько взаимосвязанных действий, которые обязаны
+// пройти либо все вместе, либо не пройти вообще:
+//
+//   1. Проверка: у ВСЕХ ещё не отменённых/не возвращённых позиций
+//      заказа order_items.status = 'in_stock' — иначе отгружать нечего
+//      отгружать (деталь всё ещё едет от поставщика). Если хоть одна
+//      не готова — отгрузка целиком отклоняется с понятной ошибкой.
+//   2. orders.status = 'shipped' (shipped_at проставит сам триггер
+//      trg_orders_set_shipped_at — вручную его здесь не трогаем).
+//   3. order_items.status = 'shipped' для всех позиций заказа.
+//   4. Списание склада: stock_movements (reason='sale', -quantity) и
+//      products.stock -= quantity по каждой позиции.
+//   5. customer_transactions (type='shipment', +сумма заказа) — триггер
+//      сам увеличит personal баланс клиента (customers.balance). Только
+//      если у заказа вообще есть customer_id — у части старых заказов
+//      (оформленных до того, как появилась таблица customers) его нет,
+//      и это ожидаемая ситуация, а не ошибка: начисление на баланс для
+//      них просто пропускается.
+// ------------------------------------------------------------
+async function shipOrder(orderId: string): Promise<NextResponse> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const orderResult = await client.query(
+      `SELECT id, customer_id, customer_name, customer_phone, status, ttn_number, created_at, updated_at
+       FROM orders WHERE id = $1 FOR UPDATE`,
+      [orderId]
+    );
+    if (orderResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Заказ с таким id не найден.' }, { status: 404 });
+    }
+
+    const order = orderResult.rows[0];
+    if (order.status === 'shipped') {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Заказ уже отгружен.' }, { status: 400 });
+    }
+    if (order.status === 'cancelled') {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'Отменённый заказ нельзя отгрузить.' }, { status: 400 });
+    }
+
+    // 'cancelled'/'returned' позиции в проверку и в саму отгрузку не
+    // попадают — отменённая позиция физически не отгружается, а
+    // возвращённая уже была отгружена и возвращена раньше (возврат
+    // возможен только после отгрузки, так что на этом шаге её тут
+    // в принципе быть не должно, но на всякий случай исключаем)
+    const itemsResult = await client.query<{
+      id: string;
+      product_id: string | null;
+      article: string;
+      name: string | null;
+      price: string;
+      quantity: number;
+      status: string;
+    }>(
+      `SELECT id, product_id, article, name, price, quantity, status
+       FROM order_items WHERE order_id = $1 AND status NOT IN ('cancelled', 'returned')`,
+      [orderId]
+    );
+
+    if (itemsResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return NextResponse.json({ error: 'В заказе нет позиций для отгрузки.' }, { status: 400 });
+    }
+
+    const notReady = itemsResult.rows.filter((row) => row.status !== 'in_stock');
+    if (notReady.length > 0) {
+      await client.query('ROLLBACK');
+      const names = notReady.map((row) => row.name || row.article).join(', ');
+      return NextResponse.json(
+        {
+          error: `Нельзя отгрузить заказ — ещё не все позиции на складе: ${names}. Сначала оформите их закупку у поставщика (экран "Закупки") или отметьте как имеющиеся на складе.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    let totalAmount = 0;
+    for (const item of itemsResult.rows) {
+      totalAmount += parseFloat(item.price) * item.quantity;
+
+      // Товар мог быть удалён из каталога уже после оформления заказа
+      // (order_items — самостоятельный "снимок", см. секцию 7
+      // schema.sql) — тогда списывать физический остаток некуда,
+      // пропускаем только эту часть, саму позицию всё равно отгружаем
+      if (item.product_id) {
+        await client.query(
+          `INSERT INTO stock_movements (product_id, quantity_change, reason, order_item_id) VALUES ($1, $2, 'sale', $3)`,
+          [item.product_id, -item.quantity, item.id]
+        );
+        await client.query('UPDATE products SET stock = stock - $2, updated_at = now() WHERE id = $1', [
+          item.product_id,
+          item.quantity,
+        ]);
+      }
+
+      await client.query(`UPDATE order_items SET status = 'shipped' WHERE id = $1`, [item.id]);
+    }
+
+    // shipped_at выставит триггер trg_orders_set_shipped_at сам —
+    // здесь его руками не трогаем
+    await client.query(`UPDATE orders SET status = 'shipped', updated_at = now() WHERE id = $1`, [orderId]);
+
+    if (order.customer_id) {
+      await client.query(
+        `
+        INSERT INTO customer_transactions (customer_id, amount, type, order_id, affects_customer_balance, comment, created_by)
+        VALUES ($1, $2, 'shipment', $3, true, 'Отгрузка заказа', 'admin')
+        `,
+        [order.customer_id, totalAmount, orderId]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    const updatedResult = await pool.query(
+      'SELECT id, customer_name, customer_phone, status, ttn_number, created_at, updated_at FROM orders WHERE id = $1',
+      [orderId]
+    );
+    const row = updatedResult.rows[0];
+
+    return NextResponse.json({
+      success: true,
+      order: {
+        id: row.id,
+        customerName: row.customer_name,
+        customerPhone: row.customer_phone,
+        status: row.status,
+        ttnNumber: row.ttn_number,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      },
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Ошибка при отгрузке заказа:', error);
+    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    return NextResponse.json({ error: 'Не удалось отгрузить заказ: ' + message }, { status: 500 });
+  } finally {
+    client.release();
   }
 }
 
@@ -239,6 +399,16 @@ export async function PATCH(
 
   const nextStatus = body.status;
   const nextTtnNumber = body.ttnNumber !== undefined ? (body.ttnNumber || '').trim() || null : undefined;
+
+  // Переход в 'shipped' — не просто смена значения в колонке status:
+  // это финальная отгрузка со списанием склада и начислением на баланс
+  // клиента, со своими проверками (см. shipOrder выше). ttnNumber в
+  // этом же запросе не обрабатываем — на практике UI всегда сохраняет
+  // его отдельной кнопкой (см. components/OrdersScreen.tsx), сюда он
+  // одновременно со сменой статуса не приходит
+  if (nextStatus === 'shipped') {
+    return await shipOrder(id);
+  }
 
   try {
     // Старое значение ТТН — нужно ДО обновления, чтобы понять, реально
