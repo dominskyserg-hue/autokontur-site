@@ -311,19 +311,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Шаг 0.5: клиент как персистентная сущность (для личного баланса,
+    // см. секцию 28 schema.sql) — находим по нормализованному телефону
+    // или заводим нового. ON CONFLICT (phone) DO UPDATE, а не DO
+    // NOTHING: если человек оформляет уже второй заказ под тем же
+    // телефоном, но указал имя/фамилию чуть иначе (опечатка в прошлый
+    // раз, или сменил фамилию) — берём самые свежие данные, это не
+    // ломает историю (сами заказы всё равно хранят свой собственный
+    // снимок customer_name/customer_surname, как и раньше)
+    const normalizedPhone = normalizePhone(customerPhone);
+    const customerResult = await client.query<{ id: string }>(
+      `
+      INSERT INTO customers (phone, name, surname)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (phone) DO UPDATE SET
+        name = EXCLUDED.name,
+        surname = EXCLUDED.surname,
+        updated_at = now()
+      RETURNING id
+      `,
+      [normalizedPhone, customerName, customerSurname]
+    );
+    const customerId = customerResult.rows[0].id;
+
     // Шаг 1: сам заказ. Статус всегда 'new' ("Новий") — так и должно
     // быть для только что оформленного заказа с витрины, менять его
-    // может только админ на экране "Заказы" (PATCH /api/orders/[id])
+    // может только админ на экране "Заказы" (PATCH /api/orders/[id]).
+    // customer_id — связь с только что найденным/созданным клиентом
+    // выше (для личного баланса); customer_name/customer_phone здесь
+    // остаются как и раньше, отдельным "снимком" на момент заказа
     const orderResult = await client.query<{ id: string }>(
       `
       INSERT INTO orders (
-        customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment, status,
+        customer_id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment, status,
         utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid, referrer
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 'new', $7, $8, $9, $10, $11, $12, $13)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', $8, $9, $10, $11, $12, $13, $14)
       RETURNING id
       `,
       [
+        customerId,
         customerName,
         customerSurname,
         customerPhone,
@@ -356,7 +383,6 @@ export async function POST(request: NextRequest) {
     // постачальника), а НЕ від retail_price — інакше для покупця з
     // персональним правилом накрутилась би ще й звичайна націнка
     // магазину поверх його власної (див. lib/customerPricing.ts)
-    const normalizedPhone = normalizePhone(customerPhone);
     const pricingRuleResult = await client.query<{ rule_type: 'discount' | 'markup'; percent: string }>(
       'SELECT rule_type, percent FROM customer_pricing_rules WHERE phone = $1',
       [normalizedPhone]
@@ -377,10 +403,17 @@ export async function POST(request: NextRequest) {
       const product = productById.get(item.id)!;
       const unitPrice = computeCustomerPrice(parseFloat(product.cost_price), parseFloat(product.retail_price), pricingRule);
 
+      // cost_price — снимок себестоимости НА МОМЕНТ ПРОДАЖИ (секция 28
+      // schema.sql), нужен для точного расчёта валовой прибыли в
+      // отчётах позже: products.cost_price к моменту отчёта может уже
+      // измениться из-за нового прайса от поставщика, а этот снимок —
+      // нет. Берём "голую" цену поставщика (product.cost_price), а не
+      // unitPrice (это то, что реально заплатил покупатель — уже с
+      // персональной скидкой/наценкой, если она есть)
       await client.query(
         `
-        INSERT INTO order_items (order_id, product_id, article, brand, name, price, quantity, supplier_id, supplier_name)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO order_items (order_id, product_id, article, brand, name, price, cost_price, quantity, supplier_id, supplier_name)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         `,
         [
           orderId,
@@ -389,6 +422,7 @@ export async function POST(request: NextRequest) {
           product.brand,
           product.name,
           unitPrice,
+          parseFloat(product.cost_price),
           item.count,
           product.supplier_id,
           product.supplier_name,
