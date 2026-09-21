@@ -1497,6 +1497,398 @@ ALTER TABLE tecdoc_compatibility ADD COLUMN IF NOT EXISTS source_note TEXT;
 
 
 -- ============================================================
+-- 28. ФИНАНСОВО-СКЛАДСКОЙ МОДУЛЬ: заказы, возвраты, взаиморасчёты
+--     с клиентами и поставщиками, аудит склада
+-- ============================================================
+-- Архитектура — леджер-система: журнал транзакций (customer_transactions,
+-- supplier_transactions, stock_movements) — источник истины, а кэш
+-- баланса (customers.balance, suppliers.balance, products.stock) —
+-- денормализация для быстрого чтения в UI. Кэш ВСЕГДА обновляется
+-- триггером сразу при вставке в журнал — никогда отдельным запросом
+-- из кода, иначе они разойдутся при сбое на середине операции.
+--
+-- Порядок секций ниже соблюдает зависимости по внешним ключам:
+-- customers создаётся раньше, чем orders получает customer_id;
+-- customer_returns/supplier_invoices раньше, чем ссылающиеся на них
+-- customer_transactions/supplier_transactions; всё это — раньше
+-- stock_movements, которая ссылается почти на всё сразу.
+
+
+-- ------------------------------------------------------------
+-- 28.1 CUSTOMERS — клиенты как персистентная сущность
+-- ------------------------------------------------------------
+-- До этой миграции имя/телефон клиента существовали только как
+-- "снимок" прямо в orders (тот же принцип, что у order_items —
+-- см. секцию 7 выше) — этого достаточно для истории заказа, но
+-- недостаточно для личного баланса, который должен накапливаться
+-- ПОПЕРЁК заказов одного и того же человека. Телефон — естественный
+-- ключ, по нему матчим новый заказ с уже существующим клиентом
+CREATE TABLE IF NOT EXISTS customers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  surname TEXT,
+  email TEXT,
+
+  -- Кэш текущего баланса (денормализация поверх customer_transactions,
+  -- обновляется триггером trg_customer_transactions_update_balance
+  -- ниже). Положительное значение = клиент должен нам (отгрузили в
+  -- долг); отрицательное = у клиента предоплата/переплата
+  balance NUMERIC(12, 2) NOT NULL DEFAULT 0,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+-- ------------------------------------------------------------
+-- 28.2 ORDERS — связь с клиентом, расширенные статусы, дата отгрузки
+-- ------------------------------------------------------------
+-- customer_id — необязательная связь (nullable), ON DELETE SET NULL:
+-- заказ не должен сломаться, если клиента потом удалят/объединят —
+-- по тому же принципу, что уже применён к order_items.supplier_id
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES customers(id) ON DELETE SET NULL;
+
+-- Было 5 статусов (new/processing/awaiting_parts/ready/cancelled),
+-- нужно 7 более детальных — явно отражающих, на каком этапе цепочки
+-- "нужно заказать у поставщика → пришло на склад → готово к выдаче"
+-- сейчас находится заказ. orders_status_check — имя ограничения,
+-- которое Postgres сам присвоил инлайн-CHECK на status в секции 6.
+-- Снимаем СТАРОЕ ограничение ПЕРЕД переносом данных (не после) —
+-- иначе сам перенос на новые значения упрётся в ещё активный старый
+-- CHECK, который новых значений не знает
+ALTER TABLE orders DROP CONSTRAINT IF EXISTS orders_status_check;
+
+-- Два старых статуса не входят в новый набор напрямую — переносим
+-- уже существующие строки на ближайший по смыслу новый статус
+UPDATE orders SET status = 'ordered_from_supplier' WHERE status = 'awaiting_parts';
+UPDATE orders SET status = 'ready_for_pickup' WHERE status = 'ready';
+
+ALTER TABLE orders ADD CONSTRAINT orders_status_check CHECK (
+  status IN (
+    'new',                     -- Новое
+    'processing',              -- В обработке
+    'ordered_from_supplier',   -- Заказано у поставщика
+    'in_stock',                -- На складе
+    'ready_for_pickup',        -- Готов к выдаче
+    'shipped',                 -- Отгружен (Выполнен)
+    'cancelled'                -- Отменён
+  )
+);
+
+-- Дата ФАКТИЧЕСКОЙ отгрузки — отдельно от created_at (дата оформления
+-- заказа) и updated_at (любое изменение). Нужна для точного P&L "по
+-- дате продажи", а не "по дате оформления" — между ними может пройти
+-- сколько угодно времени (пока деталь заказывали у поставщика).
+-- Выставляется автоматически триггером trg_orders_set_shipped_at ниже,
+-- вручную в коде трогать не нужно
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS shipped_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_orders_customer_id ON orders (customer_id);
+
+
+-- ------------------------------------------------------------
+-- 28.3 ORDER_ITEMS — снимок себестоимости и статус позиции
+-- ------------------------------------------------------------
+-- cost_price — снимок products.cost_price НА МОМЕНТ ПРОДАЖИ, по
+-- тому же принципу, что уже применён к price (розничная цена-снимок,
+-- см. секцию 7). Без этого валовую прибыль по уже проданным позициям
+-- посчитать нельзя: products.cost_price к моменту отчёта мог уже
+-- измениться (новый прайс от поставщика). DEFAULT 0 — чтобы ALTER был
+-- безопасен для уже существующих строк order_items (они этот снимок
+-- никогда не получат — исторические заказы до миграции просто не
+-- участвуют в точном P&L, это ожидаемо и не критично)
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS cost_price NUMERIC(12, 2) NOT NULL DEFAULT 0;
+
+-- Статус ОТДЕЛЬНОЙ позиции — нужен для частичного выполнения заказа
+-- (одна деталь уже на складе, другая ещё заказана у поставщика).
+-- Независим от orders.status, который менеджер выставляет вручную
+-- на весь заказ целиком
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+ALTER TABLE order_items DROP CONSTRAINT IF EXISTS order_items_status_check;
+ALTER TABLE order_items ADD CONSTRAINT order_items_status_check CHECK (
+  status IN ('pending', 'ordered_from_supplier', 'in_stock', 'shipped', 'cancelled', 'returned')
+);
+
+
+-- ------------------------------------------------------------
+-- 28.4 CUSTOMER_RETURNS / CUSTOMER_RETURN_ITEMS — возврат от клиента
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS customer_returns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- RESTRICT, а не CASCADE: если по заказу есть возврат, сам заказ
+  -- удалять нельзя (это уничтожило бы часть финансовой истории) —
+  -- сначала пришлось бы явно разобраться с возвратом
+  order_id UUID NOT NULL REFERENCES orders(id) ON DELETE RESTRICT,
+  customer_id UUID REFERENCES customers(id) ON DELETE SET NULL,
+
+  reason TEXT NOT NULL CHECK (
+    reason IN ('defect', 'customer_mistake', 'staff_mistake', 'refused')
+    -- брак / ошибся клиент / ошибся менеджер-подборщик / отказ
+  ),
+  refund_method TEXT NOT NULL CHECK (refund_method IN ('balance', 'cash', 'card')),
+
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'rejected')),
+  comment TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS customer_return_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  return_id UUID NOT NULL REFERENCES customer_returns(id) ON DELETE CASCADE,
+
+  -- RESTRICT: позиция заказа, на которую уже оформлен возврат, не
+  -- должна исчезать бесследно (испортило бы customer_return_items)
+  order_item_id UUID NOT NULL REFERENCES order_items(id) ON DELETE RESTRICT,
+
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+
+  -- true — товар возвращается на продаваемый склад (ошибся клиент/
+  -- менеджер, отказ); false — списывается как брак, на склад не
+  -- возвращается. Решает, создаётся ли положительная запись в
+  -- stock_movements при обработке возврата (логика — в коде бэкенда,
+  -- не в триггере: сама вставка строки в customer_return_items ещё
+  -- не означает, что возврат физически принят на склад)
+  restock BOOLEAN NOT NULL DEFAULT true
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_returns_order_id ON customer_returns (order_id);
+CREATE INDEX IF NOT EXISTS idx_customer_return_items_return_id ON customer_return_items (return_id);
+
+
+-- ------------------------------------------------------------
+-- 28.5 CUSTOMER_TRANSACTIONS — журнал взаиморасчётов с клиентом
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS customer_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+
+  -- Знак задаёт направление: положительная сумма увеличивает долг
+  -- клиента перед нами (отгрузка в долг), отрицательная — уменьшает
+  -- долг или увеличивает предоплату (оплата, предоплата, возврат
+  -- денег клиенту)
+  amount NUMERIC(12, 2) NOT NULL,
+  type TEXT NOT NULL CHECK (
+    type IN ('prepayment', 'shipment', 'return_refund', 'adjustment', 'cash_payment')
+  ),
+
+  order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+  return_id UUID REFERENCES customer_returns(id) ON DELETE SET NULL,
+
+  -- КЛЮЧЕВОЕ поле: когда деньги выданы физически (наличными/картой
+  -- через кассу), а не зачислены на личный счёт клиента у нас —
+  -- личный баланс клиента (customers.balance) трогать не нужно,
+  -- он не участвует. Но сама операция всё равно обязана попасть
+  -- в журнал, иначе она выпадет из отчёта Cash Flow (реальное
+  -- движение денег). affects_customer_balance = false — именно для
+  -- этого случая; триггер ниже проверяет это поле перед обновлением
+  -- customers.balance
+  affects_customer_balance BOOLEAN NOT NULL DEFAULT true,
+
+  comment TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_transactions_customer_id ON customer_transactions (customer_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_customer_transactions_order_id ON customer_transactions (order_id);
+
+
+-- ------------------------------------------------------------
+-- 28.6 SUPPLIERS — кэш долга перед поставщиком
+-- ------------------------------------------------------------
+-- Положительное значение = мы должны поставщику (взяли товар в долг);
+-- отрицательное = у нас переплата/аванс поставщику
+ALTER TABLE suppliers ADD COLUMN IF NOT EXISTS balance NUMERIC(12, 2) NOT NULL DEFAULT 0;
+
+
+-- ------------------------------------------------------------
+-- 28.7 SUPPLIER_INVOICES / SUPPLIER_INVOICE_ITEMS — приходные накладные
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS supplier_invoices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supplier_id UUID NOT NULL REFERENCES suppliers(id) ON DELETE RESTRICT,
+  invoice_number TEXT,
+  total_amount NUMERIC(12, 2) NOT NULL,
+
+  -- Если закупка сделана специально под конкретный заказ клиента
+  -- (а не пополнение общего склада) — необязательная ссылка
+  order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+
+  comment TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS supplier_invoice_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  invoice_id UUID NOT NULL REFERENCES supplier_invoices(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+  article TEXT NOT NULL,
+  brand TEXT,
+  name TEXT,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  cost_price NUMERIC(12, 2) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_invoices_supplier_id ON supplier_invoices (supplier_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_supplier_invoice_items_invoice_id ON supplier_invoice_items (invoice_id);
+
+
+-- ------------------------------------------------------------
+-- 28.8 SUPPLIER_RETURNS / SUPPLIER_RETURN_ITEMS — возврат поставщику
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS supplier_returns (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supplier_id UUID NOT NULL REFERENCES suppliers(id) ON DELETE RESTRICT,
+  reason TEXT NOT NULL CHECK (reason IN ('defect', 'unclaimed')),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed')),
+  comment TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS supplier_return_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  return_id UUID NOT NULL REFERENCES supplier_returns(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES products(id) ON DELETE SET NULL,
+  article TEXT NOT NULL,
+  quantity INTEGER NOT NULL CHECK (quantity > 0),
+  cost_price NUMERIC(12, 2) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_returns_supplier_id ON supplier_returns (supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_return_items_return_id ON supplier_return_items (return_id);
+
+
+-- ------------------------------------------------------------
+-- 28.9 SUPPLIER_TRANSACTIONS — журнал взаиморасчётов с поставщиком
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS supplier_transactions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supplier_id UUID NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE,
+
+  -- Положительная сумма = увеличивает НАШ долг перед поставщиком
+  -- (пришла накладная); отрицательная = уменьшает (наша оплата ему,
+  -- или мы вернули ему товар)
+  amount NUMERIC(12, 2) NOT NULL,
+  type TEXT NOT NULL CHECK (
+    type IN ('goods_received', 'payment_out', 'supplier_return', 'adjustment')
+  ),
+
+  invoice_id UUID REFERENCES supplier_invoices(id) ON DELETE SET NULL,
+  return_id UUID REFERENCES supplier_returns(id) ON DELETE SET NULL,
+
+  comment TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier_id ON supplier_transactions (supplier_id, created_at DESC);
+
+
+-- ------------------------------------------------------------
+-- 28.10 STOCK_MOVEMENTS — аудит движения склада
+-- ------------------------------------------------------------
+-- products.stock остаётся "текущим количеством", как и раньше — эта
+-- таблица объясняет, ПОЧЕМУ оно изменилось (нужно для отчётов и
+-- разбора спорных ситуаций вроде "куда делась деталь"). Ссылки на
+-- источник события необязательны и взаимоисключающи по смыслу (у
+-- конкретной строки заполнена ровно одна из четырёх — в зависимости
+-- от reason), но это не проверяется отдельным CHECK: слишком узкая
+-- выгода для лишней жёсткости
+CREATE TABLE IF NOT EXISTS stock_movements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+
+  -- Положительное = приход, отрицательное = расход
+  quantity_change INTEGER NOT NULL,
+  reason TEXT NOT NULL CHECK (
+    reason IN ('sale', 'customer_return', 'supplier_receipt', 'supplier_return', 'adjustment', 'defect_writeoff')
+  ),
+
+  order_item_id UUID REFERENCES order_items(id) ON DELETE SET NULL,
+  customer_return_item_id UUID REFERENCES customer_return_items(id) ON DELETE SET NULL,
+  supplier_invoice_item_id UUID REFERENCES supplier_invoice_items(id) ON DELETE SET NULL,
+  supplier_return_item_id UUID REFERENCES supplier_return_items(id) ON DELETE SET NULL,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements (product_id, created_at DESC);
+
+
+-- ------------------------------------------------------------
+-- 28.11 ТРИГГЕРЫ — автоматический пересчёт кэшей и shipped_at
+-- ------------------------------------------------------------
+
+-- Пересчёт customers.balance при новой записи в customer_transactions.
+-- Работает ТОЛЬКО если affects_customer_balance = true (см. пояснение
+-- в 28.5) — для выплат наличными/картой личный баланс не трогаем
+CREATE OR REPLACE FUNCTION fn_customer_transactions_update_balance()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.affects_customer_balance THEN
+    UPDATE customers
+    SET balance = balance + NEW.amount,
+        updated_at = now()
+    WHERE id = NEW.customer_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_customer_transactions_update_balance ON customer_transactions;
+CREATE TRIGGER trg_customer_transactions_update_balance
+  AFTER INSERT ON customer_transactions
+  FOR EACH ROW
+  EXECUTE FUNCTION fn_customer_transactions_update_balance();
+
+
+-- Пересчёт suppliers.balance при новой записи в supplier_transactions.
+-- Здесь безусловно (в отличие от клиентского триггера выше) — у
+-- поставщика нет аналога "наличных мимо баланса", любая транзакция
+-- поставщика по определению меняет наш долг перед ним
+CREATE OR REPLACE FUNCTION fn_supplier_transactions_update_balance()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE suppliers
+  SET balance = balance + NEW.amount
+  WHERE id = NEW.supplier_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_supplier_transactions_update_balance ON supplier_transactions;
+CREATE TRIGGER trg_supplier_transactions_update_balance
+  AFTER INSERT ON supplier_transactions
+  FOR EACH ROW
+  EXECUTE FUNCTION fn_supplier_transactions_update_balance();
+
+
+-- Автопроставление orders.shipped_at при переходе статуса в 'shipped'.
+-- BEFORE UPDATE и запись прямо в NEW — так это одна операция без
+-- дополнительного UPDATE-запроса поверх. Условие в самом теле (а не
+-- только в WHEN на триггере) на случай, если строка уже была shipped
+-- и её обновляют повторно другим полем (тогда shipped_at не должен
+-- "уехать" на новое время) — OLD.status IS DISTINCT FROM NEW.status
+-- в WHEN ниже как раз и отсекает такие срабатывания
+CREATE OR REPLACE FUNCTION fn_orders_set_shipped_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.shipped_at := now();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_orders_set_shipped_at ON orders;
+CREATE TRIGGER trg_orders_set_shipped_at
+  BEFORE UPDATE ON orders
+  FOR EACH ROW
+  WHEN (NEW.status = 'shipped' AND OLD.status IS DISTINCT FROM NEW.status)
+  EXECUTE FUNCTION fn_orders_set_shipped_at();
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не
