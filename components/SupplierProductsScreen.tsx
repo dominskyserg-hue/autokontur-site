@@ -270,9 +270,14 @@ export default function SupplierProductsScreen({ supplierId }: { supplierId: str
             </span>
           )}
         </div>
-        <a href="/admin" className="text-xs underline" style={{ color: 'var(--ink-muted)' }}>
-          ← Ко всем поставщикам
-        </a>
+        <div className="flex items-center gap-4">
+          <a href="/admin" className="text-xs underline" style={{ color: 'var(--ink-muted)' }}>
+            ← Ко всем поставщикам
+          </a>
+          <a href={`/admin/suppliers/${supplierId}/finance`} className="text-xs underline font-medium" style={{ color: 'var(--accent)' }}>
+            Финансы поставщика (долг, накладные, оплаты) →
+          </a>
+        </div>
       </header>
 
       {supplierError && (
