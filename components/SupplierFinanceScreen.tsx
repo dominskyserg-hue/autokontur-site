@@ -64,7 +64,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-type FormMode = 'invoice' | 'payment' | 'adjustment';
+type FormMode = 'invoice' | 'payment' | 'adjustment' | 'return';
 
 export default function SupplierFinanceScreen({ supplierId }: { supplierId: string }) {
   const [supplier, setSupplier] = useState<SupplierFinance | null>(null);
@@ -81,6 +81,11 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // ---- поля, нужные только для возврата поставщику (formMode === 'return') ----
+  const [returnArticle, setReturnArticle] = useState('');
+  const [returnQuantity, setReturnQuantity] = useState('');
+  const [returnReason, setReturnReason] = useState<'defect' | 'unclaimed'>('defect');
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -108,6 +113,49 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormError(null);
+
+    // Возврат поставщику устроен иначе остальных форм — вместо суммы
+    // здесь артикул и количество (себестоимость сервер сам берёт из
+    // каталога), поэтому у него своя ветка валидации и отправки
+    if (formMode === 'return') {
+      const quantity = parseInt(returnQuantity, 10);
+      if (!returnArticle.trim()) {
+        setFormError('Укажите артикул товара.');
+        return;
+      }
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        setFormError('Количество должно быть целым числом больше нуля.');
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const response = await fetch(`/api/admin/suppliers/${supplierId}/returns`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            article: returnArticle.trim(),
+            quantity,
+            reason: returnReason,
+            comment: comment || undefined,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Не удалось оформить возврат');
+        }
+
+        setReturnArticle('');
+        setReturnQuantity('');
+        setComment('');
+        await fetchData();
+      } catch (error) {
+        setFormError(error instanceof Error ? error.message : 'Ошибка сети при оформлении возврата');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
 
     const parsedAmount = parseFloat(amount);
     if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
@@ -232,6 +280,7 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
                   >
                     <option value="invoice">Приходная накладная (увеличивает долг)</option>
                     <option value="payment">Оплата поставщику (уменьшает долг)</option>
+                    <option value="return">Возврат поставщику (уменьшает долг)</option>
                     <option value="adjustment">Ручная корректировка</option>
                   </select>
                 </div>
@@ -269,21 +318,71 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
-                    Сумма, грн
-                  </label>
-                  <input
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
-                    placeholder="напр. 15000"
-                    className="w-full px-3 py-2 text-sm rounded-md font-mono"
-                    style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
-                  />
-                </div>
+                {formMode === 'return' ? (
+                  <>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                        Артикул товара
+                      </label>
+                      <input
+                        type="text"
+                        value={returnArticle}
+                        onChange={(e) => setReturnArticle(e.target.value)}
+                        placeholder="напр. NIS540092S601"
+                        className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                      />
+                      <p className="text-[11px] mt-1" style={{ color: 'var(--ink-faint)' }}>
+                        Себестоимость берётся из каталога этого поставщика автоматически.
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                        Количество
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        step={1}
+                        value={returnQuantity}
+                        onChange={(e) => setReturnQuantity(e.target.value)}
+                        placeholder="напр. 2"
+                        className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                        Причина
+                      </label>
+                      <select
+                        value={returnReason}
+                        onChange={(e) => setReturnReason(e.target.value as 'defect' | 'unclaimed')}
+                        className="w-full px-3 py-2 text-sm rounded-md"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                      >
+                        <option value="defect">Брак</option>
+                        <option value="unclaimed">Невостребованное</option>
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                      Сумма, грн
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      placeholder="напр. 15000"
+                      className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>

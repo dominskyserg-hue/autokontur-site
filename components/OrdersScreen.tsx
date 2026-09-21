@@ -206,6 +206,20 @@ export default function OrdersScreen() {
   const [editItemSaving, setEditItemSaving] = useState(false);
   const [editItemError, setEditItemError] = useState<string | null>(null);
 
+  // ---- возврат ОДНОЙ позиции заказа (секция 28 schema.sql) —
+  // независимый от editingItemId переключатель, чтобы не путать два
+  // разных действия над одной и той же позицией ----
+  const [returningItemId, setReturningItemId] = useState<string | null>(null);
+  const [returnQuantity, setReturnQuantity] = useState('1');
+  const [returnReason, setReturnReason] = useState<'defect' | 'customer_mistake' | 'staff_mistake' | 'refused'>(
+    'customer_mistake'
+  );
+  const [returnRefundMethod, setReturnRefundMethod] = useState<'balance' | 'cash' | 'card'>('cash');
+  const [returnComment, setReturnComment] = useState('');
+  const [returnSaving, setReturnSaving] = useState(false);
+  const [returnError, setReturnError] = useState<string | null>(null);
+  const [returnSuccessItemId, setReturnSuccessItemId] = useState<string | null>(null);
+
   // ------------------------------------------------------------
   // СПИСОК ПОСТАВЩИКОВ ДЛЯ ВЫПАДАЮЩЕГО СПИСКА (загружается один раз)
   // ------------------------------------------------------------
@@ -438,6 +452,61 @@ export default function OrdersScreen() {
       setEditItemError(error instanceof Error ? error.message : 'Ошибка сети при сохранении позиции');
     } finally {
       setEditItemSaving(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // ВОЗВРАТ ОДНОЙ ПОЗИЦИИ ЗАКАЗА (секция 28 schema.sql)
+  // ------------------------------------------------------------
+  const openItemReturn = (item: OrderItem) => {
+    setReturningItemId(item.id);
+    setReturnQuantity('1');
+    setReturnReason('customer_mistake');
+    setReturnRefundMethod('cash');
+    setReturnComment('');
+    setReturnError(null);
+    setReturnSuccessItemId(null);
+  };
+
+  const cancelItemReturn = () => {
+    setReturningItemId(null);
+    setReturnError(null);
+  };
+
+  const handleSubmitReturn = async () => {
+    if (!orderDetails || !returningItemId) return;
+
+    const quantity = parseInt(returnQuantity, 10);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setReturnError('Количество должно быть целым числом больше нуля');
+      return;
+    }
+
+    setReturnSaving(true);
+    setReturnError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${orderDetails.id}/returns`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orderItemId: returningItemId,
+          quantity,
+          reason: returnReason,
+          refundMethod: returnRefundMethod,
+          comment: returnComment || undefined,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Не удалось оформить возврат');
+      }
+
+      setReturnSuccessItemId(returningItemId);
+      setReturningItemId(null);
+    } catch (error) {
+      setReturnError(error instanceof Error ? error.message : 'Ошибка сети при оформлении возврата');
+    } finally {
+      setReturnSaving(false);
     }
   };
 
@@ -866,6 +935,112 @@ export default function OrdersScreen() {
                                 </button>
                               </div>
                             </div>
+                          )}
+
+                          {/* ---- возврат этой позиции (секция 28 schema.sql) ---- */}
+                          {returningItemId !== item.id ? (
+                            <button
+                              type="button"
+                              onClick={() => openItemReturn(item)}
+                              className="text-[11px] mt-1.5 ml-1.5 px-2 py-1 rounded"
+                              style={{ border: '1px solid var(--line)', color: 'var(--bad)' }}
+                            >
+                              Оформить возврат
+                            </button>
+                          ) : (
+                            <div className="mt-3 pt-3 flex flex-col gap-2.5" style={{ borderTop: '1px dashed var(--line)' }}>
+                              <div className="grid grid-cols-2 gap-2.5">
+                                <div>
+                                  <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                    Количество (из {item.quantity})
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={item.quantity}
+                                    step={1}
+                                    className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
+                                    style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                    value={returnQuantity}
+                                    onChange={(e) => setReturnQuantity(e.target.value)}
+                                    autoFocus
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                    Причина
+                                  </label>
+                                  <select
+                                    className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                                    style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                    value={returnReason}
+                                    onChange={(e) => setReturnReason(e.target.value as typeof returnReason)}
+                                  >
+                                    <option value="customer_mistake">Ошибся клиент</option>
+                                    <option value="staff_mistake">Ошибся менеджер</option>
+                                    <option value="refused">Отказ</option>
+                                    <option value="defect">Брак (списывается, не на склад)</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                  Возврат денег
+                                </label>
+                                <select
+                                  className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                                  style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                  value={returnRefundMethod}
+                                  onChange={(e) => setReturnRefundMethod(e.target.value as typeof returnRefundMethod)}
+                                >
+                                  <option value="cash">Наличными</option>
+                                  <option value="card">На карту</option>
+                                  <option value="balance">На баланс клиента</option>
+                                </select>
+                              </div>
+
+                              <input
+                                type="text"
+                                placeholder="Комментарий (необязательно)"
+                                className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                                style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                value={returnComment}
+                                onChange={(e) => setReturnComment(e.target.value)}
+                              />
+
+                              {returnError && (
+                                <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
+                                  {returnError}
+                                </p>
+                              )}
+
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  disabled={returnSaving}
+                                  onClick={handleSubmitReturn}
+                                  className="flex-1 py-1.5 rounded-md text-xs font-medium disabled:opacity-50"
+                                  style={{ background: 'var(--bad)', color: '#fff' }}
+                                >
+                                  {returnSaving ? 'Оформление...' : 'Оформить возврат'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={cancelItemReturn}
+                                  className="px-3 py-1.5 rounded-md text-xs"
+                                  style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                                >
+                                  Отмена
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {returnSuccessItemId === item.id && (
+                            <p className="text-[11px] mt-1.5" style={{ color: 'var(--good)' }}>
+                              Возврат оформлен.
+                            </p>
                           )}
                         </div>
                       );
