@@ -80,6 +80,7 @@ export type AdminSection =
   | 'vinRequests'
   | 'analytics'
   | 'reports'
+  | 'treasury'
   | 'settings';
 
 interface NavItem {
@@ -114,6 +115,10 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'analytics', label: 'Аналитика', href: '/admin/analytics' },
       { key: 'reports', label: 'Отчёты', href: '/admin/reports' },
     ],
+  },
+  {
+    title: 'ФИНАНСЫ',
+    items: [{ key: 'treasury', label: 'Кассы и счета', href: '/admin/treasury' }],
   },
   {
     title: 'СИСТЕМА',

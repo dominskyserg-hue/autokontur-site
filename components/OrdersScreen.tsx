@@ -133,6 +133,16 @@ interface SupplierOption {
   name: string;
 }
 
+// Для выпадающих списков "касса" (приём оплаты, выдача возврата) —
+// баланс показываем прямо в списке, чтобы кассир видел, хватит ли в
+// кассе денег, ещё до попытки провести операцию
+interface CashRegisterOption {
+  id: string;
+  name: string;
+  type: 'cash' | 'bank_account' | 'card';
+  balance: number;
+}
+
 interface OrderDetails {
   id: string;
   customerName: string;
@@ -243,9 +253,21 @@ export default function OrdersScreen() {
   );
   const [returnRefundMethod, setReturnRefundMethod] = useState<'balance' | 'cash' | 'card'>('cash');
   const [returnComment, setReturnComment] = useState('');
+  const [returnCashRegisterId, setReturnCashRegisterId] = useState('');
   const [returnSaving, setReturnSaving] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
   const [returnSuccessItemId, setReturnSuccessItemId] = useState<string | null>(null);
+
+  // ---- список касс для выбора при оплате/возврате (секция 29 schema.sql) ----
+  const [cashRegisters, setCashRegisters] = useState<CashRegisterOption[]>([]);
+
+  // ---- модалка "Принять оплату" ----
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [paymentCashRegisterId, setPaymentCashRegisterId] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentComment, setPaymentComment] = useState('');
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   // ------------------------------------------------------------
   // СПИСОК ПОСТАВЩИКОВ ДЛЯ ВЫПАДАЮЩЕГО СПИСКА (загружается один раз)
@@ -263,6 +285,23 @@ export default function OrdersScreen() {
       .catch(() => {
         // Список нужен только для смены поставщика внутри заказа —
         // если он не загрузился, сам заказ всё равно можно посмотреть
+      });
+  }, []);
+
+  // ------------------------------------------------------------
+  // СПИСОК КАСС ДЛЯ ВЫБОРА ПРИ ОПЛАТЕ/ВОЗВРАТЕ (секция 29 schema.sql,
+  // загружается один раз) — только активные, закрытую кассу выбрать
+  // на новой операции нельзя
+  // ------------------------------------------------------------
+  useEffect(() => {
+    fetch('/api/admin/cash-registers?activeOnly=1')
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.registers) setCashRegisters(data.registers as CashRegisterOption[]);
+      })
+      .catch(() => {
+        // Список нужен только для форм оплаты/возврата — если не
+        // загрузился, сам заказ всё равно можно посмотреть
       });
   }, []);
 
@@ -490,6 +529,7 @@ export default function OrdersScreen() {
     setReturnQuantity('1');
     setReturnReason('customer_mistake');
     setReturnRefundMethod('cash');
+    setReturnCashRegisterId('');
     setReturnComment('');
     setReturnError(null);
     setReturnSuccessItemId(null);
@@ -509,6 +549,14 @@ export default function OrdersScreen() {
       return;
     }
 
+    // Деньги реально выдаются из кассы только когда возврат НЕ на
+    // личный баланс клиента — при refundMethod='balance' касса не
+    // трогается (см. app/api/admin/orders/[id]/returns/route.ts)
+    if (returnRefundMethod !== 'balance' && !returnCashRegisterId) {
+      setReturnError('Укажите кассу, из которой выдаются деньги клиенту');
+      return;
+    }
+
     setReturnSaving(true);
     setReturnError(null);
     try {
@@ -520,6 +568,7 @@ export default function OrdersScreen() {
           quantity,
           reason: returnReason,
           refundMethod: returnRefundMethod,
+          cashRegisterId: returnRefundMethod !== 'balance' ? returnCashRegisterId : undefined,
           comment: returnComment || undefined,
         }),
       });
@@ -534,6 +583,56 @@ export default function OrdersScreen() {
       setReturnError(error instanceof Error ? error.message : 'Ошибка сети при оформлении возврата');
     } finally {
       setReturnSaving(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // ПРИЁМ ОПЛАТЫ ОТ КЛИЕНТА ПО ЗАКАЗУ (секция 29 schema.sql) —
+  // POST /api/admin/orders/[id]/payment
+  // ------------------------------------------------------------
+  const openPaymentModal = () => {
+    setPaymentCashRegisterId('');
+    setPaymentAmount(orderDetails ? String(orderDetails.totalAmount) : '');
+    setPaymentComment('');
+    setPaymentError(null);
+    setShowPaymentModal(true);
+  };
+
+  const handleSubmitPayment = async () => {
+    if (!orderDetails) return;
+
+    const amount = parseFloat(paymentAmount);
+    if (!paymentCashRegisterId) {
+      setPaymentError('Выберите кассу, через которую прошла оплата');
+      return;
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setPaymentError('Сумма должна быть положительным числом');
+      return;
+    }
+
+    setPaymentSaving(true);
+    setPaymentError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${orderDetails.id}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cashRegisterId: paymentCashRegisterId, amount, comment: paymentComment || undefined }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Не удалось провести платёж');
+      }
+
+      // Баланс кассы в выпадающем списке мог измениться — перечитываем
+      setCashRegisters((prev) =>
+        prev.map((r) => (r.id === paymentCashRegisterId ? { ...r, balance: data.newCashRegisterBalance } : r))
+      );
+      setShowPaymentModal(false);
+    } catch (error) {
+      setPaymentError(error instanceof Error ? error.message : 'Ошибка сети при проведении платежа');
+    } finally {
+      setPaymentSaving(false);
     }
   };
 
@@ -786,6 +885,16 @@ export default function OrdersScreen() {
                     {formatDateTime(orderDetails.createdAt)}
                   </div>
                 </div>
+
+                {/* ---- приём оплаты (секция 29 schema.sql) ---- */}
+                <button
+                  type="button"
+                  onClick={openPaymentModal}
+                  className="w-full py-2.5 rounded-md text-sm font-medium mb-5"
+                  style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
+                >
+                  Принять оплату
+                </button>
 
                 {/* ---- смена статуса ---- */}
                 <div
@@ -1044,6 +1153,27 @@ export default function OrdersScreen() {
                                 </select>
                               </div>
 
+                              {returnRefundMethod !== 'balance' && (
+                                <div>
+                                  <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                    Касса, из которой выдать деньги
+                                  </label>
+                                  <select
+                                    className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                                    style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                    value={returnCashRegisterId}
+                                    onChange={(e) => setReturnCashRegisterId(e.target.value)}
+                                  >
+                                    <option value="">Выберите кассу</option>
+                                    {cashRegisters.map((r) => (
+                                      <option key={r.id} value={r.id}>
+                                        {r.name} ({r.balance.toLocaleString('ru-RU')} ₴)
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              )}
+
                               <input
                                 type="text"
                                 placeholder="Комментарий (необязательно)"
@@ -1101,6 +1231,83 @@ export default function OrdersScreen() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== МОДАЛКА "ПРИНЯТЬ ОПЛАТУ" ==================== */}
+      {showPaymentModal && orderDetails && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-sm rounded-lg p-6" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-base font-semibold">Принять оплату</h2>
+              <button type="button" onClick={() => setShowPaymentModal(false)} className="text-sm" style={{ color: 'var(--ink-muted)' }}>
+                ✕
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3.5">
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                  Касса
+                </label>
+                <select
+                  value={paymentCashRegisterId}
+                  onChange={(e) => setPaymentCashRegisterId(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-md"
+                  style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                >
+                  <option value="">Выберите кассу</option>
+                  {cashRegisters.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.balance.toLocaleString('ru-RU')} ₴)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                  Сумма, грн
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                  style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                  Комментарий (необязательно)
+                </label>
+                <input
+                  type="text"
+                  value={paymentComment}
+                  onChange={(e) => setPaymentComment(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-md"
+                  style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                />
+              </div>
+
+              {paymentError && (
+                <p className="text-xs" style={{ color: 'var(--bad)' }}>
+                  {paymentError}
+                </p>
+              )}
+
+              <button
+                type="button"
+                disabled={paymentSaving}
+                onClick={handleSubmitPayment}
+                className="w-full py-2.5 rounded-md text-sm font-medium disabled:opacity-50"
+                style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+              >
+                {paymentSaving ? 'Проведение...' : 'Провести платёж'}
+              </button>
+            </div>
           </div>
         </div>
       )}

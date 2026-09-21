@@ -1889,6 +1889,151 @@ CREATE TRIGGER trg_orders_set_shipped_at
 
 
 -- ============================================================
+-- 29. КАССЫ И РАСЧЁТНЫЕ СЧЕТА — учёт наличных и безналичных средств
+-- ============================================================
+-- До этой секции customer_transactions/supplier_transactions отвечали
+-- на вопрос "сколько нам должен клиент / сколько мы должны
+-- поставщику", но НЕ отвечали на вопрос "а где физически лежат эти
+-- деньги прямо сейчас" — касса магазина, эквайринг-терминал и
+-- расчётный счёт в банке считались одной неразличимой "кассой".
+-- Секция 29 добавляет второй, независимый леджер поверх первого:
+-- cash_movements — источник истины по остаткам в каждой конкретной
+-- кассе/счёте, тем же принципом "журнал + денормализованный кэш +
+-- триггер", что и весь остальной финансовый модуль (секция 28).
+--
+-- Один и тот же факт "клиент заплатил" в этой архитектуре порождает
+-- ДВЕ записи в ДВУХ разных журналах: customer_transactions (баланс
+-- клиента уменьшился) и cash_movements (остаток в конкретной кассе
+-- увеличился) — они связаны необязательным полем
+-- cash_movements.customer_transaction_id, но у каждой свой собственный
+-- триггер пересчёта своего собственного кэша (customers.balance и
+-- cash_registers.balance соответственно), и они не должны дублировать
+-- логику друг друга.
+
+
+-- ------------------------------------------------------------
+-- 29.1 CASH_REGISTERS — кассы и расчётные счета
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS cash_registers (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+
+  -- Тип определяет СПОСОБ оплаты сам по себе — отдельного поля
+  -- "способ оплаты" в остальной схеме намеренно нет: выбор кассы уже
+  -- однозначно говорит, наличными заплатил клиент, картой через
+  -- терминал или переводом на расчётный счёт
+  type TEXT NOT NULL CHECK (type IN ('cash', 'bank_account', 'card')),
+
+  -- Кэш текущего остатка (денормализация поверх cash_movements,
+  -- обновляется триггером trg_cash_movements_update_balance ниже) —
+  -- НИКОГДА не трогается напрямую из кода, только через вставку в
+  -- cash_movements, по тому же принципу, что customers.balance и
+  -- suppliers.balance в секции 28
+  balance NUMERIC(12, 2) NOT NULL DEFAULT 0,
+
+  -- Кассу можно скрыть из выбора на новых операциях (закрыли точку,
+  -- расформировали кассу), не удаляя её саму — вся история движений
+  -- через неё должна остаться на месте (см. RESTRICT на
+  -- cash_movements.cash_register_id ниже)
+  is_active BOOLEAN NOT NULL DEFAULT true,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+
+-- ------------------------------------------------------------
+-- 29.2 CASH_MOVEMENTS — журнал движения денег по кассам/счетам
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS cash_movements (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+  -- RESTRICT, а не CASCADE/SET NULL: кассу с историей движений удалить
+  -- нельзя (это стёрло бы часть финансовой истории) — её можно только
+  -- деактивировать через is_active выше
+  cash_register_id UUID NOT NULL REFERENCES cash_registers(id) ON DELETE RESTRICT,
+
+  -- Знак — направление движения ИМЕННО В ЭТОЙ кассе: положительная
+  -- сумма — приход (касса пополнилась), отрицательная — расход (из
+  -- кассы выплатили). Это НЕ то же самое, что знак в
+  -- customer_transactions.amount/supplier_transactions.amount (там
+  -- знак кодирует изменение ДОЛГА, а не направление денег) — при
+  -- оплате клиентом customer_transactions.amount отрицательный (долг
+  -- уменьшился), а cash_movements.amount для той же операции
+  -- положительный (касса пополнилась)
+  amount NUMERIC(12, 2) NOT NULL CHECK (amount <> 0),
+
+  type TEXT NOT NULL CHECK (
+    type IN (
+      'customer_prepayment', -- предоплата от клиента (ещё нет долга/отгрузки)
+      'customer_payment',    -- оплата клиентом уже отгруженного заказа
+      'customer_refund',     -- возврат денег клиенту (расход)
+      'supplier_payment',    -- оплата долга поставщику (расход)
+      'transfer_out',        -- перевод в другую кассу (расход, источник)
+      'transfer_in',         -- перевод из другой кассы (приход, получатель)
+      'expense',              -- прочий расход (аренда, зарплата, логистика)
+      'income'                 -- прочий приход (взнос учредителя, начальный остаток)
+    )
+  ),
+
+  -- Необязательные связи с тем, ЧТО породило это движение денег — все
+  -- три взаимоисключающие по смыслу (у конкретной строки обычно
+  -- заполнена не больше одной), но это не проверяется отдельным CHECK
+  -- по той же причине, что и в stock_movements секции 28: слишком
+  -- узкая выгода для лишней жёсткости, а прочие расходы/доходы и
+  -- переводы между кассами не ссылаются вообще ни на что из этого
+  customer_transaction_id UUID REFERENCES customer_transactions(id) ON DELETE SET NULL,
+  supplier_transaction_id UUID REFERENCES supplier_transactions(id) ON DELETE SET NULL,
+  order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+
+  comment TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cash_movements_cash_register_id ON cash_movements (cash_register_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cash_movements_order_id ON cash_movements (order_id);
+
+
+-- ------------------------------------------------------------
+-- 29.3 СВЯЗЬ КАССЫ С ЗАКАЗОМ И С ОБОИМИ ЛЕДЖЕРАМИ СЕКЦИИ 28
+-- ------------------------------------------------------------
+-- Касса "по умолчанию" для заказа — необязательная подсказка на
+-- будущее (например, для повторной оплаты той же картой/тем же
+-- терминалом), сама по себе никакую сумму никуда не проводит
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS cash_register_id UUID REFERENCES cash_registers(id) ON DELETE SET NULL;
+
+-- Через какую именно кассу/счёт прошла эта КОНКРЕТНАЯ операция с
+-- клиентом/поставщиком — заполняется в момент вставки строки в
+-- customer_transactions/supplier_transactions, когда операция
+-- сопровождается реальным движением денег (у 'shipment' или
+-- 'adjustment' без реального движения денег это поле остаётся NULL)
+ALTER TABLE customer_transactions ADD COLUMN IF NOT EXISTS cash_register_id UUID REFERENCES cash_registers(id) ON DELETE SET NULL;
+ALTER TABLE supplier_transactions ADD COLUMN IF NOT EXISTS cash_register_id UUID REFERENCES cash_registers(id) ON DELETE SET NULL;
+
+
+-- ------------------------------------------------------------
+-- 29.4 ТРИГГЕР — автоматический пересчёт cash_registers.balance
+-- ------------------------------------------------------------
+CREATE OR REPLACE FUNCTION fn_cash_movements_update_balance()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE cash_registers
+  SET balance = balance + NEW.amount,
+      updated_at = now()
+  WHERE id = NEW.cash_register_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_cash_movements_update_balance ON cash_movements;
+CREATE TRIGGER trg_cash_movements_update_balance
+  AFTER INSERT ON cash_movements
+  FOR EACH ROW
+  EXECUTE FUNCTION fn_cash_movements_update_balance();
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не

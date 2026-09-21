@@ -66,6 +66,14 @@ function formatDateTime(iso: string): string {
 
 type FormMode = 'invoice' | 'payment' | 'adjustment' | 'return';
 
+// Для выпадающего списка "касса" при оплате поставщику (секция 29
+// schema.sql) — баланс показываем прямо в списке
+interface CashRegisterOption {
+  id: string;
+  name: string;
+  balance: number;
+}
+
 export default function SupplierFinanceScreen({ supplierId }: { supplierId: string }) {
   const [supplier, setSupplier] = useState<SupplierFinance | null>(null);
   const [transactions, setTransactions] = useState<SupplierTransaction[]>([]);
@@ -81,6 +89,22 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
   const [comment, setComment] = useState('');
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // ---- касса для реальной выплаты (formMode === 'payment') ----
+  const [cashRegisters, setCashRegisters] = useState<CashRegisterOption[]>([]);
+  const [paymentCashRegisterId, setPaymentCashRegisterId] = useState('');
+
+  useEffect(() => {
+    fetch('/api/admin/cash-registers?activeOnly=1')
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.registers) setCashRegisters(data.registers as CashRegisterOption[]);
+      })
+      .catch(() => {
+        // Форма оплаты без списка касс просто не даст выбрать кассу —
+        // остальная часть экрана финансов остаётся рабочей
+      });
+  }, []);
 
   // ---- поля, нужные только для возврата поставщику (formMode === 'return') ----
   const [returnArticle, setReturnArticle] = useState('');
@@ -166,6 +190,10 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
       setFormError('Для ручной корректировки укажите комментарий.');
       return;
     }
+    if (formMode === 'payment' && !paymentCashRegisterId) {
+      setFormError('Выберите кассу, из которой выплачены деньги поставщику.');
+      return;
+    }
 
     setSaving(true);
     try {
@@ -191,6 +219,7 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
           body: JSON.stringify({
             type: formMode === 'payment' ? 'payment_out' : 'adjustment',
             amount: signedAmount,
+            cashRegisterId: formMode === 'payment' ? paymentCashRegisterId : undefined,
             comment: comment || undefined,
           }),
         });
@@ -204,6 +233,7 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
       setInvoiceNumber('');
       setAmount('');
       setComment('');
+      setPaymentCashRegisterId('');
       await fetchData();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Ошибка сети при записи операции');
@@ -381,6 +411,27 @@ export default function SupplierFinanceScreen({ supplierId }: { supplierId: stri
                       className="w-full px-3 py-2 text-sm rounded-md font-mono"
                       style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
                     />
+                  </div>
+                )}
+
+                {formMode === 'payment' && (
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                      Касса
+                    </label>
+                    <select
+                      value={paymentCashRegisterId}
+                      onChange={(e) => setPaymentCashRegisterId(e.target.value)}
+                      className="w-full px-3 py-2 text-sm rounded-md"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                    >
+                      <option value="">Выберите кассу</option>
+                      {cashRegisters.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          {r.name} ({r.balance.toLocaleString('ru-RU')} ₴)
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
 

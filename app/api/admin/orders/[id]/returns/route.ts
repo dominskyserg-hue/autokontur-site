@@ -66,6 +66,11 @@ interface CreateReturnRequestBody {
   reason?: string;
   refundMethod?: string;
   comment?: string;
+  // Из какой кассы физически выданы деньги — обязателен, если деньги
+  // реально выдаются (refundMethod = 'cash' | 'card'); при
+  // refundMethod = 'balance' деньги никуда не платятся (просто растёт
+  // предоплата клиента на будущее), кассу указывать не нужно
+  cashRegisterId?: string;
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -97,6 +102,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const comment = (body.comment || '').trim() || null;
   const restock = body.reason !== 'defect';
+
+  const needsCashRegister = body.refundMethod !== 'balance';
+  if (needsCashRegister && (!body.cashRegisterId || !UUID_PATTERN.test(body.cashRegisterId))) {
+    return NextResponse.json({ error: 'Укажите кассу, из которой выданы деньги клиенту.' }, { status: 400 });
+  }
 
   const client = await pool.connect();
   try {
@@ -165,15 +175,52 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
     const refundAmount = parseFloat(item.price) * (body.quantity as number);
 
+    // Деньги реально выдаются из кассы — проверяем остаток ДО того, как
+    // что-либо спишем (нельзя выдать из кассы больше, чем там есть),
+    // и только потом продолжаем оформление возврата
+    if (needsCashRegister) {
+      const registerResult = await client.query(
+        'SELECT id, name, balance, is_active FROM cash_registers WHERE id = $1 FOR UPDATE',
+        [body.cashRegisterId]
+      );
+      if (registerResult.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'Касса не найдена.' }, { status: 404 });
+      }
+      const register = registerResult.rows[0];
+      if (!register.is_active) {
+        await client.query('ROLLBACK');
+        return NextResponse.json({ error: 'Касса деактивирована.' }, { status: 400 });
+      }
+      if (parseFloat(register.balance) < refundAmount) {
+        await client.query('ROLLBACK');
+        return NextResponse.json(
+          { error: `Недостаточно средств в кассе «${register.name}»: остаток ${register.balance} грн, нужно ${refundAmount} грн.` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Транзакцию в леджер клиента пишем, только если у заказа вообще
     // есть привязанный customer_id (у заказов, оформленных ДО миграции
     // секции 28 schema.sql, его может не быть) — сам возврат при этом
     // всё равно оформляется полностью корректно
+    let customerTransactionId: string | null = null;
     if (customerId) {
+      const transactionResult = await client.query(
+        `INSERT INTO customer_transactions (customer_id, amount, type, order_id, return_id, cash_register_id, affects_customer_balance, comment, created_by)
+         VALUES ($1, $2, 'return_refund', $3, $4, $5, $6, $7, 'admin')
+         RETURNING id`,
+        [customerId, -refundAmount, orderId, returnId, needsCashRegister ? body.cashRegisterId : null, body.refundMethod === 'balance', comment]
+      );
+      customerTransactionId = transactionResult.rows[0].id;
+    }
+
+    if (needsCashRegister) {
       await client.query(
-        `INSERT INTO customer_transactions (customer_id, amount, type, order_id, return_id, affects_customer_balance, comment, created_by)
-         VALUES ($1, $2, 'return_refund', $3, $4, $5, $6, 'admin')`,
-        [customerId, -refundAmount, orderId, returnId, body.refundMethod === 'balance', comment]
+        `INSERT INTO cash_movements (cash_register_id, amount, type, customer_transaction_id, order_id, comment, created_by)
+         VALUES ($1, $2, 'customer_refund', $3, $4, $5, 'admin')`,
+        [body.cashRegisterId, -refundAmount, customerTransactionId, orderId, comment]
       );
     }
 
