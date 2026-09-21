@@ -78,6 +78,7 @@ export type AdminSection =
   | 'customerDiscounts'
   | 'vinRequests'
   | 'analytics'
+  | 'reports'
   | 'settings';
 
 interface NavItem {
@@ -109,6 +110,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'customerDiscounts', label: 'Скидки и наценки клиентам', href: '/admin/customer-pricing-rules' },
       { key: 'vinRequests', label: 'VIN-запросы', href: '/admin/vin-requests' },
       { key: 'analytics', label: 'Аналитика', href: '/admin/analytics' },
+      { key: 'reports', label: 'Отчёты', href: '/admin/reports' },
     ],
   },
   {
