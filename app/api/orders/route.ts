@@ -59,7 +59,15 @@ globalThis.pgPool = pool;
 // Ровно тот же набор значений, что и в CHECK-ограничении колонки
 // orders.status в schema.sql — если когда-нибудь понадобится новый
 // статус, менять нужно СРАЗУ в двух местах: там и здесь
-const STATUS_VALUES = ['new', 'processing', 'awaiting_parts', 'ready', 'cancelled'] as const;
+const STATUS_VALUES = [
+  'new',
+  'processing',
+  'ordered_from_supplier',
+  'in_stock',
+  'ready_for_pickup',
+  'shipped',
+  'cancelled',
+] as const;
 type OrderStatus = (typeof STATUS_VALUES)[number];
 
 function isValidStatus(value: string): value is OrderStatus {

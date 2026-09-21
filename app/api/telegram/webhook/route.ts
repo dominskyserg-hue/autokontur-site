@@ -163,8 +163,10 @@ const MAIN_MENU_KEYBOARD: TelegramReplyKeyboard = {
 const STATUS_LABELS: Record<string, string> = {
   new: 'Новий',
   processing: 'В обробці',
-  awaiting_parts: 'Очікує запчастини',
-  ready: 'Готовий до видачі',
+  ordered_from_supplier: 'Замовлено у постачальника',
+  in_stock: 'На складі',
+  ready_for_pickup: 'Готовий до видачі',
+  shipped: 'Відправлено',
   cancelled: 'Скасовано',
 };
 

@@ -24,13 +24,27 @@ import AdminLayout from './AdminLayout';
 // СТАТУСЫ ЗАКАЗА — тот же набор, что и на бэкенде (см.
 // app/api/orders/route.ts и CHECK-ограничение в schema.sql)
 // ------------------------------------------------------------
-type OrderStatus = 'new' | 'processing' | 'awaiting_parts' | 'ready' | 'cancelled';
+// Было 5 статусов, стало 7 (секция 28 schema.sql, финансово-складской
+// модуль) — детальнее отражают цепочку "нужно заказать у поставщика →
+// пришло на склад → готово к выдаче". Старые 'awaiting_parts'/'ready'
+// перенесены в базе на 'ordered_from_supplier'/'ready_for_pickup'
+// соответственно (см. миграцию), этот список — их актуальная замена
+type OrderStatus =
+  | 'new'
+  | 'processing'
+  | 'ordered_from_supplier'
+  | 'in_stock'
+  | 'ready_for_pickup'
+  | 'shipped'
+  | 'cancelled';
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
-  new: 'Новый',
+  new: 'Новое',
   processing: 'В обработке',
-  awaiting_parts: 'Ожидает запчасти',
-  ready: 'Готов к выдаче',
+  ordered_from_supplier: 'Заказано у поставщика',
+  in_stock: 'На складе',
+  ready_for_pickup: 'Готов к выдаче',
+  shipped: 'Отгружен',
   cancelled: 'Отменён',
 };
 
@@ -40,14 +54,24 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
 const STATUS_COLORS: Record<OrderStatus, { bg: string; fg: string }> = {
   new: { bg: '#1B2142', fg: '#8FA8FF' },
   processing: { bg: '#3A2A16', fg: '#F2A65A' },
-  awaiting_parts: { bg: '#2B1F4A', fg: '#B79CFF' },
-  ready: { bg: '#12301F', fg: '#3FBE8B' },
+  ordered_from_supplier: { bg: '#2B1F4A', fg: '#B79CFF' },
+  in_stock: { bg: '#173A3A', fg: '#4FD1D1' },
+  ready_for_pickup: { bg: '#12301F', fg: '#3FBE8B' },
+  shipped: { bg: '#0F2E1A', fg: '#34D399' },
   cancelled: { bg: '#3A1E22', fg: '#F2635F' },
 };
 
 // Порядок статусов в выпадающем списке — не алфавитный, а
 // "естественный" порядок жизни заказа, от нового до готового/отменённого
-const STATUS_OPTIONS: OrderStatus[] = ['new', 'processing', 'awaiting_parts', 'ready', 'cancelled'];
+const STATUS_OPTIONS: OrderStatus[] = [
+  'new',
+  'processing',
+  'ordered_from_supplier',
+  'in_stock',
+  'ready_for_pickup',
+  'shipped',
+  'cancelled',
+];
 
 // ------------------------------------------------------------
 // ТИПЫ — повторяют то, что отдаёт бэкенд

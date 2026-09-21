@@ -55,7 +55,15 @@ function isValidUuid(value: string): boolean {
   return UUID_PATTERN.test(value);
 }
 
-const STATUS_VALUES = ['new', 'processing', 'awaiting_parts', 'ready', 'cancelled'] as const;
+const STATUS_VALUES = [
+  'new',
+  'processing',
+  'ordered_from_supplier',
+  'in_stock',
+  'ready_for_pickup',
+  'shipped',
+  'cancelled',
+] as const;
 type OrderStatus = (typeof STATUS_VALUES)[number];
 
 const MIN_PHONE_DIGITS = 9;

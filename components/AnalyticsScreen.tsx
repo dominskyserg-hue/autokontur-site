@@ -29,21 +29,35 @@ import HorizontalBarChart from './charts/HorizontalBarChart';
 // "Заказы" (components/OrdersScreen.tsx), чтобы один и тот же статус
 // выглядел одинаково в обоих местах интерфейса
 // ------------------------------------------------------------
-type OrderStatus = 'new' | 'processing' | 'awaiting_parts' | 'ready' | 'cancelled';
+// Було 5 статусов, стало 7 (секция 28 schema.sql, фінансово-складський
+// модуль) — старые 'awaiting_parts'/'ready' перенесены в базе на
+// 'ordered_from_supplier'/'ready_for_pickup' соответственно
+type OrderStatus =
+  | 'new'
+  | 'processing'
+  | 'ordered_from_supplier'
+  | 'in_stock'
+  | 'ready_for_pickup'
+  | 'shipped'
+  | 'cancelled';
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
-  new: 'Новый',
+  new: 'Новое',
   processing: 'В обработке',
-  awaiting_parts: 'Ожидает запчасти',
-  ready: 'Готов к выдаче',
+  ordered_from_supplier: 'Заказано у поставщика',
+  in_stock: 'На складе',
+  ready_for_pickup: 'Готов к выдаче',
+  shipped: 'Отгружен',
   cancelled: 'Отменён',
 };
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
   new: '#8FA8FF',
   processing: '#F2A65A',
-  awaiting_parts: '#B79CFF',
-  ready: '#3FBE8B',
+  ordered_from_supplier: '#B79CFF',
+  in_stock: '#4FD1D1',
+  ready_for_pickup: '#3FBE8B',
+  shipped: '#34D399',
   cancelled: '#F2635F',
 };
 

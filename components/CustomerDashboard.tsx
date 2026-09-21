@@ -68,7 +68,17 @@ import {
 // ------------------------------------------------------------
 // ТИПИ — повторюють те, що віддає бекенд
 // ------------------------------------------------------------
-type OrderStatus = 'new' | 'processing' | 'awaiting_parts' | 'ready' | 'cancelled';
+// Було 5 статусів, стало 7 (секція 28 schema.sql, фінансово-складський
+// модуль) — старі 'awaiting_parts'/'ready' перенесені в базі на
+// 'ordered_from_supplier'/'ready_for_pickup' відповідно
+type OrderStatus =
+  | 'new'
+  | 'processing'
+  | 'ordered_from_supplier'
+  | 'in_stock'
+  | 'ready_for_pickup'
+  | 'shipped'
+  | 'cancelled';
 
 interface OrderListItem {
   id: string;
@@ -173,12 +183,14 @@ function clearCustomerPhoneCookie() {
 const STATUS_META: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
   new: { label: 'Новий', bg: 'rgba(255,255,255,0.06)', fg: TECH_MUTED },
   processing: { label: 'В обробці', bg: TECH_HEAT_SOFT, fg: TECH_HEAT },
-  awaiting_parts: { label: 'Очікує запчастини', bg: 'rgba(59,130,246,0.14)', fg: TECH_ACCENT_BRIGHT },
-  ready: { label: 'Готовий до видачі', bg: TECH_GOOD_SOFT, fg: TECH_GOOD },
+  ordered_from_supplier: { label: 'Замовлено у постачальника', bg: 'rgba(59,130,246,0.14)', fg: TECH_ACCENT_BRIGHT },
+  in_stock: { label: 'На складі', bg: 'rgba(79,209,209,0.14)', fg: '#4FD1D1' },
+  ready_for_pickup: { label: 'Готовий до видачі', bg: TECH_GOOD_SOFT, fg: TECH_GOOD },
+  shipped: { label: 'Відправлено', bg: TECH_GOOD_SOFT, fg: TECH_GOOD },
   cancelled: { label: 'Скасовано', bg: 'rgba(239,68,68,0.14)', fg: '#FCA5A5' },
 };
 
-const IN_PROGRESS_STATUSES: OrderStatus[] = ['new', 'processing', 'awaiting_parts'];
+const IN_PROGRESS_STATUSES: OrderStatus[] = ['new', 'processing', 'ordered_from_supplier', 'in_stock'];
 
 function formatMoney(value: number): string {
   return Math.ceil(value).toLocaleString('uk-UA', { maximumFractionDigits: 0 });
