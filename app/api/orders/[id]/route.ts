@@ -105,6 +105,14 @@ interface OrderDetailsResponse {
   customerPhone: string;
   city: string;
   novaPoshtaAddress: string;
+  // Ref міста/відділення, обраних покупцем через реальний пошук Нової
+  // Пошти на вітрині (секція 33 schema.sql) — якщо є, картка заказа
+  // підставляє відділення для створення ТТН одразу, без повторного
+  // пошуку (components/OrderDetailsModal.tsx). null для замовлень,
+  // де адресу вводили вручну текстом (курʼєр, недоступність API під
+  // час оформлення) або створених адміністратором вручну
+  cityRef: string | null;
+  warehouseRef: string | null;
   comment: string | null;
   ttnNumber: string | null;
   // Ref документа в самій Новій Пошті — тільки якщо ТТН створили
@@ -143,7 +151,8 @@ export async function GET(
   try {
     const orderResult = await pool.query(
       `
-      SELECT id, order_number, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment,
+      SELECT id, order_number, customer_name, customer_surname, customer_phone, city, nova_poshta_address,
+             city_ref, warehouse_ref, comment,
              ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at
       FROM orders
       WHERE id = $1
@@ -212,6 +221,8 @@ export async function GET(
       customerPhone: orderRow.customer_phone,
       city: orderRow.city,
       novaPoshtaAddress: orderRow.nova_poshta_address,
+      cityRef: orderRow.city_ref,
+      warehouseRef: orderRow.warehouse_ref,
       comment: orderRow.comment,
       ttnNumber: orderRow.ttn_number,
       ttnRef: orderRow.ttn_ref,

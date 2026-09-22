@@ -68,6 +68,17 @@ interface NovaPoshtaAddressFieldsProps {
   onAddressBlur?: () => void;
   addressError?: string | null;
   addressPlaceholder: string;
+  // Ref міста/відділення з відповіді Нової Пошти — потрібні НЕ для
+  // самої вітрини (тут вони ніде не показуються), а щоб зберегти їх
+  // разом із замовленням (orders.city_ref/warehouse_ref, схема —
+  // секція 33 schema.sql). Тоді оператору в адмінці не доведеться
+  // заново шукати те саме відділення, яке покупець вже обрав тут, щоб
+  // створити ТТН (components/OrderDetailsModal.tsx). Скидаються в null,
+  // щойно покупець вручну змінює текст (вибір більше не гарантовано
+  // відповідає цьому Ref) — необов'язкові пропси, без них компонент
+  // поводиться так само, як і раніше
+  onCityRefChange?: (ref: string | null) => void;
+  onWarehouseRefChange?: (ref: string | null) => void;
 }
 
 // Скільки мілісекунд чекати після останнього натискання клавіші,
@@ -86,6 +97,8 @@ export default function NovaPoshtaAddressFields({
   onAddressBlur,
   addressError,
   addressPlaceholder,
+  onCityRefChange,
+  onWarehouseRefChange,
 }: NovaPoshtaAddressFieldsProps) {
   const [cityRef, setCityRef] = useState('');
   const [cityOptions, setCityOptions] = useState<CityOption[]>([]);
@@ -158,16 +171,19 @@ export default function NovaPoshtaAddressFields({
   const handlePickCity = (option: CityOption) => {
     onCityChange(option.name);
     setCityRef(option.ref);
+    onCityRefChange?.(option.ref);
     setCityOpen(false);
     // Місто змінилось — раніше обране відділення могло належати
     // іншому місту, тому скидаємо і його, щоб не відправити разом
     // "Харків" + "Відділення №3, Львів"
     onAddressChange('');
+    onWarehouseRefChange?.(null);
     setWarehouseQuery('');
   };
 
   const handlePickWarehouse = (option: WarehouseOption) => {
     onAddressChange(option.description);
+    onWarehouseRefChange?.(option.ref);
     setWarehouseOpen(false);
   };
 
@@ -181,6 +197,8 @@ export default function NovaPoshtaAddressFields({
           onChange={(e) => {
             onCityChange(e.target.value);
             setCityRef('');
+            onCityRefChange?.(null);
+            onWarehouseRefChange?.(null);
             setCityOpen(true);
           }}
           onFocus={() => setCityOpen(true)}

@@ -67,6 +67,8 @@ interface OrderDetails {
   customerPhone: string;
   city: string;
   novaPoshtaAddress: string;
+  cityRef: string | null;
+  warehouseRef: string | null;
   comment: string | null;
   ttnNumber: string | null;
   ttnRef: string | null;
@@ -148,6 +150,14 @@ export default function OrderDetailsModal({
   const [ttnRecipient, setTtnRecipient] = useState<{ cityRef: string; warehouseRef: string; label: string } | null>(
     null
   );
+  // Якщо покупець на вітрині вже обрав місто й відділення через
+  // реальний пошук Нової Пошти — orderDetails.cityRef/warehouseRef
+  // заповнені (секція 33 schema.sql), і шукати їх заново не треба:
+  // одразу підставляємо готового отримувача. showManualPicker вмикає
+  // ручний пошук (components/AdminNovaPoshtaPicker.tsx) — коли Ref'ів
+  // немає (замовлення оформлене вручну текстом) або коли адмін сам
+  // натиснув "Змінити", бо клієнт попросив інше відділення
+  const [showManualPicker, setShowManualPicker] = useState(false);
   const [ttnWeight, setTtnWeight] = useState('1');
   const [ttnSeats, setTtnSeats] = useState('1');
   const [ttnCost, setTtnCost] = useState('');
@@ -357,6 +367,17 @@ export default function OrderDetailsModal({
   const openCreateTtn = () => {
     setCreateTtnError(null);
     setTtnCost(orderDetails ? String(Math.ceil(orderDetails.totalAmount)) : '');
+
+    const knownRecipient =
+      orderDetails?.cityRef && orderDetails?.warehouseRef
+        ? { cityRef: orderDetails.cityRef, warehouseRef: orderDetails.warehouseRef, label: `${orderDetails.city}, ${orderDetails.novaPoshtaAddress}` }
+        : null;
+    setTtnRecipient(knownRecipient);
+    // Ручний пошук потрібен лише тоді, коли готового відповідника
+    // немає — інакше адмін одразу бачить те відділення, яке покупець
+    // вже обрав на сайті, і йому не треба нічого шукати заново
+    setShowManualPicker(!knownRecipient);
+
     setShowCreateTtn(true);
   };
 
@@ -759,17 +780,43 @@ export default function OrderDetailsModal({
 
                     {showCreateTtn && (
                       <div className="mt-2.5 pt-2.5 flex flex-col gap-2" style={{ borderTop: '1px dashed var(--line)' }}>
-                        <AdminNovaPoshtaPicker
-                          initialCityQuery={orderDetails.city}
-                          initialWarehouseQuery={orderDetails.novaPoshtaAddress}
-                          onPick={({ cityRef, cityName, warehouseRef, warehouseDescription }) =>
-                            setTtnRecipient({ cityRef, warehouseRef, label: `${cityName}, ${warehouseDescription}` })
-                          }
-                        />
-                        {ttnRecipient && (
-                          <p className="text-[11px]" style={{ color: 'var(--good)' }}>
-                            Обрано: {ttnRecipient.label}
-                          </p>
+                        {/* Покупець уже обрав це відділення на сайті через
+                            реальний пошук Нової Пошти (city_ref/warehouse_ref,
+                            секція 33 schema.sql) — шукати заново не треба,
+                            просто показуємо, що саме буде використано, з
+                            можливістю обрати інше через "Змінити" */}
+                        {!showManualPicker && ttnRecipient ? (
+                          <div
+                            className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-md text-[11px]"
+                            style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}
+                          >
+                            <span style={{ color: 'var(--good)' }}>
+                              ✓ {ttnRecipient.label} <span style={{ color: 'var(--ink-faint)' }}>(з форми замовлення)</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowManualPicker(true)}
+                              className="underline shrink-0"
+                              style={{ color: 'var(--accent)' }}
+                            >
+                              Змінити
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <AdminNovaPoshtaPicker
+                              initialCityQuery={orderDetails.city}
+                              initialWarehouseQuery={orderDetails.novaPoshtaAddress}
+                              onPick={({ cityRef, cityName, warehouseRef, warehouseDescription }) =>
+                                setTtnRecipient({ cityRef, warehouseRef, label: `${cityName}, ${warehouseDescription}` })
+                              }
+                            />
+                            {ttnRecipient && (
+                              <p className="text-[11px]" style={{ color: 'var(--good)' }}>
+                                Обрано: {ttnRecipient.label}
+                              </p>
+                            )}
+                          </>
                         )}
 
                         <div className="grid grid-cols-3 gap-2">

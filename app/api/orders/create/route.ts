@@ -152,6 +152,14 @@ interface OrderCreateRequestBody {
   customerPhone?: string;
   city?: string;
   novaPoshtaAddress?: string;
+  // Ref міста/відділення з реального пошуку Нової Пошти на вітрині
+  // (components/NovaPoshtaAddressFields.tsx) — необов'язкові, null,
+  // якщо покупець ввів адресу вручну текстом або обрав доставку
+  // кур'єром. Зберігаються, щоб оператору в адмінці не доводилось
+  // шукати те саме відділення заново для створення ТТН (схема —
+  // секція 33 schema.sql, app/api/orders/[id]/route.ts)
+  cityRef?: string | null;
+  warehouseRef?: string | null;
   comment?: string;
   items?: OrderCreateItemInput[];
   // Атрибуция первого визита (см. lib/attribution.ts) — откуда
@@ -198,6 +206,12 @@ export async function POST(request: NextRequest) {
   const customerPhone = (body.customerPhone || '').trim();
   const city = (body.city || '').trim();
   const novaPoshtaAddress = (body.novaPoshtaAddress || '').trim();
+  // Просто доверяем тому, что прислал фронтенд — эти Ref ни на что не
+  // влияют в самом заказе, они лишь ускоряют создание ТТН в адмінці
+  // позже (см. комментарий у поля в интерфейсе выше), поэтому нет
+  // смысла проверять их через отдельный запрос к API Новой Пошти
+  const cityRef = body.cityRef?.trim() || null;
+  const warehouseRef = body.warehouseRef?.trim() || null;
   // comment — единственное необязательное поле из этой группы:
   // пустая строка превращается в null, а не сохраняется как есть,
   // чтобы в базе не копились строки из одних пробелов
@@ -343,10 +357,10 @@ export async function POST(request: NextRequest) {
     const orderResult = await client.query<{ id: string; order_number: number }>(
       `
       INSERT INTO orders (
-        customer_id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment, status,
+        customer_id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, city_ref, warehouse_ref, comment, status,
         utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid, referrer
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', $8, $9, $10, $11, $12, $13, $14)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'new', $10, $11, $12, $13, $14, $15, $16)
       RETURNING id, order_number
       `,
       [
@@ -356,6 +370,8 @@ export async function POST(request: NextRequest) {
         customerPhone,
         city,
         novaPoshtaAddress,
+        cityRef,
+        warehouseRef,
         comment,
         utmSource,
         utmMedium,

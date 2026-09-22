@@ -683,6 +683,14 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
   const [customerPhone, setCustomerPhone] = useState('');
   const [city, setCity] = useState('');
   const [novaPoshtaAddress, setNovaPoshtaAddress] = useState('');
+  // Ref міста/відділення, обраних через реальний пошук Нової Пошти
+  // (components/NovaPoshtaAddressFields.tsx) — зберігаємо разом із
+  // замовленням, щоб оператору в адмінці не доводилось шукати те саме
+  // відділення заново для створення ТТН (components/OrderDetailsModal.tsx).
+  // null, якщо покупець ввів адресу вручну текстом (без вибору зі
+  // списку) — тоді адмінка просто працює по-старому
+  const [cityRef, setCityRef] = useState<string | null>(null);
+  const [warehouseRef, setWarehouseRef] = useState<string | null>(null);
   const [comment, setComment] = useState('');
 
   // Спосіб доставки — ЛИШЕ перемикає підписи/плейсхолдери полів
@@ -875,6 +883,8 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
           customerPhone: customerPhone.trim(),
           city: city.trim(),
           novaPoshtaAddress: novaPoshtaAddress.trim(),
+          cityRef: deliveryMethod === 'branch' ? cityRef : null,
+          warehouseRef: deliveryMethod === 'branch' ? warehouseRef : null,
           comment: fullComment,
           // Артикул/бренд/название/цену бэкенд перечитывает из базы
           // сам по id товара (см. комментарий в app/api/orders/create/
@@ -932,6 +942,8 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
       setCustomerPhone('');
       setCity('');
       setNovaPoshtaAddress('');
+      setCityRef(null);
+      setWarehouseRef(null);
       setComment('');
       setNameTouched(false);
       setSurnameTouched(false);
@@ -1308,6 +1320,8 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
             onPhoneChange={setCustomerPhone}
             onCityChange={setCity}
             onAddressChange={setNovaPoshtaAddress}
+            onCityRefChange={setCityRef}
+            onWarehouseRefChange={setWarehouseRef}
             onCommentChange={setComment}
             onDeliveryMethodChange={setDeliveryMethod}
             onVinProtectChange={setVinProtect}
@@ -2923,6 +2937,8 @@ interface CartDrawerProps {
   onPhoneChange: (value: string) => void;
   onCityChange: (value: string) => void;
   onAddressChange: (value: string) => void;
+  onCityRefChange: (ref: string | null) => void;
+  onWarehouseRefChange: (ref: string | null) => void;
   onCommentChange: (value: string) => void;
   onDeliveryMethodChange: (value: 'branch' | 'courier') => void;
   onVinProtectChange: (value: boolean) => void;
@@ -2985,6 +3001,8 @@ function CartDrawer({
   onPhoneChange,
   onCityChange,
   onAddressChange,
+  onCityRefChange,
+  onWarehouseRefChange,
   onCommentChange,
   onDeliveryMethodChange,
   onVinProtectChange,
@@ -3186,6 +3204,8 @@ function CartDrawer({
                   onAddressBlur={onAddressBlur}
                   addressError={addressError}
                   addressPlaceholder={addressCopy.placeholder}
+                  onCityRefChange={onCityRefChange}
+                  onWarehouseRefChange={onWarehouseRefChange}
                 />
 
                 <div>
