@@ -4,17 +4,24 @@
 // Экран "Новый заказ" — оформление заказа менеджером из админ-панели
 // (клиент позвонил/написал напрямую, а не сам прошёл корзину на сайте).
 //
-// Использует уже существующие эндпоинты, ничего нового на бэкенде не
-// понадобилось:
+// Использует эндпоинты:
 //   GET  /api/admin/customers?search=...  — подсказка по телефону,
 //                                            если клиент уже покупал
 //   GET  /api/products?search=...&pageSize=10  — поиск товаров в каталог
-//   POST /api/orders/create               — то же самое создание
-//                                            заказа, которым пользуется
-//                                            витрина (customer_id и
-//                                            cost_price-снимок
-//                                            проставляются автоматически,
-//                                            см. app/api/orders/create/route.ts)
+//   POST /api/admin/orders/create         — создание заказа менеджером.
+//                                            В отличие от публичного
+//                                            /api/orders/create (им
+//                                            пользуется витрина, и он
+//                                            намеренно игнорирует цену
+//                                            из тела запроса — иначе
+//                                            анонимный покупатель мог
+//                                            бы подделать её), этот
+//                                            роут защищён паролем
+//                                            админки и ДОВЕРЯЕТ цене
+//                                            продажи и закупочной цене,
+//                                            которые менеджер вписал
+//                                            вручную для каждой позиции
+//                                            (см. app/api/admin/orders/create/route.ts)
 //
 // Город/адрес необязательны для заполнения прямо сейчас — если их
 // ещё не знают, кнопка "Уточнить по телефону" подставляет ту же
@@ -43,6 +50,7 @@ interface ProductSearchResult {
   article: string;
   brand: string | null;
   name: string | null;
+  costPrice: number;
   retailPrice: number;
   stock: number;
   supplierName: string;
@@ -53,7 +61,14 @@ interface CartItem {
   article: string;
   brand: string | null;
   name: string | null;
-  retailPrice: number;
+  // Цена закупки и цена продажи ЗА ОДНУ ШТУКУ — обе редактируемые:
+  // подставляются из каталога при добавлении товара, но менеджер может
+  // тут же поправить любую из них (согласовал скидку с клиентом по
+  // телефону, знает реальную закупочную цену этой конкретной поставки
+  // и т.п.). Именно эти значения уходят в order_items.price/cost_price
+  // при отправке заказа — см. app/api/admin/orders/create/route.ts
+  costPrice: number;
+  price: number;
   stock: number;
   quantity: number;
 }
@@ -166,7 +181,8 @@ export default function NewOrderScreen() {
           article: product.article,
           brand: product.brand,
           name: product.name,
-          retailPrice: product.retailPrice,
+          costPrice: product.costPrice,
+          price: product.retailPrice,
           stock: product.stock,
           quantity: 1,
         },
@@ -180,11 +196,19 @@ export default function NewOrderScreen() {
     setCart((prev) => prev.map((item) => (item.id === id ? { ...item, quantity } : item)));
   };
 
+  const updatePrice = (id: string, price: number) => {
+    setCart((prev) => prev.map((item) => (item.id === id ? { ...item, price } : item)));
+  };
+
+  const updateCostPrice = (id: string, costPrice: number) => {
+    setCart((prev) => prev.map((item) => (item.id === id ? { ...item, costPrice } : item)));
+  };
+
   const removeFromCart = (id: string) => {
     setCart((prev) => prev.filter((item) => item.id !== id));
   };
 
-  const cartTotal = cart.reduce((sum, item) => sum + item.retailPrice * item.quantity, 0);
+  const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   const applyPendingNote = () => {
     setCity(PENDING_NOTE);
@@ -218,10 +242,14 @@ export default function NewOrderScreen() {
       setSubmitError('Добавьте хотя бы один товар в заказ.');
       return;
     }
+    if (cart.some((item) => !Number.isFinite(item.price) || item.price < 0 || !Number.isFinite(item.costPrice) || item.costPrice < 0)) {
+      setSubmitError('Цена продажи и цена закупки должны быть корректными числами (0 или больше).');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      const response = await fetch('/api/orders/create', {
+      const response = await fetch('/api/admin/orders/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -231,7 +259,7 @@ export default function NewOrderScreen() {
           city: city.trim(),
           novaPoshtaAddress: novaPoshtaAddress.trim(),
           comment: comment.trim() || 'Заказ оформлен менеджером из админ-панели.',
-          items: cart.map((item) => ({ id: item.id, count: item.quantity })),
+          items: cart.map((item) => ({ id: item.id, count: item.quantity, price: item.price, costPrice: item.costPrice })),
         }),
       });
       const data = await response.json();
@@ -485,7 +513,7 @@ export default function NewOrderScreen() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                      {['Товар', 'Цена', 'Кол-во', 'Сумма', ''].map((h) => (
+                      {['Товар', 'Цена закупки', 'Цена продажи', 'Кол-во', 'Сумма', ''].map((h) => (
                         <th
                           key={h}
                           className="text-left px-4 py-2 text-xs font-medium whitespace-nowrap"
@@ -505,7 +533,28 @@ export default function NewOrderScreen() {
                             {item.article}
                           </p>
                         </td>
-                        <td className="px-4 py-2.5 font-mono whitespace-nowrap">{formatMoney(item.retailPrice)}</td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          <input
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={item.costPrice}
+                            onChange={(e) => updateCostPrice(item.id, Math.max(0, parseFloat(e.target.value) || 0))}
+                            className="w-24 px-2 py-1 text-xs rounded-md font-mono"
+                            style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                          />
+                        </td>
+                        <td className="px-4 py-2.5 whitespace-nowrap">
+                          <input
+                            type="number"
+                            min={0}
+                            step="any"
+                            value={item.price}
+                            onChange={(e) => updatePrice(item.id, Math.max(0, parseFloat(e.target.value) || 0))}
+                            className="w-24 px-2 py-1 text-xs rounded-md font-mono"
+                            style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                          />
+                        </td>
                         <td className="px-4 py-2.5 whitespace-nowrap">
                           <input
                             type="number"
@@ -517,7 +566,7 @@ export default function NewOrderScreen() {
                           />
                         </td>
                         <td className="px-4 py-2.5 font-mono whitespace-nowrap">
-                          {formatMoney(item.retailPrice * item.quantity)}
+                          {formatMoney(item.price * item.quantity)}
                         </td>
                         <td className="px-4 py-2.5 text-right whitespace-nowrap">
                           <button
@@ -534,7 +583,7 @@ export default function NewOrderScreen() {
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={3} className="px-4 py-3 text-sm font-semibold text-right">
+                      <td colSpan={4} className="px-4 py-3 text-sm font-semibold text-right">
                         Итого
                       </td>
                       <td colSpan={2} className="px-4 py-3 text-sm font-semibold font-mono">
