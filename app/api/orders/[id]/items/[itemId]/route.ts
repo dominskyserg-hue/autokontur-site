@@ -147,7 +147,7 @@ export async function PATCH(
         supplier_id = COALESCE($4, supplier_id),
         supplier_name = COALESCE($5, supplier_name)
       WHERE id = $1 AND order_id = $2
-      RETURNING id, article, brand, name, price, quantity, supplier_id, supplier_name
+      RETURNING id, article, brand, name, price, quantity, supplier_id, supplier_name, status
       `,
       [
         itemId,
@@ -180,6 +180,7 @@ export async function PATCH(
         quantity: row.quantity,
         supplierId: row.supplier_id,
         supplierName: row.supplier_name,
+        status: row.status,
       },
     });
   } catch (error) {
