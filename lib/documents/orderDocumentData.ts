@@ -8,7 +8,7 @@
 import { Pool } from 'pg';
 import { getCompanyRequisites } from './companySettings';
 import { getOrCreateDocumentNumber, type DocumentType } from './numbering';
-import type { DocumentOrderInfo, OrderDocumentData, ReturnActItem } from './types';
+import { DEFAULT_DISPLAY_OPTIONS, type DocumentDisplayOptions, type DocumentOrderInfo, type OrderDocumentData, type ReturnActItem } from './types';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -86,7 +86,8 @@ export interface ReturnActInput {
 export async function buildOrderDocumentData(
   orderId: string,
   docType: DocumentType,
-  returnInput?: ReturnActInput
+  returnInput?: ReturnActInput,
+  displayOptions?: Partial<DocumentDisplayOptions>
 ): Promise<OrderDocumentData> {
   const [order, company] = await Promise.all([loadOrder(orderId), getCompanyRequisites()]);
 
@@ -104,6 +105,7 @@ export async function buildOrderDocumentData(
     createdAt: record.createdAt,
     order,
     company,
+    displayOptions: { ...DEFAULT_DISPLAY_OPTIONS, ...displayOptions },
   };
 
   if (docType === 'return_act') {

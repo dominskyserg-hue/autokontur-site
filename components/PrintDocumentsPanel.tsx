@@ -21,9 +21,35 @@
 //   POST .../save     — сохранить PDF в заказ (Vercel Blob)
 // ============================================================
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type DocType = 'invoice' | 'delivery_note' | 'return_act';
+
+// Настройки того, что показывать в таблице позиций документа
+// (кнопка "Редактировать" в модальном окне предпросмотра) —
+// запоминаются в localStorage браузера, чтобы не переключать их
+// заново при каждом открытии печати
+const DISPLAY_OPTIONS_STORAGE_KEY = 'printDocuments.displayOptions';
+
+interface DisplayOptions {
+  showArticle: boolean;
+  showBrand: boolean;
+}
+
+function loadDisplayOptions(): DisplayOptions {
+  if (typeof window === 'undefined') return { showArticle: true, showBrand: true };
+  try {
+    const raw = window.localStorage.getItem(DISPLAY_OPTIONS_STORAGE_KEY);
+    if (!raw) return { showArticle: true, showBrand: true };
+    const parsed = JSON.parse(raw);
+    return {
+      showArticle: typeof parsed.showArticle === 'boolean' ? parsed.showArticle : true,
+      showBrand: typeof parsed.showBrand === 'boolean' ? parsed.showBrand : true,
+    };
+  } catch {
+    return { showArticle: true, showBrand: true };
+  }
+}
 
 const DOC_LABELS: Record<DocType, { icon: string; title: string }> = {
   invoice: { icon: '📄', title: 'Рахунок-фактура' },
@@ -58,6 +84,14 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // ---- "Редактировать" — какие колонки показывать в таблице позиций ----
+  const [showEditBar, setShowEditBar] = useState(false);
+  const [displayOptions, setDisplayOptions] = useState<DisplayOptions>({ showArticle: true, showBrand: true });
+
+  useEffect(() => {
+    setDisplayOptions(loadDisplayOptions());
+  }, []);
+
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   // Позиции, которые вообще можно вернуть — уже отменённые в саму
@@ -73,6 +107,14 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
     };
   }
 
+  // Собирает тело запроса для preview/download/save: позиции возврата
+  // (только для акта повернення) + текущие настройки видимости колонок
+  // "Артикул"/"Бренд" — они применяются ко всем трём типам документов
+  function buildRequestBody(docType: DocType): Record<string, unknown> {
+    const returnBody = docType === 'return_act' ? buildReturnBody() : null;
+    return { ...(returnBody || {}), ...displayOptions };
+  }
+
   async function openPreview(docType: DocType, body?: unknown) {
     setActiveDocType(docType);
     setPreviewHtml(null);
@@ -84,7 +126,7 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
       const response = await fetch(`/api/orders/${orderId}/documents/${docType}/preview`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body || {}),
+        body: JSON.stringify(body ?? buildRequestBody(docType)),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -100,6 +142,7 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
   }
 
   function handleButtonClick(docType: DocType) {
+    setShowEditBar(false);
     if (docType === 'return_act') {
       // Для акта повернення сначала показываем форму выбора позиций —
       // сама форма отрисовывается ниже, предпросмотр здесь ещё не грузим
@@ -112,22 +155,43 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
   }
 
   function handleBuildReturnAct() {
-    const body = buildReturnBody();
-    if (!body) {
+    const returnBody = buildReturnBody();
+    if (!returnBody) {
       setPreviewError('Отметьте хотя бы одну позицию для возврата и укажите количество');
       return;
     }
-    if (!body.reason) {
+    if (!returnBody.reason) {
       setPreviewError('Укажите причину возврата');
       return;
     }
-    openPreview('return_act', body);
+    openPreview('return_act', { ...returnBody, ...displayOptions });
+  }
+
+  // Переключатель "Показывать артикулы/бренды" — сразу перестраивает
+  // уже открытый предпросмотр тем же набором данных (позиции возврата,
+  // если это акт повернення, остаются теми же — buildRequestBody их
+  // подставит из уже заполненной формы)
+  function toggleDisplayOption(key: keyof DisplayOptions) {
+    const next = { ...displayOptions, [key]: !displayOptions[key] };
+    setDisplayOptions(next);
+    try {
+      window.localStorage.setItem(DISPLAY_OPTIONS_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      // localStorage может быть недоступен (приватный режим) — тогда
+      // настройка просто не переживёт перезагрузку страницы, не страшно
+    }
+
+    if (activeDocType && previewHtml) {
+      const returnBody = activeDocType === 'return_act' ? buildReturnBody() : null;
+      openPreview(activeDocType, { ...(returnBody || {}), ...next });
+    }
   }
 
   function closePanel() {
     setActiveDocType(null);
     setPreviewHtml(null);
     setPreviewError(null);
+    setShowEditBar(false);
   }
 
   function handlePrint() {
@@ -138,11 +202,10 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
     if (!activeDocType) return;
     setDownloading(true);
     try {
-      const returnBody = activeDocType === 'return_act' ? buildReturnBody() : undefined;
       const response = await fetch(`/api/orders/${orderId}/documents/${activeDocType}/download`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(returnBody || {}),
+        body: JSON.stringify(buildRequestBody(activeDocType)),
       });
       if (!response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -169,11 +232,10 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
     setSaving(true);
     setSaved(false);
     try {
-      const returnBody = activeDocType === 'return_act' ? buildReturnBody() : undefined;
       const response = await fetch(`/api/orders/${orderId}/documents/${activeDocType}/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(returnBody || {}),
+        body: JSON.stringify(buildRequestBody(activeDocType)),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -293,10 +355,50 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
                 {DOC_LABELS[activeDocType].icon} {DOC_LABELS[activeDocType].title}
                 {previewNumber ? ` № ${previewNumber}` : ''}
               </h3>
-              <button type="button" onClick={closePanel} className="text-sm px-2 py-1" style={{ color: 'var(--ink-muted)' }}>
-                ✕
-              </button>
+              <div className="flex items-center gap-1">
+                {previewHtml && (
+                  <button
+                    type="button"
+                    onClick={() => setShowEditBar((v) => !v)}
+                    className="text-sm px-2 py-1 rounded-md"
+                    style={{
+                      color: showEditBar ? 'var(--accent-ink)' : 'var(--ink-muted)',
+                      background: showEditBar ? 'var(--accent)' : 'transparent',
+                    }}
+                  >
+                    ✏️ Редактировать
+                  </button>
+                )}
+                <button type="button" onClick={closePanel} className="text-sm px-2 py-1" style={{ color: 'var(--ink-muted)' }}>
+                  ✕
+                </button>
+              </div>
             </div>
+
+            {/* ---- панель "Редактировать": что показывать в таблице ---- */}
+            {showEditBar && previewHtml && (
+              <div
+                className="flex flex-wrap items-center gap-4 px-4 py-2.5 text-sm"
+                style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}
+              >
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={displayOptions.showArticle}
+                    onChange={() => toggleDisplayOption('showArticle')}
+                  />
+                  Показывать артикулы
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={displayOptions.showBrand}
+                    onChange={() => toggleDisplayOption('showBrand')}
+                  />
+                  Показывать бренды
+                </label>
+              </div>
+            )}
 
             <div className="flex-1 overflow-hidden" style={{ background: '#E9EBEF' }}>
               {loadingPreview && (

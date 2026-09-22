@@ -10,7 +10,7 @@
 import { NextResponse } from 'next/server';
 import { buildOrderDocumentData, OrderNotFoundError, type ReturnActInput } from './orderDocumentData';
 import { hasExistingDocument, type DocumentType } from './numbering';
-import type { OrderDocumentData } from './types';
+import type { DocumentDisplayOptions, OrderDocumentData } from './types';
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DOC_TYPES: DocumentType[] = ['invoice', 'delivery_note', 'return_act'];
@@ -21,18 +21,27 @@ function isValidDocType(value: string): value is DocumentType {
 
 type ResolveResult = { data: OrderDocumentData } | { error: NextResponse };
 
-// Тело запроса используется только для акта повернення: { items:
-// [{ article, quantity }], reason }. Для рахунку и накладной тело
-// не нужно вовсе — оба документа полностью выводятся из самого
-// заказа, тело запроса в этих случаях просто игнорируется
-async function parseReturnInput(request: Request): Promise<ReturnActInput | undefined | NextResponse> {
+interface ParsedBody {
+  returnInput?: ReturnActInput;
+  displayOptions?: Partial<DocumentDisplayOptions>;
+}
+
+// Тело запроса необязательно для всех трёх типов документа. Для акта
+// повернення в нём же (не отдельным запросом) приходят { items:
+// [{ article, quantity }], reason } — позиции и причина возврата. Для
+// любого типа документа в теле может быть { showArticle, showBrand } —
+// какие колонки таблицы показывать (кнопка "Редактировать" в
+// components/PrintDocumentsPanel.tsx). Тело читается РОВНО ОДИН раз
+// (request.text() нельзя вызвать дважды), поэтому оба набора полей
+// разбираются здесь вместе, а не в двух отдельных функциях
+async function parseBody(request: Request): Promise<ParsedBody | NextResponse> {
   let raw = '';
   try {
     raw = await request.text();
   } catch {
-    return undefined;
+    return {};
   }
-  if (!raw) return undefined;
+  if (!raw) return {};
 
   let body: unknown;
   try {
@@ -41,25 +50,38 @@ async function parseReturnInput(request: Request): Promise<ReturnActInput | unde
     return NextResponse.json({ error: 'Тело запроса должно быть корректным JSON.' }, { status: 400 });
   }
 
-  const { items, reason } = (body as { items?: unknown; reason?: unknown }) || {};
-  if (!Array.isArray(items) || items.length === 0) return undefined;
+  const { items, reason, showArticle, showBrand } =
+    (body as { items?: unknown; reason?: unknown; showArticle?: unknown; showBrand?: unknown }) || {};
 
-  const parsedItems = items
-    .filter(
-      (item): item is { article: string; quantity: number } =>
-        !!item &&
-        typeof item === 'object' &&
-        typeof (item as Record<string, unknown>).article === 'string' &&
-        Number.isFinite((item as Record<string, unknown>).quantity) &&
-        ((item as Record<string, unknown>).quantity as number) > 0
-    )
-    .map((item) => ({ article: item.article, quantity: Math.floor(item.quantity) }));
+  const result: ParsedBody = {};
 
-  if (parsedItems.length === 0) {
-    return NextResponse.json({ error: 'Не удалось распознать список позиций для возврата.' }, { status: 400 });
+  if (typeof showArticle === 'boolean' || typeof showBrand === 'boolean') {
+    result.displayOptions = {
+      ...(typeof showArticle === 'boolean' ? { showArticle } : {}),
+      ...(typeof showBrand === 'boolean' ? { showBrand } : {}),
+    };
   }
 
-  return { items: parsedItems, reason: typeof reason === 'string' ? reason.trim() : '' };
+  if (Array.isArray(items) && items.length > 0) {
+    const parsedItems = items
+      .filter(
+        (item): item is { article: string; quantity: number } =>
+          !!item &&
+          typeof item === 'object' &&
+          typeof (item as Record<string, unknown>).article === 'string' &&
+          Number.isFinite((item as Record<string, unknown>).quantity) &&
+          ((item as Record<string, unknown>).quantity as number) > 0
+      )
+      .map((item) => ({ article: item.article, quantity: Math.floor(item.quantity) }));
+
+    if (parsedItems.length === 0) {
+      return NextResponse.json({ error: 'Не удалось распознать список позиций для возврата.' }, { status: 400 });
+    }
+
+    result.returnInput = { items: parsedItems, reason: typeof reason === 'string' ? reason.trim() : '' };
+  }
+
+  return result;
 }
 
 export async function resolveDocumentData(
@@ -79,30 +101,26 @@ export async function resolveDocumentData(
     };
   }
 
-  let returnInput: ReturnActInput | undefined;
-  if (docTypeParam === 'return_act') {
-    const parsed = await parseReturnInput(request);
-    if (parsed instanceof NextResponse) return { error: parsed };
-    returnInput = parsed;
+  const parsed = await parseBody(request);
+  if (parsed instanceof NextResponse) return { error: parsed };
 
-    if (!returnInput) {
-      const alreadyExists = await hasExistingDocument(orderId, 'return_act');
-      if (!alreadyExists) {
-        return {
-          error: NextResponse.json(
-            {
-              error:
-                'Для первого формирования акта возврата укажите список позиций (items) и причину возврата (reason).',
-            },
-            { status: 400 }
-          ),
-        };
-      }
+  if (docTypeParam === 'return_act' && !parsed.returnInput) {
+    const alreadyExists = await hasExistingDocument(orderId, 'return_act');
+    if (!alreadyExists) {
+      return {
+        error: NextResponse.json(
+          {
+            error:
+              'Для первого формирования акта возврата укажите список позиций (items) и причину возврата (reason).',
+          },
+          { status: 400 }
+        ),
+      };
     }
   }
 
   try {
-    const data = await buildOrderDocumentData(orderId, docTypeParam, returnInput);
+    const data = await buildOrderDocumentData(orderId, docTypeParam, parsed.returnInput, parsed.displayOptions);
     return { data };
   } catch (error) {
     if (error instanceof OrderNotFoundError) {

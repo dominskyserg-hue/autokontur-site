@@ -75,8 +75,21 @@ export function renderItemsTable(options: {
   items: DocumentOrderItem[];
   quantityLabel?: string;
   getQuantity?: (item: DocumentOrderItem) => number;
+  // Колонки "Артикул" и "Бренд" можно скрыть целиком (кнопка
+  // "Редактировать" в components/PrintDocumentsPanel.tsx) — например,
+  // чтобы не показывать клиенту внутренние артикулы поставщика или
+  // не палить, у какого бренда куплена деталь. По умолчанию обе
+  // показаны — это прежнее поведение
+  showArticle?: boolean;
+  showBrand?: boolean;
 }): string {
-  const { items, quantityLabel = 'К-сть', getQuantity = (item) => item.quantity } = options;
+  const {
+    items,
+    quantityLabel = 'К-сть',
+    getQuantity = (item) => item.quantity,
+    showArticle = true,
+    showBrand = true,
+  } = options;
 
   const rows = items
     .map((item, index) => {
@@ -85,8 +98,8 @@ export function renderItemsTable(options: {
       return `
     <tr>
       <td class="num">${index + 1}</td>
-      <td>${escapeHtml(item.article)}</td>
-      <td>${escapeHtml(item.brand || '—')}</td>
+      ${showArticle ? `<td>${escapeHtml(item.article)}</td>` : ''}
+      ${showBrand ? `<td>${escapeHtml(item.brand || '—')}</td>` : ''}
       <td>${escapeHtml(item.name || '—')}</td>
       <td class="num">${qty}</td>
       <td>шт.</td>
@@ -101,8 +114,8 @@ export function renderItemsTable(options: {
     <thead>
       <tr>
         <th class="num">№</th>
-        <th>Артикул</th>
-        <th>Бренд</th>
+        ${showArticle ? '<th>Артикул</th>' : ''}
+        ${showBrand ? '<th>Бренд</th>' : ''}
         <th>Найменування</th>
         <th class="num">${escapeHtml(quantityLabel)}</th>
         <th>Од.</th>

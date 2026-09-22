@@ -39,7 +39,7 @@ export async function renderInvoiceHtml(data: OrderDocumentData): Promise<string
       company,
     })}
     ${renderClientInfoGrid(order)}
-    ${renderItemsTable({ items: order.items })}
+    ${renderItemsTable({ items: order.items, ...data.displayOptions })}
     ${renderTotalsBlock({ totalAmount: order.totalAmount, wordsLine: amountToWordsUah(order.totalAmount) })}
     <p class="muted" style="font-size: 10.5px; margin: 0 0 4px;">
       Без ПДВ (не є платником податку на додану вартість).

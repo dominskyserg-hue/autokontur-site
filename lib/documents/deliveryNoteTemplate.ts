@@ -26,7 +26,7 @@ export async function renderDeliveryNoteHtml(data: OrderDocumentData): Promise<s
       company,
     })}
     ${renderClientInfoGrid(order)}
-    ${renderItemsTable({ items: order.items })}
+    ${renderItemsTable({ items: order.items, ...data.displayOptions })}
     ${renderTotalsBlock({ totalAmount: order.totalAmount, wordsLine: amountToWordsUah(order.totalAmount) })}
     ${renderSignaturesBlock({
       company,
