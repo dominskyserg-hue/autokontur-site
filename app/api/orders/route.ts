@@ -92,6 +92,10 @@ interface OrderListItem {
   totalAmount: number;
   createdAt: string;
   updatedAt: string;
+  // Сколько реально поступило деньгами по этому заказу — для бейджа
+  // оплаты рядом со статусом отгрузки (components/PaymentBadge.tsx),
+  // тот же расчёт, что и в GET /api/orders/[id]
+  paidAmount: number;
 }
 
 export async function GET(request: NextRequest) {
@@ -163,6 +167,15 @@ export async function GET(request: NextRequest) {
         o.updated_at,
         COUNT(oi.id) AS items_count,
         COALESCE(SUM(oi.price * oi.quantity), 0) AS total_amount,
+        -- Оплаченная сумма — отдельным коррелированным подзапросом, а
+        -- не через JOIN с cash_movements: JOIN вместе с уже имеющимся
+        -- JOIN order_items размножил бы строки (одна на каждую пару
+        -- позиция×движение кассы) и испортил бы оба SUM() выше
+        COALESCE(
+          (SELECT SUM(cm.amount) FROM cash_movements cm
+           WHERE cm.order_id = o.id AND cm.type IN ('customer_payment', 'customer_prepayment', 'customer_refund')),
+          0
+        ) AS paid_amount,
         COUNT(*) OVER() AS total_count
       FROM orders o
       LEFT JOIN order_items oi ON oi.order_id = o.id
@@ -187,6 +200,7 @@ export async function GET(request: NextRequest) {
       // total_amount — результат SUM() по колонке NUMERIC, драйвер pg
       // возвращает такие значения строкой, явно переводим в число
       totalAmount: parseFloat(row.total_amount),
+      paidAmount: parseFloat(row.paid_amount),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     }));

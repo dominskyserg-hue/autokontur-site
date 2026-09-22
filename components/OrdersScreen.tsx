@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminLayout from './AdminLayout';
 import OrderDetailsModal from './OrderDetailsModal';
+import PaymentBadge from './PaymentBadge';
 import {
   STATUS_COLORS,
   STATUS_LABELS,
@@ -38,6 +39,7 @@ interface OrderListItem {
   status: OrderStatus;
   itemsCount: number;
   totalAmount: number;
+  paidAmount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -215,7 +217,7 @@ export default function OrdersScreen() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                  {['ID заказа', 'Дата', 'Клиент', 'Телефон', 'Кол-во товаров', 'Сумма', 'Статус', ''].map(
+                  {['ID заказа', 'Дата', 'Клиент', 'Телефон', 'Кол-во товаров', 'Сумма', 'Статус', 'Оплата', ''].map(
                     (heading) => (
                       <th
                         key={heading}
@@ -250,6 +252,9 @@ export default function OrdersScreen() {
                     <td className="px-4 py-2.5 font-mono whitespace-nowrap">{formatMoney(order.totalAmount)}</td>
                     <td className="px-4 py-2.5 whitespace-nowrap">
                       <StatusBadge status={order.status} />
+                    </td>
+                    <td className="px-4 py-2.5 whitespace-nowrap">
+                      <PaymentBadge paidAmount={order.paidAmount} totalAmount={order.totalAmount} />
                     </td>
                     <td className="px-4 py-2.5 whitespace-nowrap text-right">
                       <button

@@ -33,6 +33,7 @@
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import PrintDocumentsPanel from './PrintDocumentsPanel';
 import AdminNovaPoshtaPicker from './AdminNovaPoshtaPicker';
+import PaymentBadge from './PaymentBadge';
 import {
   ITEM_STATUS_COLORS,
   ITEM_STATUS_LABELS,
@@ -121,45 +122,6 @@ function SaveIndicator({ save }: { save: SaveState }) {
   );
 }
 
-// Бейдж статуса оплаты — рядом со статусом отгрузки заказа. Считается
-// от paidAmount (сумма движений кассы по заказу, app/api/orders/[id]/route.ts),
-// а не просто "да/нет": частичная оплата — отдельный, третий вариант
-function PaymentBadge({ paidAmount, totalAmount }: { paidAmount: number; totalAmount: number }) {
-  const EPSILON = 0.01;
-
-  if (paidAmount <= EPSILON) {
-    return (
-      <span
-        className="text-[11px] px-2 py-1 rounded-full font-medium whitespace-nowrap"
-        style={{ background: '#3A1E22', color: '#F2635F' }}
-      >
-        Не оплачено
-      </span>
-    );
-  }
-
-  if (paidAmount + EPSILON >= totalAmount) {
-    return (
-      <span
-        className="text-[11px] px-2 py-1 rounded-full font-medium whitespace-nowrap"
-        style={{ background: '#12301F', color: '#3FBE8B' }}
-      >
-        Оплачено
-      </span>
-    );
-  }
-
-  return (
-    <span
-      className="text-[11px] px-2 py-1 rounded-full font-medium whitespace-nowrap"
-      style={{ background: '#3A2A16', color: '#F2A65A' }}
-      title={`Оплачено ${formatMoney(paidAmount)} из ${formatMoney(totalAmount)} грн`}
-    >
-      Оплачено частично
-    </span>
-  );
-}
-
 export default function OrderDetailsModal({
   orderId,
   onClose,
@@ -216,6 +178,9 @@ export default function OrderDetailsModal({
   const [returnSaving, setReturnSaving] = useState(false);
   const [returnError, setReturnError] = useState<string | null>(null);
   const [returnSuccessItemId, setReturnSuccessItemId] = useState<string | null>(null);
+
+  // ---- телефон відділення Нової Пошти (контакт для дзвінка) ----
+  const [warehousePhone, setWarehousePhone] = useState<string | null>(null);
 
   // ---- модалка "Принять оплату" ----
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -290,6 +255,41 @@ export default function OrderDetailsModal({
       cancelled = true;
     };
   }, [orderId]);
+
+  // ------------------------------------------------------------
+  // ТЕЛЕФОН ВІДДІЛЕННЯ НОВОЇ ПОШТИ — підтягується окремим, необов'язковим
+  // запитом, коли у заказа вже відомі місто й відділення отримувача.
+  // Замовлення зберігає лише текст ("Дніпро", "Відділення №5, вул. ...")
+  // без Ref — тому щоб дізнатись телефон, шукаємо відділення повторно
+  // через GET /api/nova-poshta/warehouse-info. Якщо Нова Пошта
+  // недоступна або відділення не знайдено — просто не показуємо
+  // телефон, це не критична для перегляду заказа інформація
+  // ------------------------------------------------------------
+  useEffect(() => {
+    setWarehousePhone(null);
+    if (!orderDetails?.city || !orderDetails?.novaPoshtaAddress) return;
+
+    let cancelled = false;
+    const params = new URLSearchParams({
+      city: orderDetails.city,
+      address: orderDetails.novaPoshtaAddress,
+    });
+
+    fetch(`/api/nova-poshta/warehouse-info?${params}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled && data.success && data.phone) {
+          setWarehousePhone(data.phone as string);
+        }
+      })
+      .catch(() => {
+        // мовчки лишаємо порожнім — це лише додаткова довідкова інформація
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orderDetails?.city, orderDetails?.novaPoshtaAddress]);
 
   // ------------------------------------------------------------
   // ОБЩИЙ ПОМОЩНИК АВТОСОХРАНЕНИЯ — один и тот же PATCH
@@ -710,6 +710,15 @@ export default function OrderDetailsModal({
                     <div>
                       <p style={{ color: 'var(--ink-faint)' }}>Відділення</p>
                       <p className="mt-0.5">{orderDetails.novaPoshtaAddress || '—'}</p>
+                      {warehousePhone && (
+                        <a
+                          href={`tel:+${warehousePhone.replace(/\s+/g, '')}`}
+                          className="mt-0.5 block font-mono text-[11px] hover:underline"
+                          style={{ color: 'var(--accent)' }}
+                        >
+                          ☎ +{warehousePhone}
+                        </a>
+                      )}
                     </div>
                   </div>
 
@@ -962,24 +971,26 @@ export default function OrderDetailsModal({
                                     </span>
                                   </td>
                                   <td className="px-3 py-2.5 align-top text-right whitespace-nowrap">
-                                    <button
-                                      type="button"
-                                      onClick={() => (isEditing ? cancelItemEdit() : openItemEdit(item))}
-                                      className="text-[11px] px-1.5 py-1 rounded"
-                                      style={{ color: 'var(--ink-muted)' }}
-                                      title="Изменить цену/поставщика"
-                                    >
-                                      ✎
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => (isReturning ? cancelItemReturn() : openItemReturn(item))}
-                                      className="text-[11px] px-1.5 py-1 rounded"
-                                      style={{ color: 'var(--bad)' }}
-                                      title="Оформить возврат"
-                                    >
-                                      ↩
-                                    </button>
+                                    <div className="flex justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => (isEditing ? cancelItemEdit() : openItemEdit(item))}
+                                        className="text-base leading-none px-2.5 py-2 rounded-md"
+                                        style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                                        title="Изменить цену/поставщика"
+                                      >
+                                        ✎
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => (isReturning ? cancelItemReturn() : openItemReturn(item))}
+                                        className="text-base leading-none px-2.5 py-2 rounded-md"
+                                        style={{ border: '1px solid var(--line)', color: 'var(--bad)' }}
+                                        title="Оформить возврат"
+                                      >
+                                        ↩
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
 
