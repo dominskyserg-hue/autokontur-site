@@ -178,6 +178,12 @@ interface SupplierResponse {
   // (самое свежее products.updated_at среди его товаров). null — если
   // прайс ещё ни разу не загружали
   lastSyncedAt: string | null;
+  // Наш долг перед поставщиком — кэш поверх леджера supplier_transactions
+  // (секция 28 schema.sql), тот же баланс, что показан на экране
+  // "Финансы поставщика" (components/SupplierFinanceScreen.tsx).
+  // Положительное значение = мы должны поставщику, отрицательное =
+  // переплата с нашей стороны
+  balance: number;
   mapping: MappingResponse | null;
 }
 
@@ -400,7 +406,7 @@ export async function POST(request: NextRequest) {
             email_auto_import_enabled = COALESCE($9, email_auto_import_enabled),
             price_url = $10
         WHERE id = $1
-        RETURNING id, name, contact_name, phone, email, currency, is_active, email_auto_import_enabled, price_url, delivery_time, created_at
+        RETURNING id, name, contact_name, phone, email, currency, is_active, email_auto_import_enabled, price_url, delivery_time, balance, created_at
         `,
         [
           body.id,
@@ -433,7 +439,7 @@ export async function POST(request: NextRequest) {
         `
         INSERT INTO suppliers (name, contact_name, phone, email, currency, is_active, delivery_time, email_auto_import_enabled, price_url)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING id, name, contact_name, phone, email, currency, is_active, email_auto_import_enabled, price_url, delivery_time, created_at
+        RETURNING id, name, contact_name, phone, email, currency, is_active, email_auto_import_enabled, price_url, delivery_time, balance, created_at
         `,
         [
           body.name.trim(),
@@ -475,6 +481,7 @@ export async function POST(request: NextRequest) {
       // ещё не иметь загруженных товаров — точное значение вернёт
       // следующий GET /api/suppliers, здесь достаточно null
       lastSyncedAt: null,
+      balance: parseFloat(supplierRow.balance),
       mapping,
     };
 
@@ -518,6 +525,7 @@ export async function GET() {
         s.email_auto_import_enabled,
         s.price_url,
         s.delivery_time,
+        s.balance,
         s.created_at,
         m.article_column,
         m.brand_column,
@@ -559,6 +567,9 @@ export async function GET() {
         deliveryTime: row.delivery_time,
         createdAt: row.created_at,
         lastSyncedAt: row.last_synced_at,
+        // balance — колонка NUMERIC, драйвер pg возвращает такие
+        // значения строкой, явно переводим в число
+        balance: parseFloat(row.balance),
         mapping: hasMapping
           ? {
               article: row.article_column,

@@ -63,6 +63,10 @@ interface Supplier {
   deliveryTime: string | null;
   createdAt: string;
   lastSyncedAt: string | null;
+  // Наш долг перед поставщиком (app/api/suppliers/route.ts) — тот же
+  // баланс, что и на экране "Финансы поставщика"
+  // (components/SupplierFinanceScreen.tsx, /admin/suppliers/[id]/finance)
+  balance: number;
   mapping: MappingData | null;
 }
 
@@ -271,6 +275,9 @@ export default function SupplierMappingScreen() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  // ---- сортировка списка по убыванию долга (кнопка над списком) ----
+  const [sortByDebt, setSortByDebt] = useState(false);
 
   // ---- какой поставщик сейчас выбран в списке справа. Пустая строка
   // означает "никто не выбран" — форма слева работает как форма
@@ -714,6 +721,17 @@ export default function SupplierMappingScreen() {
 
   const pausedCount = stats ? stats.suppliersCount - stats.activeSuppliersCount : 0;
   const allMapped = stats ? stats.suppliersCount > 0 && stats.mappedSuppliersCount === stats.suppliersCount : false;
+
+  // Список поставщиков, отсортированный по убыванию долга (когда
+  // включена соответствующая кнопка) — чтобы сразу видеть, кому
+  // сначала нужно платить. По умолчанию порядок как отдаёт API
+  // (по дате создания, см. app/api/suppliers/route.ts)
+  const sortedSuppliers = useMemo(() => {
+    if (!sortByDebt) return suppliers;
+    return [...suppliers].sort((a, b) => b.balance - a.balance);
+  }, [suppliers, sortByDebt]);
+
+  const totalDebt = useMemo(() => suppliers.reduce((sum, s) => sum + Math.max(0, s.balance), 0), [suppliers]);
 
   return (
     <AdminLayout active="suppliers">
@@ -1224,10 +1242,36 @@ export default function SupplierMappingScreen() {
 
         {/* ==================== СПИСОК ПОСТАВЩИКОВ ==================== */}
         <section className="p-5 rounded-lg" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-          <h2 className="text-base font-semibold mb-1">Действующие поставщики</h2>
-          <p className="text-xs mb-4" style={{ color: 'var(--ink-muted)' }}>
-            Статус синхронизации и наценка. Клик по карточке — открыть в редакторе слева.
-          </p>
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <h2 className="text-base font-semibold">Действующие поставщики</h2>
+            {totalDebt > 0 && (
+              <div className="text-right shrink-0">
+                <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                  Всего должны поставщикам
+                </p>
+                <p className="text-sm font-semibold" style={{ color: 'var(--bad)' }}>
+                  {totalDebt.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} грн
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+              Статус синхронизации и наценка. Клик по карточке — открыть в редакторе слева.
+            </p>
+            <button
+              type="button"
+              onClick={() => setSortByDebt((v) => !v)}
+              className="text-xs px-2.5 py-1.5 rounded-md shrink-0"
+              style={{
+                border: '1px solid var(--line)',
+                background: sortByDebt ? 'var(--accent-soft)' : 'transparent',
+                color: sortByDebt ? 'var(--accent)' : 'var(--ink-muted)',
+              }}
+            >
+              Долг ↓{sortByDebt ? ' ✓' : ''}
+            </button>
+          </div>
 
           {loadError && (
             <p className="text-xs mb-3" style={{ color: 'var(--bad)' }}>
@@ -1248,7 +1292,7 @@ export default function SupplierMappingScreen() {
             </p>
           ) : (
             <ul className="flex flex-col gap-2.5">
-              {suppliers.map((supplier) => {
+              {sortedSuppliers.map((supplier) => {
                 const avatarColor = pickAvatarColor(supplier.id);
                 const isSelected = supplier.id === selectedId;
                 const isToggling = togglingIds.has(supplier.id);
@@ -1311,14 +1355,39 @@ export default function SupplierMappingScreen() {
                               : 'прайс ещё не загружали'}
                           </span>
                         </div>
-                        <a
-                          href={`/admin/suppliers/${supplier.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[11px] underline mt-1 inline-block"
-                          style={{ color: 'var(--accent)' }}
-                        >
-                          Товары поставщика →
-                        </a>
+                        <div className="flex items-center gap-3 mt-1.5">
+                          <a
+                            href={`/admin/suppliers/${supplier.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[11px] underline"
+                            style={{ color: 'var(--accent)' }}
+                          >
+                            Товары поставщика →
+                          </a>
+                          {/* Долг перед поставщиком — кликабельный бейдж прямо
+                              в списке ведёт на "Финансы поставщика", где можно
+                              его списать (оплатой/возвратом), см.
+                              components/SupplierFinanceScreen.tsx */}
+                          <a
+                            href={`/admin/suppliers/${supplier.id}/finance`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[11px] px-1.5 py-0.5 rounded font-mono font-medium"
+                            style={
+                              supplier.balance > 0
+                                ? { background: 'var(--bad-soft)', color: 'var(--bad)' }
+                                : supplier.balance < 0
+                                  ? { background: 'var(--good-soft)', color: 'var(--good)' }
+                                  : { background: 'var(--surface)', color: 'var(--ink-faint)' }
+                            }
+                            title="Открыть финансы поставщика — оплата, накладные, списание долга"
+                          >
+                            {supplier.balance > 0
+                              ? `Долг: ${supplier.balance.toLocaleString('ru-RU', { maximumFractionDigits: 0 })} грн`
+                              : supplier.balance < 0
+                                ? `Переплата: ${Math.abs(supplier.balance).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} грн`
+                                : 'Долга нет'}
+                          </a>
+                        </div>
                       </div>
                     </div>
                   </li>

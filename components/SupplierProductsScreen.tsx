@@ -39,6 +39,10 @@ interface Supplier {
   email: string | null;
   currency: string;
   isActive: boolean;
+  // Наш долг перед поставщиком (секция 28 schema.sql) — показывается
+  // прямо в кнопке "Финансы поставщика" ниже, чтобы её было видно и
+  // понятно, зачем туда идти, не открывая экран
+  balance: number;
   mapping: { markup: number } | null;
 }
 
@@ -270,12 +274,34 @@ export default function SupplierProductsScreen({ supplierId }: { supplierId: str
             </span>
           )}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 flex-wrap">
           <a href="/admin" className="text-xs underline" style={{ color: 'var(--ink-muted)' }}>
             ← Ко всем поставщикам
           </a>
-          <a href={`/admin/suppliers/${supplierId}/finance`} className="text-xs underline font-medium" style={{ color: 'var(--accent)' }}>
-            Финансы поставщика (долг, накладные, оплаты) →
+          {/* Раньше это была мелкая ссылка текстом — легко было не
+              заметить среди остального контента, из-за чего казалось,
+              что списать долг поставщику вообще негде. Теперь это
+              полноценная кнопка с суммой долга прямо на ней */}
+          <a
+            href={`/admin/suppliers/${supplierId}/finance`}
+            className="text-sm px-3.5 py-1.5 rounded-md font-medium"
+            style={
+              !supplier || supplier.balance === 0
+                ? { border: '1px solid var(--line)', color: 'var(--ink)' }
+                : supplier.balance > 0
+                  ? { background: 'var(--bad-soft)', color: 'var(--bad)' }
+                  : { background: 'var(--good-soft)', color: 'var(--good)' }
+            }
+          >
+            💳 Финансы поставщика
+            {supplier && supplier.balance !== 0 && (
+              <>
+                {' — '}
+                {supplier.balance > 0 ? 'долг' : 'переплата'}{' '}
+                {Math.abs(supplier.balance).toLocaleString('ru-RU', { maximumFractionDigits: 0 })} грн
+              </>
+            )}
+            {' →'}
           </a>
         </div>
       </header>
