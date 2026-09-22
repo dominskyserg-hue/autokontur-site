@@ -866,12 +866,15 @@ export default function OrdersScreen() {
           onClick={closeOrderDetails}
         >
           <div
-            className="w-full max-w-lg max-h-[85vh] overflow-y-auto p-6 rounded-lg"
+            className="w-full max-w-5xl max-h-[85vh] rounded-lg flex flex-col overflow-hidden"
             style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}
             // stopPropagation — клик ВНУТРИ окна не должен его закрывать
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between mb-5">
+            <div
+              className="flex items-start justify-between px-6 py-4 shrink-0"
+              style={{ borderBottom: '1px solid var(--line)' }}
+            >
               <h2 className="text-base font-semibold">
                 Заказ {orderDetails ? shortId(orderDetails.id) : ''}
               </h2>
@@ -887,21 +890,33 @@ export default function OrdersScreen() {
             </div>
 
             {detailsError && (
-              <p className="text-xs mb-4" style={{ color: 'var(--bad)' }}>
+              <p className="text-xs px-6 pt-4" style={{ color: 'var(--bad)' }}>
                 {detailsError}
               </p>
             )}
 
             {loadingDetails && (
-              <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+              <p className="text-xs px-6 pt-4" style={{ color: 'var(--ink-faint)' }}>
                 Загрузка...
               </p>
             )}
 
+            {/* Два столбца — данные заказа/клиента слева (своя прокрутка),
+                состав заказа и действия справа (своя прокрутка). Раньше
+                всё шло одной длинной колонкой в узком окне — приходилось
+                очень много скроллить, чтобы добраться от шапки до состава
+                заказа. min-h-0 на строке обязателен: без него дочерние
+                overflow-y-auto игнорируют высоту родителя-flex и модалка
+                просто растягивается на весь контент */}
             {!loadingDetails && orderDetails && (
-              <>
+              <div className="flex flex-1 min-h-0">
+                {/* ==================== ЛЕВАЯ КОЛОНКА ==================== */}
+                <div
+                  className="w-[300px] shrink-0 overflow-y-auto p-5 flex flex-col gap-5"
+                  style={{ borderRight: '1px solid var(--line)' }}
+                >
                 {/* ---- данные клиента и доставки ---- */}
-                <div className="text-sm mb-5 flex flex-col gap-1">
+                <div className="text-sm flex flex-col gap-1">
                   <div>
                     <span style={{ color: 'var(--ink-muted)' }}>Клиент: </span>
                     {orderDetails.customerName} {orderDetails.customerSurname}
@@ -930,47 +945,35 @@ export default function OrdersScreen() {
                   </div>
                 </div>
 
-                {/* ---- приём оплаты (секция 29 schema.sql) ---- */}
-                <button
-                  type="button"
-                  onClick={openPaymentModal}
-                  className="w-full py-2.5 rounded-md text-sm font-medium mb-5"
-                  style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
-                >
-                  Принять оплату
-                </button>
-
                 {/* ---- смена статуса ---- */}
                 <div
-                  className="p-3.5 rounded-md mb-5"
+                  className="p-3.5 rounded-md"
                   style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
                 >
                   <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
                     Статус заказа
                   </label>
-                  <div className="flex gap-2">
-                    <select
-                      className="flex-1 px-3 py-2 text-sm rounded-md"
-                      style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
-                      value={statusDraft}
-                      onChange={(e) => setStatusDraft(e.target.value as OrderStatus)}
-                    >
-                      {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
-                          {STATUS_LABELS[status]}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={savingStatus || statusDraft === orderDetails.status}
-                      onClick={handleSaveStatus}
-                      className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
-                      style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
-                    >
-                      {savingStatus ? 'Сохранение...' : 'Сохранить'}
-                    </button>
-                  </div>
+                  <select
+                    className="w-full px-3 py-2 text-sm rounded-md"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                    value={statusDraft}
+                    onChange={(e) => setStatusDraft(e.target.value as OrderStatus)}
+                  >
+                    {STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {STATUS_LABELS[status]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={savingStatus || statusDraft === orderDetails.status}
+                    onClick={handleSaveStatus}
+                    className="w-full mt-2 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                    style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                  >
+                    {savingStatus ? 'Сохранение...' : 'Сохранить'}
+                  </button>
                   {statusSaveError && (
                     <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
                       {statusSaveError}
@@ -980,31 +983,29 @@ export default function OrdersScreen() {
 
                 {/* ---- номер ТТН Новой Почты ---- */}
                 <div
-                  className="p-3.5 rounded-md mb-5"
+                  className="p-3.5 rounded-md"
                   style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
                 >
                   <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
                     Номер ТТН (Новая Почта)
                   </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      className="flex-1 px-3 py-2 text-sm rounded-md font-mono"
-                      style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
-                      placeholder="напр. 20450123456789"
-                      value={ttnDraft}
-                      onChange={(e) => setTtnDraft(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      disabled={savingTtn || ttnDraft.trim() === (orderDetails.ttnNumber || '')}
-                      onClick={handleSaveTtn}
-                      className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
-                      style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
-                    >
-                      {savingTtn ? 'Сохранение...' : 'Сохранить'}
-                    </button>
-                  </div>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                    placeholder="напр. 20450123456789"
+                    value={ttnDraft}
+                    onChange={(e) => setTtnDraft(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    disabled={savingTtn || ttnDraft.trim() === (orderDetails.ttnNumber || '')}
+                    onClick={handleSaveTtn}
+                    className="w-full mt-2 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                    style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                  >
+                    {savingTtn ? 'Сохранение...' : 'Сохранить'}
+                  </button>
                   <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
                     После сохранения клиент увидит номер и кнопку отслеживания в своём личном кабинете.
                   </p>
@@ -1017,16 +1018,16 @@ export default function OrdersScreen() {
 
                 {/* ---- автомобиль клиента (для печатных документов) ---- */}
                 <div
-                  className="p-3.5 rounded-md mb-5"
+                  className="p-3.5 rounded-md"
                   style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
                 >
                   <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
                     Автомобиль клиента
                   </label>
-                  <div className="flex gap-2 mb-2">
+                  <div className="flex flex-col gap-2 mb-2">
                     <input
                       type="text"
-                      className="flex-1 px-3 py-2 text-sm rounded-md"
+                      className="w-full px-3 py-2 text-sm rounded-md"
                       style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                       placeholder="напр. Volkswagen Golf 2015"
                       value={carInfoDraft}
@@ -1034,7 +1035,7 @@ export default function OrdersScreen() {
                     />
                     <input
                       type="text"
-                      className="w-44 px-3 py-2 text-sm rounded-md font-mono uppercase"
+                      className="w-full px-3 py-2 text-sm rounded-md font-mono uppercase"
                       style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                       placeholder="VIN"
                       value={vinDraft}
@@ -1047,7 +1048,7 @@ export default function OrdersScreen() {
                         (vinDraft.trim() === (orderDetails.vin || '') && carInfoDraft.trim() === (orderDetails.carInfo || ''))
                       }
                       onClick={handleSaveVehicle}
-                      className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                      className="w-full py-2 rounded-md text-sm font-medium disabled:opacity-50"
                       style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
                     >
                       {savingVehicle ? 'Сохранение...' : 'Сохранить'}
@@ -1065,6 +1066,19 @@ export default function OrdersScreen() {
 
                 {/* ---- печать и документы (lib/documents/*.ts) ---- */}
                 <PrintDocumentsPanel orderId={orderDetails.id} items={orderDetails.items} />
+                </div>
+
+                {/* ==================== ПРАВАЯ КОЛОНКА ==================== */}
+                <div className="flex-1 overflow-y-auto p-5">
+                  {/* ---- приём оплаты (секция 29 schema.sql) ---- */}
+                  <button
+                    type="button"
+                    onClick={openPaymentModal}
+                    className="w-full py-2.5 rounded-md text-sm font-medium mb-5"
+                    style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
+                  >
+                    Принять оплату
+                  </button>
 
                 {/* ---- состав заказа ---- */}
                 <h3 className="text-sm font-semibold mb-2.5">Состав заказа</h3>
@@ -1324,7 +1338,8 @@ export default function OrdersScreen() {
                   <span>Итого</span>
                   <span className="font-mono">{formatMoney(orderDetails.totalAmount)}</span>
                 </div>
-              </>
+                </div>
+              </div>
             )}
           </div>
         </div>
