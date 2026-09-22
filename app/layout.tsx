@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import VinRequestButton from '@/components/VinRequestButton';
@@ -83,6 +83,18 @@ export const metadata: Metadata = {
   // (локальна розробка, чи поки не встигли підключити GSC) — Next
   // просто не рендерить тег, помилки не буде
   verification: GSC_VERIFICATION ? { google: GSC_VERIFICATION } : undefined,
+};
+
+// БЕЗ цього export'у Next.js НЕ додає тег <meta name="viewport"> сам —
+// мобільний браузер тоді вважає сторінку "десктопною" (ширина за
+// замовчуванням ~980px) і або масштабує весь сайт цілком, або дозволяє
+// прокрутку вбік. Саме через це на телефоні картка товару (модальне
+// вікно на весь екран, components/ProductModalShell.tsx) "вилазила"
+// за межі екрана — це стосувалось не лише картки товару, а взагалі
+// будь-якої сторінки сайту, просто на модалці це найпомітніше
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 };
 
 // lang="uk" — основной язык сайта теперь украинский (клиентская
