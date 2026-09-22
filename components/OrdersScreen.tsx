@@ -1237,7 +1237,7 @@ export default function OrdersScreen() {
 
       {/* ==================== МОДАЛКА "ПРИНЯТЬ ОПЛАТУ" ==================== */}
       {showPaymentModal && orderDetails && (
-        <div className="fixed inset-0 z-30 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
           <div className="w-full max-w-sm rounded-lg p-6" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold">Принять оплату</h2>
