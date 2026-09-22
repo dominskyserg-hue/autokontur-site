@@ -156,6 +156,10 @@ export function renderSignaturesBlock(options: {
 }): string {
   const { company, leftCaption, rightCaption, qrDataUrl, qrCaption } = options;
 
+  // QR навмисно НЕ в одному flex-рядку з підписами (раніше через
+  // вирівнювання по нижньому краю він "спливав" над тонкою лінією
+  // підпису, замість того щоб стояти внизу) — окремий блок під ними,
+  // по центру, ближче до самого низу сторінки
   return `
   <div class="signatures">
     <div class="signature-block">
@@ -165,11 +169,6 @@ export function renderSignaturesBlock(options: {
       <p class="signature-caption">${escapeHtml(leftCaption)}${company.directorName ? ` — ${escapeHtml(company.directorName)}` : ''}</p>
     </div>
     ${
-      qrDataUrl
-        ? `<div class="qr-block"><img src="${qrDataUrl}" alt="QR"><span>${escapeHtml(qrCaption || '')}</span></div>`
-        : ''
-    }
-    ${
       rightCaption
         ? `
     <div class="signature-block">
@@ -178,5 +177,6 @@ export function renderSignaturesBlock(options: {
     </div>`
         : ''
     }
-  </div>`;
+  </div>
+  ${qrDataUrl ? `<div class="qr-block"><img src="${qrDataUrl}" alt="QR"><span>${escapeHtml(qrCaption || '')}</span></div>` : ''}`;
 }

@@ -262,7 +262,12 @@ export function renderDocumentShell({ title, accentColor = '#5B6EF5', bodyHtml }
     font-size: 10px;
   }
 
+  /* QR — окремим блоком ПІД підписами, а не в одному рядку з ними:
+     висота QR (картинка + підпис) більша за тонку лінію підпису, і
+     при вирівнюванні по нижньому краю в один flex-рядок QR "спливав"
+     вище за сам рядок підписів замість того, щоб стояти внизу сторінки */
   .qr-block {
+    margin: 18px auto 0;
     text-align: center;
     font-size: 9.5px;
     color: #5C6472;
@@ -273,7 +278,7 @@ export function renderDocumentShell({ title, accentColor = '#5B6EF5', bodyHtml }
     width: 26mm;
     height: 26mm;
     display: block;
-    margin-bottom: 4px;
+    margin: 0 auto 4px;
   }
 
   .doc-footer-note {
