@@ -14,8 +14,7 @@
 
 import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
-import { normalizePhone } from '@/lib/phoneNormalize';
-import { sendTelegramMessageTo } from '@/lib/telegramNotify';
+import { notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -106,6 +105,11 @@ interface OrderDetailsResponse {
   novaPoshtaAddress: string;
   comment: string | null;
   ttnNumber: string | null;
+  // Ref документа в самій Новій Пошті — тільки якщо ТТН створили
+  // кнопкою "Створити ТТН" (POST /api/orders/[id]/create-ttn), а не
+  // вписали вручну. Потрібен лише щоб фронтенд знав, чи можна
+  // запропонувати кнопку "Друкувати маркування" (app/api/orders/[id]/ttn-label/route.ts)
+  ttnRef: string | null;
   vin: string | null;
   carInfo: string | null;
   status: OrderStatus;
@@ -132,7 +136,7 @@ export async function GET(
     const orderResult = await pool.query(
       `
       SELECT id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment,
-             ttn_number, vin, car_info, status, created_at, updated_at
+             ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at
       FROM orders
       WHERE id = $1
       `,
@@ -185,6 +189,7 @@ export async function GET(
       novaPoshtaAddress: orderRow.nova_poshta_address,
       comment: orderRow.comment,
       ttnNumber: orderRow.ttn_number,
+      ttnRef: orderRow.ttn_ref,
       vin: orderRow.vin,
       carInfo: orderRow.car_info,
       status: orderRow.status,
@@ -479,26 +484,7 @@ export async function PATCH(
     // одразу після return нижче, і сповіщення випадково не долітало б
     // (той самий фікс, що і в app/api/orders/create/route.ts)
     if (row.ttn_number && row.ttn_number !== previousTtnNumber) {
-      after(async () => {
-        try {
-          const chatResult = await pool.query(
-            `SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1`,
-            [normalizePhone(row.customer_phone)]
-          );
-          const chatId = chatResult.rows[0]?.telegram_chat_id;
-          if (chatId) {
-            await sendTelegramMessageTo(
-              chatId,
-              [
-                `Ваше замовлення №${(row.id as string).slice(0, 8)} відправлено Новою Поштою!`,
-                `Номер ТТН: ${row.ttn_number}`,
-              ].join('\n')
-            );
-          }
-        } catch (error) {
-          console.error('Ошибка при отправке Telegram-уведомления о ТТН:', error);
-        }
-      });
+      after(() => notifyCustomerTtnAssigned(row.id, row.customer_phone, row.ttn_number));
     }
 
     return NextResponse.json({

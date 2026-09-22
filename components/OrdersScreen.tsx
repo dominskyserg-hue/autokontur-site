@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminLayout from './AdminLayout';
 import PrintDocumentsPanel from './PrintDocumentsPanel';
+import AdminNovaPoshtaPicker from './AdminNovaPoshtaPicker';
 
 // ------------------------------------------------------------
 // СТАТУСЫ ЗАКАЗА — тот же набор, что и на бэкенде (см.
@@ -153,6 +154,7 @@ interface OrderDetails {
   novaPoshtaAddress: string;
   comment: string | null;
   ttnNumber: string | null;
+  ttnRef: string | null;
   vin: string | null;
   carInfo: string | null;
   status: OrderStatus;
@@ -235,6 +237,22 @@ export default function OrdersScreen() {
   const [ttnDraft, setTtnDraft] = useState('');
   const [savingTtn, setSavingTtn] = useState(false);
   const [ttnSaveError, setTtnSaveError] = useState<string | null>(null);
+
+  // ---- создание ТТН через API Новой Почты (вместо ручного ввода
+  // номера) — components/AdminNovaPoshtaPicker.tsx подбирает город и
+  // отделение получателя, остальное (вес/сумма/плательщик) — простые
+  // поля тут же ----
+  const [showCreateTtn, setShowCreateTtn] = useState(false);
+  const [ttnRecipient, setTtnRecipient] = useState<{ cityRef: string; warehouseRef: string; label: string } | null>(
+    null
+  );
+  const [ttnWeight, setTtnWeight] = useState('1');
+  const [ttnSeats, setTtnSeats] = useState('1');
+  const [ttnCost, setTtnCost] = useState('');
+  const [ttnPayerType, setTtnPayerType] = useState<'Recipient' | 'Sender'>('Recipient');
+  const [ttnDescription, setTtnDescription] = useState('Запчастини');
+  const [creatingTtn, setCreatingTtn] = useState(false);
+  const [createTtnError, setCreateTtnError] = useState<string | null>(null);
 
   // ---- VIN и авто клиента — для шапки печатных документов
   // (components/PrintDocumentsPanel.tsx), сохраняются вместе, одной
@@ -469,6 +487,59 @@ export default function OrdersScreen() {
       setTtnSaveError(error instanceof Error ? error.message : 'Ошибка сети при сохранении ТТН');
     } finally {
       setSavingTtn(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // ОТКРЫТЬ ФОРМУ СОЗДАНИЯ ТТН — сумма к оплате заказа подставляется
+  // как оголошена вартість по умолчанию (оператор может поправить)
+  // ------------------------------------------------------------
+  const openCreateTtn = () => {
+    setCreateTtnError(null);
+    setTtnCost(orderDetails ? String(Math.ceil(orderDetails.totalAmount)) : '');
+    setShowCreateTtn(true);
+  };
+
+  // ------------------------------------------------------------
+  // СОЗДАНИЕ ТТН ЧЕРЕЗ API НОВОЙ ПОЧТЫ — POST /api/orders/[id]/create-ttn
+  // ------------------------------------------------------------
+  const handleCreateTtn = async () => {
+    if (!orderDetails) return;
+
+    if (!ttnRecipient) {
+      setCreateTtnError('Оберіть місто та відділення отримувача.');
+      return;
+    }
+
+    setCreatingTtn(true);
+    setCreateTtnError(null);
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}/create-ttn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          recipientCityRef: ttnRecipient.cityRef,
+          recipientWarehouseRef: ttnRecipient.warehouseRef,
+          weight: parseFloat(ttnWeight),
+          seatsAmount: parseInt(ttnSeats, 10),
+          cost: parseFloat(ttnCost),
+          payerType: ttnPayerType,
+          description: ttnDescription,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось создать ТТН');
+      }
+
+      setTtnDraft(data.ttnNumber as string);
+      setOrderDetails({ ...orderDetails, ttnNumber: data.ttnNumber as string, ttnRef: data.ttnRef as string });
+      setShowCreateTtn(false);
+      setTtnRecipient(null);
+    } catch (error) {
+      setCreateTtnError(error instanceof Error ? error.message : 'Ошибка сети при создании ТТН');
+    } finally {
+      setCreatingTtn(false);
     }
   };
 
@@ -1014,6 +1085,145 @@ export default function OrdersScreen() {
                       {ttnSaveError}
                     </p>
                   )}
+
+                  {/* ---- создание ТТН через API Новой Почты ---- */}
+                  <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line)' }}>
+                    {orderDetails.ttnRef ? (
+                      <a
+                        href={`/api/orders/${orderDetails.id}/ttn-label`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block w-full text-center py-2 rounded-md text-sm font-medium"
+                        style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+                      >
+                        Друкувати маркування ТТН
+                      </a>
+                    ) : !showCreateTtn ? (
+                      <button
+                        type="button"
+                        onClick={openCreateTtn}
+                        disabled={Boolean(orderDetails.ttnNumber)}
+                        className="w-full py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                        style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+                        title={orderDetails.ttnNumber ? 'ТТН вже вписано вручну' : undefined}
+                      >
+                        Створити ТТН через Нову Пошту
+                      </button>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        <p className="text-[11px] font-medium" style={{ color: 'var(--ink-muted)' }}>
+                          Місто і відділення отримувача
+                        </p>
+                        <AdminNovaPoshtaPicker
+                          initialCityQuery={orderDetails.city}
+                          initialWarehouseQuery={orderDetails.novaPoshtaAddress}
+                          onPick={({ cityRef, cityName, warehouseRef, warehouseDescription }) =>
+                            setTtnRecipient({ cityRef, warehouseRef, label: `${cityName}, ${warehouseDescription}` })
+                          }
+                        />
+                        {ttnRecipient && (
+                          <p className="text-[11px]" style={{ color: 'var(--good)' }}>
+                            Обрано: {ttnRecipient.label}
+                          </p>
+                        )}
+
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[11px] mb-1" style={{ color: 'var(--ink-muted)' }}>
+                              Вага, кг
+                            </label>
+                            <input
+                              type="number"
+                              min={0.1}
+                              step="0.1"
+                              className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
+                              style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                              value={ttnWeight}
+                              onChange={(e) => setTtnWeight(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] mb-1" style={{ color: 'var(--ink-muted)' }}>
+                              Місць
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              step={1}
+                              className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
+                              style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                              value={ttnSeats}
+                              onChange={(e) => setTtnSeats(e.target.value)}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] mb-1" style={{ color: 'var(--ink-muted)' }}>
+                              Оцінка, грн
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              step="1"
+                              className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
+                              style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                              value={ttnCost}
+                              onChange={(e) => setTtnCost(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] mb-1" style={{ color: 'var(--ink-muted)' }}>
+                            Хто платить за доставку
+                          </label>
+                          <select
+                            className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                            value={ttnPayerType}
+                            onChange={(e) => setTtnPayerType(e.target.value as 'Recipient' | 'Sender')}
+                          >
+                            <option value="Recipient">Отримувач</option>
+                            <option value="Sender">Відправник</option>
+                          </select>
+                        </div>
+
+                        <input
+                          type="text"
+                          placeholder="Опис відправлення"
+                          className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                          style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                          value={ttnDescription}
+                          onChange={(e) => setTtnDescription(e.target.value)}
+                        />
+
+                        {createTtnError && (
+                          <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
+                            {createTtnError}
+                          </p>
+                        )}
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            disabled={creatingTtn}
+                            onClick={handleCreateTtn}
+                            className="flex-1 py-1.5 rounded-md text-xs font-medium disabled:opacity-50"
+                            style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                          >
+                            {creatingTtn ? 'Створення...' : 'Створити ТТН'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowCreateTtn(false)}
+                            className="px-3 py-1.5 rounded-md text-xs"
+                            style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                          >
+                            Відміна
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* ---- автомобиль клиента (для печатных документов) ---- */}

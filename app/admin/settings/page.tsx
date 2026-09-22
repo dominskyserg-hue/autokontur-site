@@ -9,6 +9,7 @@ import EmailImportPanel from '@/components/EmailImportPanel';
 import UrlImportPanel from '@/components/UrlImportPanel';
 import ContactSettingsForm from '@/components/ContactSettingsForm';
 import CompanyRequisitesForm from '@/components/CompanyRequisitesForm';
+import NovaPoshtaSettingsForm from '@/components/NovaPoshtaSettingsForm';
 import AnnouncementsManager from '@/components/AnnouncementsManager';
 import SitePagesManager from '@/components/SitePagesManager';
 
@@ -30,6 +31,7 @@ export default function SettingsPage() {
       <UrlImportPanel />
       <ContactSettingsForm />
       <CompanyRequisitesForm />
+      <NovaPoshtaSettingsForm />
       <SitePagesManager />
       <AnnouncementsManager />
     </AdminLayout>

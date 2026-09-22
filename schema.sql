@@ -2142,6 +2142,45 @@ CREATE INDEX IF NOT EXISTS idx_order_documents_order_id ON order_documents (orde
 
 
 -- ============================================================
+-- 31. ІНТЕГРАЦІЯ З НОВОЮ ПОШТОЮ — створення ТТН прямо з картки заказа
+-- ============================================================
+-- Раніше номер ТТН менеджер створював на сайті Нової Пошти вручну і
+-- просто вписував готовий номер у поле orders.ttn_number (текстом).
+-- Тепер ТТН можна створити прямо з картки заказа кнопкою "Створити
+-- ТТН" (components/OrdersScreen.tsx, app/api/orders/[id]/create-ttn/route.ts) —
+-- через офіційне API Нової Пошти (lib/novaPoshta/*.ts).
+
+-- ------------------------------------------------------------
+-- 31.1 ДАНІ ВІДПРАВНИКА — один раз обираються в Налаштуваннях
+-- ------------------------------------------------------------
+-- Один ключ API Нової Пошти завжди прив'язаний РІВНО до одного
+-- зареєстрованого відправника (ФОП/компанії) — сам Ref відправника
+-- (np_sender_ref) можна дізнатись автоматично через API
+-- (Counterparty/getCounterparties), а ось контактну особу й адресу
+-- забору посилки відправник міг зареєструвати одразу декілька —
+-- тому саме їх адміністратор обирає один раз у Налаштуваннях
+-- (components/NovaPoshtaSettingsForm.tsx), а не система вгадує сама
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS np_sender_ref TEXT;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS np_contact_sender_ref TEXT;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS np_contact_sender_label TEXT;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS np_senders_phone TEXT;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS np_sender_address_ref TEXT;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS np_city_sender_ref TEXT;
+ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS np_sender_address_label TEXT;
+
+-- ------------------------------------------------------------
+-- 31.2 ТТН ЗАКАЗУ — посилання на документ у самій Новій Пошті
+-- ------------------------------------------------------------
+-- orders.ttn_number (текстовий номер, вже існує в секції 6) лишається
+-- як і був — саме його бачить клієнт у кабінеті. ttn_ref — це
+-- ВНУТРІШНІЙ ідентифікатор документа в системі Нової Пошти (інший
+-- формат, GUID), потрібен лише на бекенді для друку маркування
+-- (app/api/orders/[id]/ttn-label/route.ts) — сам номер ttn_number для
+-- друку не підходить, Нова Пошта хоче саме Ref
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS ttn_ref TEXT;
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не
