@@ -117,6 +117,12 @@ interface OrderDetailsResponse {
   updatedAt: string;
   items: OrderItemResponse[];
   totalAmount: number;
+  // Сколько реально поступило деньгами по этому заказу — сумма
+  // cash_movements, привязанных к заказу (секция 29 schema.sql):
+  // оплаты/предоплаты плюс, минусом, возвраты наличными/картой.
+  // Используется для бейджа оплаты рядом со статусом отгрузки в
+  // карточке заказа (components/OrderDetailsModal.tsx)
+  paidAmount: number;
 }
 
 // ------------------------------------------------------------
@@ -180,6 +186,22 @@ export async function GET(
     // SQL-запрос с SUM() ради этого не нужен
     const totalAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
+    // Оплаченная сумма — сумма движений кассы по этому заказу.
+    // Работает независимо от того, привязан ли к заказу customer_id
+    // (cash_movements.order_id заполняется всегда, см.
+    // app/api/admin/orders/[id]/payment/route.ts), в отличие от
+    // customer_transactions, куда запись пишется только при наличии
+    // клиента
+    const paidResult = await pool.query(
+      `
+      SELECT COALESCE(SUM(amount), 0) AS paid
+      FROM cash_movements
+      WHERE order_id = $1 AND type IN ('customer_payment', 'customer_prepayment', 'customer_refund')
+      `,
+      [id]
+    );
+    const paidAmount = parseFloat(paidResult.rows[0].paid);
+
     const order: OrderDetailsResponse = {
       id: orderRow.id,
       customerName: orderRow.customer_name,
@@ -197,6 +219,7 @@ export async function GET(
       updatedAt: orderRow.updated_at,
       items,
       totalAmount,
+      paidAmount,
     };
 
     return NextResponse.json({ success: true, order });

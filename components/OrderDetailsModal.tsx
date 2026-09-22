@@ -75,6 +75,7 @@ interface OrderDetails {
   updatedAt: string;
   items: OrderItem[];
   totalAmount: number;
+  paidAmount: number;
 }
 
 interface SupplierOption {
@@ -116,6 +117,45 @@ function SaveIndicator({ save }: { save: SaveState }) {
   return (
     <span className="text-[11px]" style={{ color: 'var(--good)' }}>
       ✓ Сохранено
+    </span>
+  );
+}
+
+// Бейдж статуса оплаты — рядом со статусом отгрузки заказа. Считается
+// от paidAmount (сумма движений кассы по заказу, app/api/orders/[id]/route.ts),
+// а не просто "да/нет": частичная оплата — отдельный, третий вариант
+function PaymentBadge({ paidAmount, totalAmount }: { paidAmount: number; totalAmount: number }) {
+  const EPSILON = 0.01;
+
+  if (paidAmount <= EPSILON) {
+    return (
+      <span
+        className="text-[11px] px-2 py-1 rounded-full font-medium whitespace-nowrap"
+        style={{ background: '#3A1E22', color: '#F2635F' }}
+      >
+        Не оплачено
+      </span>
+    );
+  }
+
+  if (paidAmount + EPSILON >= totalAmount) {
+    return (
+      <span
+        className="text-[11px] px-2 py-1 rounded-full font-medium whitespace-nowrap"
+        style={{ background: '#12301F', color: '#3FBE8B' }}
+      >
+        Оплачено
+      </span>
+    );
+  }
+
+  return (
+    <span
+      className="text-[11px] px-2 py-1 rounded-full font-medium whitespace-nowrap"
+      style={{ background: '#3A2A16', color: '#F2A65A' }}
+      title={`Оплачено ${formatMoney(paidAmount)} из ${formatMoney(totalAmount)} грн`}
+    >
+      Оплачено частично
     </span>
   );
 }
@@ -466,6 +506,18 @@ export default function OrderDetailsModal({
         throw new Error(data.error || 'Не удалось оформить возврат');
       }
 
+      // Возврат наличными/картой реально уменьшает оплаченную сумму
+      // (cash_movements 'customer_refund', см. app/api/orders/[id]/route.ts) —
+      // бейдж оплаты должен это сразу учитывать. Возврат "на баланс
+      // клиента", наоборот, кассы не касается, paidAmount не трогаем
+      if (returnRefundMethod !== 'balance') {
+        const returnedItem = orderDetails.items.find((item) => item.id === returningItemId);
+        if (returnedItem) {
+          const refundAmount = returnedItem.price * quantity;
+          setOrderDetails((prev) => (prev ? { ...prev, paidAmount: prev.paidAmount - refundAmount } : prev));
+        }
+      }
+
       setReturnSuccessItemId(returningItemId);
       setReturningItemId(null);
       onOrderChanged();
@@ -516,6 +568,9 @@ export default function OrderDetailsModal({
       setCashRegisters((prev) =>
         prev.map((r) => (r.id === paymentCashRegisterId ? { ...r, balance: data.newCashRegisterBalance } : r))
       );
+      // Бейдж оплаты (PaymentBadge) должен сразу отразить только что
+      // принятые деньги, не дожидаясь повторного открытия карточки
+      setOrderDetails((prev) => (prev ? { ...prev, paidAmount: prev.paidAmount + amount } : prev));
       setShowPaymentModal(false);
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Ошибка сети при проведении платежа');
@@ -840,9 +895,12 @@ export default function OrderDetailsModal({
 
               {/* ==================== ПРАВАЯ КОЛОНКА: СОСТАВ ЗАКАЗА ==================== */}
               <div className="min-w-0">
-                <h3 className="text-xs font-semibold mb-2.5" style={{ color: 'var(--ink-muted)' }}>
-                  СКЛАД ЗАМОВЛЕННЯ
-                </h3>
+                <div className="flex items-center justify-between mb-2.5">
+                  <h3 className="text-xs font-semibold" style={{ color: 'var(--ink-muted)' }}>
+                    СКЛАД ЗАМОВЛЕННЯ
+                  </h3>
+                  <PaymentBadge paidAmount={orderDetails.paidAmount} totalAmount={orderDetails.totalAmount} />
+                </div>
 
                 {orderDetails.items.length === 0 ? (
                   <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
