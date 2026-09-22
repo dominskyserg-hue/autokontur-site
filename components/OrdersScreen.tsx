@@ -20,6 +20,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminLayout from './AdminLayout';
+import PrintDocumentsPanel from './PrintDocumentsPanel';
 
 // ------------------------------------------------------------
 // СТАТУСЫ ЗАКАЗА — тот же набор, что и на бэкенде (см.
@@ -152,6 +153,8 @@ interface OrderDetails {
   novaPoshtaAddress: string;
   comment: string | null;
   ttnNumber: string | null;
+  vin: string | null;
+  carInfo: string | null;
   status: OrderStatus;
   createdAt: string;
   updatedAt: string;
@@ -232,6 +235,14 @@ export default function OrdersScreen() {
   const [ttnDraft, setTtnDraft] = useState('');
   const [savingTtn, setSavingTtn] = useState(false);
   const [ttnSaveError, setTtnSaveError] = useState<string | null>(null);
+
+  // ---- VIN и авто клиента — для шапки печатных документов
+  // (components/PrintDocumentsPanel.tsx), сохраняются вместе, одной
+  // кнопкой, так же отдельно от формы смены статуса ----
+  const [vinDraft, setVinDraft] = useState('');
+  const [carInfoDraft, setCarInfoDraft] = useState('');
+  const [savingVehicle, setSavingVehicle] = useState(false);
+  const [vehicleSaveError, setVehicleSaveError] = useState<string | null>(null);
 
   // ---- список поставщиков для выпадающего списка "сменить поставщика" ----
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
@@ -386,6 +397,8 @@ export default function OrdersScreen() {
           setOrderDetails(data.order as OrderDetails);
           setStatusDraft((data.order as OrderDetails).status);
           setTtnDraft((data.order as OrderDetails).ttnNumber || '');
+          setVinDraft((data.order as OrderDetails).vin || '');
+          setCarInfoDraft((data.order as OrderDetails).carInfo || '');
         }
       })
       .catch((error) => {
@@ -456,6 +469,37 @@ export default function OrdersScreen() {
       setTtnSaveError(error instanceof Error ? error.message : 'Ошибка сети при сохранении ТТН');
     } finally {
       setSavingTtn(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // СОХРАНЕНИЕ VIN И АВТО КЛИЕНТА — PATCH /api/orders/[id]
+  // ------------------------------------------------------------
+  const handleSaveVehicle = async () => {
+    if (!orderDetails) return;
+
+    setSavingVehicle(true);
+    setVehicleSaveError(null);
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vin: vinDraft.trim() || null, carInfo: carInfoDraft.trim() || null }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось сохранить данные автомобиля');
+      }
+
+      setOrderDetails({
+        ...orderDetails,
+        vin: (data.order as { vin: string | null }).vin,
+        carInfo: (data.order as { carInfo: string | null }).carInfo,
+      });
+    } catch (error) {
+      setVehicleSaveError(error instanceof Error ? error.message : 'Ошибка сети при сохранении данных автомобиля');
+    } finally {
+      setSavingVehicle(false);
     }
   };
 
@@ -970,6 +1014,57 @@ export default function OrdersScreen() {
                     </p>
                   )}
                 </div>
+
+                {/* ---- автомобиль клиента (для печатных документов) ---- */}
+                <div
+                  className="p-3.5 rounded-md mb-5"
+                  style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
+                >
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                    Автомобиль клиента
+                  </label>
+                  <div className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      className="flex-1 px-3 py-2 text-sm rounded-md"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                      placeholder="напр. Volkswagen Golf 2015"
+                      value={carInfoDraft}
+                      onChange={(e) => setCarInfoDraft(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      className="w-44 px-3 py-2 text-sm rounded-md font-mono uppercase"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                      placeholder="VIN"
+                      value={vinDraft}
+                      onChange={(e) => setVinDraft(e.target.value.toUpperCase())}
+                    />
+                    <button
+                      type="button"
+                      disabled={
+                        savingVehicle ||
+                        (vinDraft.trim() === (orderDetails.vin || '') && carInfoDraft.trim() === (orderDetails.carInfo || ''))
+                      }
+                      onClick={handleSaveVehicle}
+                      className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                      style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                    >
+                      {savingVehicle ? 'Сохранение...' : 'Сохранить'}
+                    </button>
+                  </div>
+                  <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                    Необязательно — попадает в шапку печатных документов заказа (счёт, накладная, акт).
+                  </p>
+                  {vehicleSaveError && (
+                    <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
+                      {vehicleSaveError}
+                    </p>
+                  )}
+                </div>
+
+                {/* ---- печать и документы (lib/documents/*.ts) ---- */}
+                <PrintDocumentsPanel orderId={orderDetails.id} items={orderDetails.items} />
 
                 {/* ---- состав заказа ---- */}
                 <h3 className="text-sm font-semibold mb-2.5">Состав заказа</h3>

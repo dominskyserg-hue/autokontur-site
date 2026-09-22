@@ -43,3 +43,20 @@ export async function saveImage(webpBuffer: Buffer): Promise<string> {
 
   return blob.url;
 }
+
+// Той самий підхід, що й saveImage() вище, але для логотипу й
+// печатки/підпису компанії (app/api/company-requisites/upload-asset/route.ts) —
+// окрема функція лише через інший префікс шляху в Blob-сховищі
+// ("company/logo/..." замість "products/..."), щоб файли не змішувались
+// в одній "папці" з фото товарів
+export async function saveCompanyAsset(webpBuffer: Buffer, kind: 'logo' | 'stamp'): Promise<string> {
+  const fileName = `company/${kind}/${crypto.randomUUID()}.webp`;
+
+  const blob = await put(fileName, webpBuffer, {
+    access: 'public',
+    contentType: 'image/webp',
+    cacheControlMaxAge: 31536000,
+  });
+
+  return blob.url;
+}

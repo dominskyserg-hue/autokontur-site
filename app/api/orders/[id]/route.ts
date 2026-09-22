@@ -106,6 +106,8 @@ interface OrderDetailsResponse {
   novaPoshtaAddress: string;
   comment: string | null;
   ttnNumber: string | null;
+  vin: string | null;
+  carInfo: string | null;
   status: OrderStatus;
   createdAt: string;
   updatedAt: string;
@@ -130,7 +132,7 @@ export async function GET(
     const orderResult = await pool.query(
       `
       SELECT id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment,
-             ttn_number, status, created_at, updated_at
+             ttn_number, vin, car_info, status, created_at, updated_at
       FROM orders
       WHERE id = $1
       `,
@@ -183,6 +185,8 @@ export async function GET(
       novaPoshtaAddress: orderRow.nova_poshta_address,
       comment: orderRow.comment,
       ttnNumber: orderRow.ttn_number,
+      vin: orderRow.vin,
+      carInfo: orderRow.car_info,
       status: orderRow.status,
       createdAt: orderRow.created_at,
       updatedAt: orderRow.updated_at,
@@ -358,9 +362,16 @@ async function shipOrder(orderId: string): Promise<NextResponse> {
 // добавлено вместе с отслеживанием посылки в личном кабинете клиента
 // (components/CustomerDashboard.tsx). Можно передать оба поля сразу
 // или только одно из них — то, что не передано, просто не меняется
+// vin/carInfo — необов'язкові поля про автомобіль клієнта, вводяться
+// вручну в картці замовлення (секція 30.2 schema.sql) і потрапляють у
+// шапку друкованих документів (lib/documents/partials.ts,
+// renderClientInfoGrid). Окремого екрану для них нема — той самий
+// PATCH, що вже оновлює статус і ТТН
 interface PatchOrderRequestBody {
   status?: string;
   ttnNumber?: string | null;
+  vin?: string | null;
+  carInfo?: string | null;
 }
 
 export async function PATCH(
@@ -383,9 +394,14 @@ export async function PATCH(
     );
   }
 
-  if (body.status === undefined && body.ttnNumber === undefined) {
+  if (
+    body.status === undefined &&
+    body.ttnNumber === undefined &&
+    body.vin === undefined &&
+    body.carInfo === undefined
+  ) {
     return NextResponse.json(
-      { error: 'Укажите статус и/или номер ТТН для обновления.' },
+      { error: 'Укажите статус, номер ТТН, VIN и/или автомобиль для обновления.' },
       { status: 400 }
     );
   }
@@ -399,6 +415,8 @@ export async function PATCH(
 
   const nextStatus = body.status;
   const nextTtnNumber = body.ttnNumber !== undefined ? (body.ttnNumber || '').trim() || null : undefined;
+  const nextVin = body.vin !== undefined ? (body.vin || '').trim().toUpperCase() || null : undefined;
+  const nextCarInfo = body.carInfo !== undefined ? (body.carInfo || '').trim() || null : undefined;
 
   // Переход в 'shipped' — не просто смена значения в колонке status:
   // это финальная отгрузка со списанием склада и начислением на баланс
@@ -426,11 +444,24 @@ export async function PATCH(
     const result = await pool.query(
       `
       UPDATE orders
-      SET status = COALESCE($2, status), ttn_number = CASE WHEN $3 THEN $4 ELSE ttn_number END, updated_at = now()
+      SET status = COALESCE($2, status),
+          ttn_number = CASE WHEN $3 THEN $4 ELSE ttn_number END,
+          vin = CASE WHEN $5 THEN $6 ELSE vin END,
+          car_info = CASE WHEN $7 THEN $8 ELSE car_info END,
+          updated_at = now()
       WHERE id = $1
-      RETURNING id, customer_name, customer_phone, status, ttn_number, created_at, updated_at
+      RETURNING id, customer_name, customer_phone, status, ttn_number, vin, car_info, created_at, updated_at
       `,
-      [id, nextStatus ?? null, nextTtnNumber !== undefined, nextTtnNumber ?? null]
+      [
+        id,
+        nextStatus ?? null,
+        nextTtnNumber !== undefined,
+        nextTtnNumber ?? null,
+        nextVin !== undefined,
+        nextVin ?? null,
+        nextCarInfo !== undefined,
+        nextCarInfo ?? null,
+      ]
     );
 
     if (result.rows.length === 0) {
@@ -478,6 +509,8 @@ export async function PATCH(
         customerPhone: row.customer_phone,
         status: row.status,
         ttnNumber: row.ttn_number,
+        vin: row.vin,
+        carInfo: row.car_info,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },
