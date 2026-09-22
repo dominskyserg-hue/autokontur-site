@@ -98,6 +98,8 @@ interface OrderItemResponse {
 
 interface OrderDetailsResponse {
   id: string;
+  // Человекочитаемый номер заказа (1, 2, 3...) — см. lib/orderUi.ts
+  orderNumber: number;
   customerName: string;
   customerSurname: string;
   customerPhone: string;
@@ -141,7 +143,7 @@ export async function GET(
   try {
     const orderResult = await pool.query(
       `
-      SELECT id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment,
+      SELECT id, order_number, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment,
              ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at
       FROM orders
       WHERE id = $1
@@ -204,6 +206,7 @@ export async function GET(
 
     const order: OrderDetailsResponse = {
       id: orderRow.id,
+      orderNumber: orderRow.order_number,
       customerName: orderRow.customer_name,
       customerSurname: orderRow.customer_surname,
       customerPhone: orderRow.customer_phone,

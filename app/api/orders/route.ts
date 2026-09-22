@@ -84,6 +84,8 @@ const MAX_PAGE_SIZE = 100;
 // только для одного конкретного заказа через GET /api/orders/[id])
 interface OrderListItem {
   id: string;
+  // Человекочитаемый номер заказа (1, 2, 3...) — см. lib/orderUi.ts
+  orderNumber: number;
   customerName: string;
   customerSurname: string;
   customerPhone: string;
@@ -159,6 +161,7 @@ export async function GET(request: NextRequest) {
       `
       SELECT
         o.id,
+        o.order_number,
         o.customer_name,
         o.customer_surname,
         o.customer_phone,
@@ -192,6 +195,10 @@ export async function GET(request: NextRequest) {
 
     const orders: OrderListItem[] = result.rows.map((row) => ({
       id: row.id,
+      // order_number — колонка INTEGER, драйвер pg возвращает такие
+      // значения обычным числом (не строкой, в отличие от NUMERIC) —
+      // parseFloat/parseInt тут не нужен
+      orderNumber: row.order_number,
       customerName: row.customer_name,
       customerSurname: row.customer_surname,
       customerPhone: row.customer_phone,

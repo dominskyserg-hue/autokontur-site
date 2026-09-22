@@ -44,8 +44,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 
   try {
-    const orderResult = await pool.query(`SELECT ttn_ref FROM orders WHERE id = $1`, [id]);
+    const orderResult = await pool.query(`SELECT ttn_ref, order_number FROM orders WHERE id = $1`, [id]);
     const ttnRef = orderResult.rows[0]?.ttn_ref;
+    const orderNumber = orderResult.rows[0]?.order_number ?? id.slice(0, 8);
     if (!ttnRef) {
       return NextResponse.json({ error: 'У этого заказа ещё нет ТТН, созданной через Нову Пошту.' }, { status: 404 });
     }
@@ -62,7 +63,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       status: 200,
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `inline; filename="ttn_${id.slice(0, 8)}.pdf"`,
+        'Content-Disposition': `inline; filename="ttn_zamovlennya_${orderNumber}.pdf"`,
         'Cache-Control': 'no-store',
       },
     });

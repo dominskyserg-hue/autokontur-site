@@ -42,7 +42,7 @@ import {
   STATUS_OPTIONS,
   formatDateTime,
   formatMoney,
-  shortId,
+  formatOrderNumber,
   type OrderItemStatus,
   type OrderStatus,
 } from '@/lib/orderUi';
@@ -61,6 +61,7 @@ interface OrderItem {
 
 interface OrderDetails {
   id: string;
+  orderNumber: number;
   customerName: string;
   customerSurname: string;
   customerPhone: string;
@@ -598,7 +599,7 @@ export default function OrderDetailsModal({
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h2 className="text-base font-semibold whitespace-nowrap">
-                Заказ {orderDetails ? shortId(orderDetails.id) : ''}
+                Заказ {orderDetails ? formatOrderNumber(orderDetails.orderNumber) : ''}
               </h2>
               {orderDetails && (
                 <>

@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const html = await renderDocumentHtml(resolved.data);
     const pdf = await renderHtmlToPdf(html);
 
-    const filename = `${FILENAME_PREFIX[docType] || 'document'}_${resolved.data.order.shortId}.pdf`;
+    const filename = `${FILENAME_PREFIX[docType] || 'document'}_${resolved.data.order.orderNumber}.pdf`;
 
     return new NextResponse(new Uint8Array(pdf), {
       status: 200,

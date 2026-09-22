@@ -28,7 +28,7 @@ export class OrderNotFoundError extends Error {}
 
 async function loadOrder(orderId: string): Promise<DocumentOrderInfo> {
   const orderResult = await pool.query(
-    `SELECT id, customer_name, customer_surname, customer_phone, vin, car_info, created_at
+    `SELECT id, order_number, customer_name, customer_surname, customer_phone, vin, car_info, created_at
      FROM orders WHERE id = $1`,
     [orderId]
   );
@@ -58,7 +58,7 @@ async function loadOrder(orderId: string): Promise<DocumentOrderInfo> {
 
   return {
     id: row.id,
-    shortId: (row.id as string).slice(0, 8),
+    orderNumber: row.order_number,
     customerName: row.customer_name,
     customerSurname: row.customer_surname,
     customerPhone: row.customer_phone,

@@ -179,10 +179,10 @@ const STATUS_LABELS: Record<string, string> = {
 // замовлення під різними номерами) — тому IN (...), а не "=" один
 async function fetchOrdersForChat(
   chatId: number
-): Promise<Array<{ id: string; status: string; itemsCount: number; totalAmount: number; createdAt: string }>> {
+): Promise<Array<{ id: string; orderNumber: number; status: string; itemsCount: number; totalAmount: number; createdAt: string }>> {
   const result = await pool.query(
     `
-    SELECT o.id, o.status, o.created_at,
+    SELECT o.id, o.order_number, o.status, o.created_at,
       COUNT(oi.id) AS items_count,
       COALESCE(SUM(oi.price * oi.quantity), 0) AS total_amount
     FROM orders o
@@ -199,6 +199,9 @@ async function fetchOrdersForChat(
 
   return result.rows.map((row) => ({
     id: row.id,
+    // order_number — колонка INTEGER, драйвер pg возвращает такие
+    // значения обычным числом, а не строкой
+    orderNumber: row.order_number,
     status: row.status,
     itemsCount: parseInt(row.items_count, 10),
     totalAmount: parseFloat(row.total_amount),
@@ -206,7 +209,9 @@ async function fetchOrdersForChat(
   }));
 }
 
-function formatOrdersReply(orders: Array<{ id: string; status: string; itemsCount: number; totalAmount: number; createdAt: string }>): string {
+function formatOrdersReply(
+  orders: Array<{ id: string; orderNumber: number; status: string; itemsCount: number; totalAmount: number; createdAt: string }>
+): string {
   if (orders.length === 0) {
     return 'Замовлень поки не знайдено. Якщо ви вже оформлювали замовлення на сайті — переконайтесь, що Telegram підключений до того самого номера телефону (Особистий кабінет → «Налаштування» → «Підключити Telegram-сповіщення»).';
   }
@@ -214,10 +219,7 @@ function formatOrdersReply(orders: Array<{ id: string; status: string; itemsCoun
   const lines = orders.map((o) => {
     const date = new Date(o.createdAt).toLocaleDateString('uk-UA');
     const statusLabel = STATUS_LABELS[o.status] || o.status;
-    // Короткий id (перші 8 символів UUID) — те саме, що показує сайт
-    // у списку замовлень, повний UUID покупцю ні до чого
-    const shortId = o.id.slice(0, 8);
-    return `№${shortId} від ${date} — ${statusLabel}\n   ${o.itemsCount} поз. на ${o.totalAmount} грн`;
+    return `№${o.orderNumber} від ${date} — ${statusLabel}\n   ${o.itemsCount} поз. на ${o.totalAmount} грн`;
   });
 
   return `📦 Ваші останні замовлення:\n\n${lines.join('\n\n')}\n\nПовна інформація й склад кожного замовлення — в Особистому кабінеті: ${SITE_URL}/account`;

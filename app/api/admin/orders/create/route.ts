@@ -205,15 +205,16 @@ export async function POST(request: NextRequest) {
     );
     const customerId = customerResult.rows[0].id;
 
-    const orderResult = await client.query<{ id: string }>(
+    const orderResult = await client.query<{ id: string; order_number: number }>(
       `
       INSERT INTO orders (customer_id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'new')
-      RETURNING id
+      RETURNING id, order_number
       `,
       [customerId, customerName, customerSurname, customerPhone, city, novaPoshtaAddress, comment]
     );
     const orderId = orderResult.rows[0].id;
+    const orderNumber = orderResult.rows[0].order_number;
 
     // Персональное правило цены клиента — подстраховка ТОЛЬКО для тех
     // позиций, где менеджер не переопределил цену вручную (см. ниже)
@@ -284,7 +285,7 @@ export async function POST(request: NextRequest) {
             chatId,
             [
               `Дякуємо за замовлення, ${customerName}!`,
-              `Номер замовлення: №${orderId.slice(0, 8)}`,
+              `Номер замовлення: №${orderNumber}`,
               '',
               ...summaryLines,
               '',
@@ -299,7 +300,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ success: true, orderId });
+    return NextResponse.json({ success: true, orderId, orderNumber });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Ошибка при создании заказа менеджером:', error);

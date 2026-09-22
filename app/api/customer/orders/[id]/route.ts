@@ -92,6 +92,8 @@ interface CustomerOrderItem {
 
 interface CustomerOrderDetails {
   id: string;
+  // Человекочитаемый номер заказа (1, 2, 3...) — см. lib/orderUi.ts
+  orderNumber: number;
   status: OrderStatus;
   city: string;
   novaPoshtaAddress: string;
@@ -127,7 +129,7 @@ export async function GET(
     // вообще заказ с таким id, если это не его номер
     const orderResult = await pool.query(
       `
-      SELECT id, status, city, nova_poshta_address, comment, ttn_number, created_at
+      SELECT id, order_number, status, city, nova_poshta_address, comment, ttn_number, created_at
       FROM orders
       WHERE id = $1 AND RIGHT(regexp_replace(customer_phone, '\\D', '', 'g'), 9) = $2
       `,
@@ -166,6 +168,7 @@ export async function GET(
 
     const order: CustomerOrderDetails = {
       id: orderRow.id,
+      orderNumber: orderRow.order_number,
       status: orderRow.status,
       city: orderRow.city,
       novaPoshtaAddress: orderRow.nova_poshta_address,

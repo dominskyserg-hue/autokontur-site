@@ -2181,6 +2181,65 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS ttn_ref TEXT;
 
 
 -- ============================================================
+-- 32. ПОСЛІДОВНА НУМЕРАЦІЯ ЗАМОВЛЕНЬ (order_number)
+-- ============================================================
+-- Раніше і в адмінці, і в повідомленнях покупцю (Telegram), і в
+-- друкованих документах "номер замовлення" — це був просто шматок
+-- UUID (наприклад "№13d3aa1b") — виглядає як випадковий сміттєвий
+-- код і псує вигляд списку заказів. order_number — звичайний
+-- зростаючий номер (1, 2, 3...), показується скрізь як "№142".
+--
+-- id (UUID) лишається первинним ключем і надалі — order_number це
+-- ДОДАТКОВЕ, чисто "людське" поле, в адресах сторінок (/p/..., API)
+-- і посиланнях продовжує використовуватись UUID
+CREATE SEQUENCE IF NOT EXISTS orders_number_seq;
+
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_number INTEGER;
+
+-- Заповнюємо номер для вже існуючих замовлень, які створили ДО цієї
+-- міграції (order_number ще NULL) — від найстарішого до найновішого,
+-- щоб порядок номерів збігався з порядком створення замовлень.
+-- Обгорнуто в перевірку EXISTS — при повторному запуску скрипта (весь
+-- schema.sql ідемпотентний) NULL-рядків вже не буде, і цей блок
+-- просто нічого не зробить
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM orders WHERE order_number IS NULL) THEN
+    WITH numbered AS (
+      SELECT id, ROW_NUMBER() OVER (ORDER BY created_at ASC) AS rn
+      FROM orders
+      WHERE order_number IS NULL
+    )
+    UPDATE orders o
+    SET order_number = numbered.rn + COALESCE((SELECT MAX(order_number) FROM orders), 0)
+    FROM numbered
+    WHERE o.id = numbered.id;
+  END IF;
+END $$;
+
+-- Послідовність продовжує нумерацію з наступного вільного номера —
+-- інакше НОВІ замовлення (order_number за замовчуванням із цієї
+-- послідовності, див. ALTER ... SET DEFAULT нижче) отримали б номери,
+-- що вже зайняті старими замовленнями, і UNIQUE-обмеження одразу ж
+-- зламалось би на першому ж новому замовленні
+SELECT setval('orders_number_seq', COALESCE((SELECT MAX(order_number) FROM orders), 0) + 1, false);
+
+ALTER TABLE orders ALTER COLUMN order_number SET DEFAULT nextval('orders_number_seq');
+ALTER TABLE orders ALTER COLUMN order_number SET NOT NULL;
+
+-- ALTER TABLE ... ADD CONSTRAINT не має свого "IF NOT EXISTS" у
+-- Postgres (на відміну від ADD COLUMN) — перевіряємо вручну через
+-- системний каталог pg_constraint, щоб повторний запуск schema.sql
+-- не впав на помилці "constraint already exists"
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'orders_order_number_key') THEN
+    ALTER TABLE orders ADD CONSTRAINT orders_order_number_key UNIQUE (order_number);
+  END IF;
+END $$;
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не

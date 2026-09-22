@@ -18,7 +18,8 @@ export interface DocumentOrderItem {
 
 export interface DocumentOrderInfo {
   id: string;
-  shortId: string;
+  // Человекочитаемый номер заказа (1, 2, 3...) — см. lib/orderUi.ts
+  orderNumber: number;
   customerName: string;
   customerSurname: string;
   customerPhone: string;

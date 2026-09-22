@@ -713,6 +713,10 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
   const [orderStatus, setOrderStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
   const [orderError, setOrderError] = useState<string | null>(null);
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null);
+  // Людський номер замовлення (1, 2, 3...) — те, що реально показуємо
+  // покупцю на екрані "Дякуємо..." замість шматка UUID (createdOrderId
+  // лишається лише для аналітики trackPurchase() нижче)
+  const [createdOrderNumber, setCreatedOrderNumber] = useState<number | null>(null);
 
   // ------------------------------------------------------------
   // КОРЗИНА: загрузка из localStorage при открытии страницы
@@ -920,6 +924,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
       // делает эффект выше, который сохраняет cart в localStorage
       // при каждом изменении — запись [] означает "очистить")
       setCreatedOrderId(data.orderId);
+      setCreatedOrderNumber(data.orderNumber);
       setOrderStatus('success');
       setCart([]);
       setCustomerName('');
@@ -1283,6 +1288,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
             orderStatus={orderStatus}
             orderError={orderError}
             createdOrderId={createdOrderId}
+            createdOrderNumber={createdOrderNumber}
             customerName={customerName}
             customerSurname={customerSurname}
             customerPhone={customerPhone}
@@ -2878,6 +2884,7 @@ interface CartDrawerProps {
   orderStatus: 'idle' | 'submitting' | 'success';
   orderError: string | null;
   createdOrderId: string | null;
+  createdOrderNumber: number | null;
   customerName: string;
   customerSurname: string;
   customerPhone: string;
@@ -2939,6 +2946,7 @@ function CartDrawer({
   orderStatus,
   orderError,
   createdOrderId,
+  createdOrderNumber,
   customerName,
   customerSurname,
   customerPhone,
@@ -3011,7 +3019,7 @@ function CartDrawer({
         </div>
 
         {orderStatus === 'success' ? (
-          <OrderSuccessScreen orderId={createdOrderId} customerPhone={customerPhone} onClose={onClose} />
+          <OrderSuccessScreen orderNumber={createdOrderNumber} customerPhone={customerPhone} onClose={onClose} />
         ) : cart.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
             <div style={{ color: TECH_BORDER_2 }}>
@@ -3397,12 +3405,12 @@ function CartRow({
 }
 
 // Экран "Дякуємо за замовлення!" — показывается вместо списка товаров
-// сразу после того, как заказ успешно создан на бэкенде. orderId — то,
-// что вернул POST /api/orders/create; показываем первые 8 символов
-// UUID, точно в том же формате (#хххххххх), что и в списке заказов
-// админ-панели (см. shortId() в components/OrdersScreen.tsx) — так
-// менеджер сможет быстро найти этот заказ по номеру, который назовёт
-// клиент
+// сразу после того, как заказ успешно создан на бэкенде. orderNumber —
+// человекочитаемый номер заказа (1, 2, 3...), который вернул
+// POST /api/orders/create — тот же номер, что покупатель потом
+// назовёт менеджеру, и который менеджер увидит в списке заказов
+// админ-панели (components/OrdersScreen.tsx) — единый формат №142
+// везде, вместо куска UUID, который тут показывался раньше
 // Юзернейм бота Telegram-сповіщень — той самий, що й
 // TELEGRAM_BOT_USERNAME у lib/telegramNotify.ts. Продубльований тут
 // окремою константою (не імпортований звідти): той файл рахує секрет
@@ -3411,11 +3419,11 @@ function CartRow({
 const TELEGRAM_BOT_USERNAME = 'dominatorparts_orders_bot';
 
 function OrderSuccessScreen({
-  orderId,
+  orderNumber,
   customerPhone,
   onClose,
 }: {
-  orderId: string | null;
+  orderNumber: number | null;
   customerPhone: string;
   onClose: () => void;
 }) {
@@ -3433,7 +3441,7 @@ function OrderSuccessScreen({
       <p className="mb-1 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
         Номер вашого замовлення:{' '}
         <span className="font-semibold" style={{ fontFamily: MONO_TECH, color: TECH_INK }}>
-          №{orderId ? orderId.slice(0, 8) : ''}
+          №{orderNumber ?? ''}
         </span>
       </p>
       <p className="mb-6 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>

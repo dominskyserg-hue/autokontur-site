@@ -27,12 +27,13 @@ import {
   STATUS_OPTIONS,
   formatDateTime,
   formatMoney,
-  shortId,
+  formatOrderNumber,
   type OrderStatus,
 } from '@/lib/orderUi';
 
 interface OrderListItem {
   id: string;
+  orderNumber: number;
   customerName: string;
   customerSurname: string;
   customerPhone: string;
@@ -217,17 +218,15 @@ export default function OrdersScreen() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                  {['ID заказа', 'Дата', 'Клиент', 'Телефон', 'Кол-во товаров', 'Сумма', 'Статус', 'Оплата', ''].map(
-                    (heading) => (
-                      <th
-                        key={heading}
-                        className="text-left px-4 py-2.5 text-xs font-medium whitespace-nowrap"
-                        style={{ color: 'var(--ink-muted)' }}
-                      >
-                        {heading}
-                      </th>
-                    )
-                  )}
+                  {['№', 'Дата', 'Клиент', 'Телефон', 'К-сть', 'Сумма', 'Статус / Оплата', ''].map((heading) => (
+                    <th
+                      key={heading}
+                      className="text-left px-3 py-2.5 text-xs font-medium whitespace-nowrap"
+                      style={{ color: 'var(--ink-muted)' }}
+                    >
+                      {heading}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -238,25 +237,25 @@ export default function OrdersScreen() {
                     className="cursor-pointer"
                     style={{ borderBottom: '1px solid var(--line)' }}
                   >
-                    <td className="px-4 py-2.5 font-mono whitespace-nowrap" style={{ color: 'var(--ink-faint)' }}>
-                      {shortId(order.id)}
+                    <td className="px-3 py-2.5 font-mono whitespace-nowrap" style={{ color: 'var(--ink-faint)' }}>
+                      {formatOrderNumber(order.orderNumber)}
                     </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap" style={{ color: 'var(--ink-muted)' }}>
+                    <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: 'var(--ink-muted)' }}>
                       {formatDateTime(order.createdAt)}
                     </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       {order.customerName} {order.customerSurname}
                     </td>
-                    <td className="px-4 py-2.5 font-mono whitespace-nowrap">{order.customerPhone}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">{order.itemsCount}</td>
-                    <td className="px-4 py-2.5 font-mono whitespace-nowrap">{formatMoney(order.totalAmount)}</td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <StatusBadge status={order.status} />
+                    <td className="px-3 py-2.5 font-mono whitespace-nowrap">{order.customerPhone}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">{order.itemsCount}</td>
+                    <td className="px-3 py-2.5 font-mono whitespace-nowrap">{formatMoney(order.totalAmount)}</td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <div className="flex flex-col items-start gap-1">
+                        <StatusBadge status={order.status} />
+                        <PaymentBadge paidAmount={order.paidAmount} totalAmount={order.totalAmount} />
+                      </div>
                     </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap">
-                      <PaymentBadge paidAmount={order.paidAmount} totalAmount={order.totalAmount} />
-                    </td>
-                    <td className="px-4 py-2.5 whitespace-nowrap text-right">
+                    <td className="px-3 py-2.5 whitespace-nowrap text-right">
                       <button
                         type="button"
                         onClick={(e) => {

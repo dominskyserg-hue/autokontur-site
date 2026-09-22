@@ -340,14 +340,14 @@ export async function POST(request: NextRequest) {
     // customer_id — связь с только что найденным/созданным клиентом
     // выше (для личного баланса); customer_name/customer_phone здесь
     // остаются как и раньше, отдельным "снимком" на момент заказа
-    const orderResult = await client.query<{ id: string }>(
+    const orderResult = await client.query<{ id: string; order_number: number }>(
       `
       INSERT INTO orders (
         customer_id, customer_name, customer_surname, customer_phone, city, nova_poshta_address, comment, status,
         utm_source, utm_medium, utm_campaign, utm_term, utm_content, gclid, referrer
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7, 'new', $8, $9, $10, $11, $12, $13, $14)
-      RETURNING id
+      RETURNING id, order_number
       `,
       [
         customerId,
@@ -367,6 +367,7 @@ export async function POST(request: NextRequest) {
       ]
     );
     const orderId = orderResult.rows[0].id;
+    const orderNumber = orderResult.rows[0].order_number;
 
     // Персональне правило ціни покупця (customer_pricing_rules, за
     // нормалізованим номером телефону) — застосовується АВТОМАТИЧНО,
@@ -489,7 +490,7 @@ export async function POST(request: NextRequest) {
             chatId,
             [
               `Дякуємо за замовлення, ${customerName}!`,
-              `Номер замовлення: №${orderId.slice(0, 8)}`,
+              `Номер замовлення: №${orderNumber}`,
               '',
               ...summaryLines,
               '',
@@ -505,7 +506,7 @@ export async function POST(request: NextRequest) {
       }
     });
 
-    return NextResponse.json({ success: true, orderId });
+    return NextResponse.json({ success: true, orderId, orderNumber });
   } catch (error) {
     // Откатываем всё, что успели вставить в этой транзакции — заказ
     // без позиций (или наоборот) хуже, чем полностью отсутствующий заказ

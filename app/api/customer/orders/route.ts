@@ -105,6 +105,8 @@ function isValidPhone(rawPhone: string): boolean {
 
 interface CustomerOrderListItem {
   id: string;
+  // Человекочитаемый номер заказа (1, 2, 3...) — см. lib/orderUi.ts
+  orderNumber: number;
   status: OrderStatus;
   itemsCount: number;
   totalAmount: number;
@@ -132,6 +134,7 @@ export async function GET(request: NextRequest) {
       `
       SELECT
         o.id,
+        o.order_number,
         o.status,
         o.created_at,
         COUNT(oi.id) AS items_count,
@@ -157,6 +160,7 @@ export async function GET(request: NextRequest) {
 
     const orders: CustomerOrderListItem[] = result.rows.map((row) => ({
       id: row.id,
+      orderNumber: row.order_number,
       status: row.status,
       itemsCount: parseInt(row.items_count, 10),
       // total_amount — результат SUM() по колонке NUMERIC, драйвер pg

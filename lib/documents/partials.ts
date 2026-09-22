@@ -48,7 +48,7 @@ export function renderSellerHeader(options: {
 
 export function renderClientInfoGrid(order: DocumentOrderInfo, extraRows: Array<[string, string]> = []): string {
   const rows: Array<[string, string]> = [
-    ['Замовлення', `№${order.shortId} від ${formatDateUa(order.createdAt)}`],
+    ['Замовлення', `№${order.orderNumber} від ${formatDateUa(order.createdAt)}`],
     ['Клієнт', `${order.customerName} ${order.customerSurname}`.trim()],
     ['Телефон', order.customerPhone],
     ...extraRows,

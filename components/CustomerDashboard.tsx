@@ -82,6 +82,7 @@ type OrderStatus =
 
 interface OrderListItem {
   id: string;
+  orderNumber: number;
   status: OrderStatus;
   itemsCount: number;
   totalAmount: number;
@@ -100,6 +101,7 @@ interface OrderItem {
 
 interface OrderDetails {
   id: string;
+  orderNumber: number;
   status: OrderStatus;
   city: string;
   novaPoshtaAddress: string;
@@ -200,8 +202,10 @@ function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-function shortId(id: string): string {
-  return `№${id.slice(0, 8)}`;
+// Людський номер замовлення (1, 2, 3...) — orders.order_number,
+// секція 32 schema.sql, а не шматок UUID
+function formatOrderNumber(orderNumber: number): string {
+  return `№${orderNumber}`;
 }
 
 // ------------------------------------------------------------
@@ -272,7 +276,7 @@ function openReceipt(order: OrderDetails, phone: string) {
     <html lang="uk">
       <head>
         <meta charset="utf-8" />
-        <title>Чек ${shortId(order.id)}</title>
+        <title>Чек ${formatOrderNumber(order.orderNumber)}</title>
         <style>
           body { font-family: Arial, sans-serif; color: #111; padding: 24px; }
           h1 { font-size: 18px; margin-bottom: 4px; }
@@ -283,7 +287,7 @@ function openReceipt(order: OrderDetails, phone: string) {
         </style>
       </head>
       <body>
-        <h1>DominatorParts — чек замовлення ${shortId(order.id)}</h1>
+        <h1>DominatorParts — чек замовлення ${formatOrderNumber(order.orderNumber)}</h1>
         <p>Дата: ${formatDate(order.createdAt)}</p>
         <p>Телефон: ${phone}</p>
         <p>Доставка: ${order.city}, ${order.novaPoshtaAddress}</p>
@@ -1114,7 +1118,7 @@ export default function CustomerDashboard() {
                           >
                             <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
                               <span className="text-sm" style={{ fontFamily: TECH_MONO_FONT, color: TECH_FAINT }}>
-                                {shortId(order.id)}
+                                {formatOrderNumber(order.orderNumber)}
                               </span>
                               <span className="whitespace-nowrap text-sm" style={{ color: TECH_MUTED }}>
                                 {formatDate(order.createdAt)}

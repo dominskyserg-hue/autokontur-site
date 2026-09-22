@@ -93,8 +93,11 @@ export function formatDateTime(iso: string): string {
   });
 }
 
-// Короткая, читаемая часть UUID для отображения — полный id всё равно
-// виден в панели деталей и в самом запросе к API
-export function shortId(id: string): string {
-  return `#${id.slice(0, 8)}`;
+// Человекочитаемый номер заказа (1, 2, 3...) — простое возрастающее
+// число (orders.order_number, схема — секция 32 schema.sql), а не
+// кусок UUID. UUID (order.id) остаётся первичным ключом и используется
+// в адресах API/страниц, но покупателю и оператору показывать его
+// не нужно — с него и начиналась путаница "что за случайный код"
+export function formatOrderNumber(orderNumber: number): string {
+  return `№${orderNumber}`;
 }

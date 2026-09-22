@@ -23,7 +23,7 @@ export async function renderInvoiceHtml(data: OrderDocumentData): Promise<string
     `Отримувач: ${company.legalName || company.shopName}`,
     company.iban ? `IBAN: ${company.iban}` : null,
     company.taxId ? `ІПН/ЄДРПОУ: ${company.taxId}` : null,
-    `Призначення: Оплата за замовленням №${order.shortId}`,
+    `Призначення: Оплата за замовленням №${order.orderNumber}`,
     `Сума: ${order.totalAmount.toFixed(2)} грн`,
   ]
     .filter(Boolean)

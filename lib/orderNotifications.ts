@@ -37,9 +37,17 @@ export async function notifyCustomerTtnAssigned(orderId: string, customerPhone: 
     const chatId = chatResult.rows[0]?.telegram_chat_id;
     if (!chatId) return;
 
+    // Людський номер замовлення (order_number) — окремим запитом, а не
+    // переданий викликачем: обидва місця, що викликають цю функцію
+    // (app/api/orders/[id]/route.ts, app/api/orders/[id]/create-ttn/route.ts),
+    // і так вже мають під рукою orderId, а міняти сигнатуру заради
+    // одного зайвого параметра, який тут же й обчислюється, не варто
+    const orderResult = await pool.query(`SELECT order_number FROM orders WHERE id = $1`, [orderId]);
+    const orderNumber = orderResult.rows[0]?.order_number ?? orderId.slice(0, 8);
+
     await sendTelegramMessageTo(
       chatId,
-      [`Ваше замовлення №${orderId.slice(0, 8)} відправлено Новою Поштою!`, `Номер ТТН: ${ttnNumber}`].join('\n')
+      [`Ваше замовлення №${orderNumber} відправлено Новою Поштою!`, `Номер ТТН: ${ttnNumber}`].join('\n')
     );
   } catch (error) {
     console.error('Ошибка при отправке Telegram-уведомления о ТТН:', error);
