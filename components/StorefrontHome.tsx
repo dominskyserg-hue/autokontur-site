@@ -2509,44 +2509,51 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
               </h2>
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                 {popularProducts.map((product) => (
-                  <Link
+                  <div
                     key={product.id}
-                    href={buildProductPath(product.id, product)}
                     className="flex flex-col gap-2.5 rounded-xl p-3 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                     style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                   >
-                    <div
-                      className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg"
-                      style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}
-                    >
-                      {product.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={product.imageUrl}
-                          alt={product.name || product.article}
-                          loading="lazy"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: TECH_FAINT }}>
-                          <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-                          <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.5" />
-                          <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
-                        </svg>
-                      )}
-                    </div>
-
-                    <div className="min-w-0">
-                      <p
-                        className="mb-0.5 truncate text-[10.5px] font-bold uppercase tracking-wide"
-                        style={{ fontFamily: SANS_TECH, color: TECH_ACCENT_BRIGHT }}
+                    {/* Посилання на картку товару — лише зображення й текст, БЕЗ
+                        кнопки "В кошик" всередині: вкладати <button> в <a> не можна
+                        (невалідний HTML, у Safari взагалі ламає розмітку), тому
+                        кнопка нижче — окремий елемент поряд, а не всередині Link,
+                        той самий прийом, що і в "звичайних" картках результатів
+                        пошуку вище */}
+                    <Link href={buildProductPath(product.id, product)} className="flex flex-col gap-2.5">
+                      <div
+                        className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg"
+                        style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}
                       >
-                        {product.brand || 'Без бренду'}
-                      </p>
-                      <p className="truncate text-xs leading-snug" style={{ fontFamily: SANS_TECH, color: TECH_INK }}>
-                        {product.name || product.article}
-                      </p>
-                    </div>
+                        {product.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={product.imageUrl}
+                            alt={product.name || product.article}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: TECH_FAINT }}>
+                            <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                            <circle cx="8.5" cy="10" r="1.5" stroke="currentColor" strokeWidth="1.5" />
+                            <path d="M21 16l-5-5-4 4-2-2-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+
+                      <div className="min-w-0">
+                        <p
+                          className="mb-0.5 truncate text-[10.5px] font-bold uppercase tracking-wide"
+                          style={{ fontFamily: SANS_TECH, color: TECH_ACCENT_BRIGHT }}
+                        >
+                          {product.brand || 'Без бренду'}
+                        </p>
+                        <p className="truncate text-xs leading-snug" style={{ fontFamily: SANS_TECH, color: TECH_INK }}>
+                          {product.name || product.article}
+                        </p>
+                      </div>
+                    </Link>
 
                     <div className="mt-auto flex items-center justify-between gap-2">
                       <span style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, fontSize: 16, color: '#fff' }}>
@@ -2555,11 +2562,23 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                           ГРН
                         </span>
                       </span>
-                      {product.stock > 0 && (
-                        <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: TECH_GOOD }} title="В наявності" />
-                      )}
+                      <button
+                        type="button"
+                        disabled={product.stock <= 0}
+                        onClick={() => addToCart(product)}
+                        aria-label="Додати в кошик"
+                        title="Додати в кошик"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-shadow hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
+                        style={
+                          product.stock > 0
+                            ? { background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }
+                            : { background: TECH_SURFACE, color: TECH_FAINT }
+                        }
+                      >
+                        <CartIcon />
+                      </button>
                     </div>
-                  </Link>
+                  </div>
                 ))}
               </div>
             </div>
