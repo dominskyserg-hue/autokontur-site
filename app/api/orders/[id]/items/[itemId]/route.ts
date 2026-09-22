@@ -4,16 +4,19 @@
 // (например /api/orders/3fa85f64-.../items/9c6a1b2d-...)
 //
 // PATCH — ручное редактирование ОДНОЙ позиции внутри заказа:
-// цена, по которой она продана (price), и/или поставщик, который
-// её отгружает (supplierId). Нужно, например, если админ вручную
-// поправляет цену клиенту или переназначает деталь другому
-// поставщику после оформления заказа.
+// цена, по которой она продана (price), поставщик, который её
+// отгружает (supplierId), и/или название позиции (name). Название
+// правится, например, когда прайс-лист поставщика был на русском и
+// в заказ попало русское название детали — вместо того, чтобы менять
+// его в каталоге товаров (это затронуло бы вообще все заказы с этим
+// товаром), здесь правится только "снимок" в этом конкретном заказе.
 //
-// Тело запроса — JSON, оба поля необязательны, но хотя бы одно
+// Тело запроса — JSON, все поля необязательны, но хотя бы одно
 // должно быть передано:
 //   { "price": 1250.5 }
 //   { "supplierId": "3fa85f64-..." }
-//   { "price": 1250.5, "supplierId": "3fa85f64-..." }
+//   { "name": "Фільтр масляний" }
+//   { "price": 1250.5, "supplierId": "3fa85f64-...", "name": "..." }
 //
 // ВАЖНО: order_items хранит "снимок" товара на момент покупки (см.
 // комментарий в schema.sql) — supplier_name это ТЕКСТ, скопированный
@@ -65,6 +68,7 @@ function isValidUuid(value: string): boolean {
 interface PatchOrderItemRequestBody {
   price?: number;
   supplierId?: string;
+  name?: string;
 }
 
 // Next.js 15: params у Route Handler — это Promise, поэтому его
@@ -94,12 +98,17 @@ export async function PATCH(
 
   const hasPrice = body.price !== undefined;
   const hasSupplier = body.supplierId !== undefined;
+  const hasName = body.name !== undefined;
 
-  if (!hasPrice && !hasSupplier) {
+  if (!hasPrice && !hasSupplier && !hasName) {
     return NextResponse.json(
-      { error: 'Передайте хотя бы одно поле для изменения: price или supplierId.' },
+      { error: 'Передайте хотя бы одно поле для изменения: price, supplierId или name.' },
       { status: 400 }
     );
+  }
+
+  if (hasName && !(body.name as string).trim()) {
+    return NextResponse.json({ error: 'Название позиции не может быть пустым.' }, { status: 400 });
   }
 
   if (hasPrice && (!Number.isFinite(body.price) || (body.price as number) < 0)) {
@@ -145,7 +154,8 @@ export async function PATCH(
       SET
         price = COALESCE($3, price),
         supplier_id = COALESCE($4, supplier_id),
-        supplier_name = COALESCE($5, supplier_name)
+        supplier_name = COALESCE($5, supplier_name),
+        name = COALESCE($6, name)
       WHERE id = $1 AND order_id = $2
       RETURNING id, article, brand, name, price, quantity, supplier_id, supplier_name, status
       `,
@@ -155,6 +165,7 @@ export async function PATCH(
         hasPrice ? body.price : null,
         hasSupplier ? body.supplierId : null,
         hasSupplier ? supplierName : null,
+        hasName ? (body.name as string).trim() : null,
       ]
     );
 

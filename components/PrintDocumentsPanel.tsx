@@ -58,6 +58,7 @@ const DOC_LABELS: Record<DocType, { icon: string; title: string }> = {
 };
 
 interface PanelOrderItem {
+  id: string;
   article: string;
   brand: string | null;
   name: string | null;
@@ -66,7 +67,18 @@ interface PanelOrderItem {
   status: string;
 }
 
-export default function PrintDocumentsPanel({ orderId, items }: { orderId: string; items: PanelOrderItem[] }) {
+export default function PrintDocumentsPanel({
+  orderId,
+  items,
+  onItemNameSaved,
+}: {
+  orderId: string;
+  items: PanelOrderItem[];
+  // Викликається після успішного збереження виправленої назви — щоб
+  // склад заказа в самій картці (components/OrderDetailsModal.tsx)
+  // одразу показав виправлений текст, а не лише документ у прев'ю
+  onItemNameSaved?: (itemId: string, name: string) => void;
+}) {
   // ---- какая форма сейчас открыта ----
   const [activeDocType, setActiveDocType] = useState<DocType | null>(null);
 
@@ -91,6 +103,23 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
   useEffect(() => {
     setDisplayOptions(loadDisplayOptions());
   }, []);
+
+  // ---- "Редактировать" — исправление названий позиций (например,
+  // если прайс поставщика был на русском) прямо перед печатью ----
+  const [nameDrafts, setNameDrafts] = useState<Record<string, string>>({});
+  const [savingNames, setSavingNames] = useState(false);
+  const [nameSaveError, setNameSaveError] = useState<string | null>(null);
+
+  // Черновики названий заполняем текущими значениями каждый раз, когда
+  // реально открывают панель "Редактировать" — а не при каждом рендере
+  // (иначе несохранённый черновик стирался бы, например, после
+  // переключения "Показывать артикулы")
+  useEffect(() => {
+    if (!showEditBar) return;
+    setNameDrafts(Object.fromEntries(items.map((item) => [item.id, item.name || ''])));
+    setNameSaveError(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showEditBar]);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
@@ -184,6 +213,52 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
     if (activeDocType && previewHtml) {
       const returnBody = activeDocType === 'return_act' ? buildReturnBody() : null;
       openPreview(activeDocType, { ...(returnBody || {}), ...next });
+    }
+  }
+
+  // Сохраняет ТОЛЬКО реально изменённые названия (сравнение с items —
+  // чтобы не слать PATCH для позиций, которые просто оставили как
+  // есть), затем перестраивает уже открытый предпросмотр — так
+  // исправленный текст сразу видно в том же окне, без повторного
+  // открытия документа
+  async function handleSaveNames() {
+    const changed = items.filter((item) => {
+      const draft = (nameDrafts[item.id] ?? '').trim();
+      return draft && draft !== (item.name || '');
+    });
+
+    if (changed.length === 0) {
+      setNameSaveError('Нет изменённых названий');
+      return;
+    }
+
+    setSavingNames(true);
+    setNameSaveError(null);
+    try {
+      for (const item of changed) {
+        const nextName = nameDrafts[item.id].trim();
+        const response = await fetch(`/api/orders/${orderId}/items/${item.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: nextName }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || `Не удалось сохранить название для ${item.article}`);
+        }
+        onItemNameSaved?.(item.id, nextName);
+      }
+
+      // Позиции возврата (для акта повернення) остаются теми же, что
+      // уже выбраны в форме — buildRequestBody подставит их сама
+      if (activeDocType) {
+        const returnBody = activeDocType === 'return_act' ? buildReturnBody() : null;
+        await openPreview(activeDocType, { ...(returnBody || {}), ...displayOptions });
+      }
+    } catch (error) {
+      setNameSaveError(error instanceof Error ? error.message : 'Ошибка сети при сохранении названий');
+    } finally {
+      setSavingNames(false);
     }
   }
 
@@ -375,28 +450,73 @@ export default function PrintDocumentsPanel({ orderId, items }: { orderId: strin
               </div>
             </div>
 
-            {/* ---- панель "Редактировать": что показывать в таблице ---- */}
+            {/* ---- панель "Редактировать": что показывать в таблице + названия позиций ---- */}
             {showEditBar && previewHtml && (
               <div
-                className="flex flex-wrap items-center gap-4 px-4 py-2.5 text-sm"
+                className="px-4 py-2.5 text-sm"
                 style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}
               >
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={displayOptions.showArticle}
-                    onChange={() => toggleDisplayOption('showArticle')}
-                  />
-                  Показывать артикулы
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={displayOptions.showBrand}
-                    onChange={() => toggleDisplayOption('showBrand')}
-                  />
-                  Показывать бренды
-                </label>
+                <div className="flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={displayOptions.showArticle}
+                      onChange={() => toggleDisplayOption('showArticle')}
+                    />
+                    Показывать артикулы
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={displayOptions.showBrand}
+                      onChange={() => toggleDisplayOption('showBrand')}
+                    />
+                    Показывать бренды
+                  </label>
+                </div>
+
+                {/* ---- исправление названий позиций (напр. если прайс
+                    поставщика был на русском) — правит order_items.name
+                    этого заказа, документ сразу перестраивается ---- */}
+                <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line)' }}>
+                  <p className="text-xs font-medium mb-2" style={{ color: 'var(--ink-muted)' }}>
+                    Названия позицій у документі
+                  </p>
+                  <div className="flex flex-col gap-1.5 mb-2">
+                    {items.map((item) => (
+                      <div key={item.id} className="flex items-center gap-2">
+                        <span
+                          className="text-xs font-mono shrink-0 w-24 truncate"
+                          style={{ color: 'var(--ink-faint)' }}
+                          title={item.article}
+                        >
+                          {item.article}
+                        </span>
+                        <input
+                          type="text"
+                          className="flex-1 min-w-0 px-2.5 py-1.5 text-xs rounded-md"
+                          style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                          value={nameDrafts[item.id] ?? ''}
+                          onChange={(e) => setNameDrafts({ ...nameDrafts, [item.id]: e.target.value })}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  {nameSaveError && (
+                    <p className="text-xs mb-2" style={{ color: 'var(--bad)' }}>
+                      {nameSaveError}
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    disabled={savingNames}
+                    onClick={handleSaveNames}
+                    className="text-xs px-3 py-1.5 rounded-md disabled:opacity-50"
+                    style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                  >
+                    {savingNames ? 'Сохранение...' : 'Сохранить названия и обновить документ'}
+                  </button>
+                </div>
               </div>
             )}
 

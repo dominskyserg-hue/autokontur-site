@@ -900,7 +900,17 @@ export default function OrderDetailsModal({
                 </div>
 
                 {/* ---- друк документів ---- */}
-                <PrintDocumentsPanel orderId={orderDetails.id} items={orderDetails.items} />
+                <PrintDocumentsPanel
+                  orderId={orderDetails.id}
+                  items={orderDetails.items}
+                  onItemNameSaved={(itemId, name) => {
+                    setOrderDetails((prev) =>
+                      prev
+                        ? { ...prev, items: prev.items.map((item) => (item.id === itemId ? { ...item, name } : item)) }
+                        : prev
+                    );
+                  }}
+                />
               </div>
 
               {/* ==================== ПРАВАЯ КОЛОНКА: СОСТАВ ЗАКАЗА ==================== */}
