@@ -93,6 +93,13 @@ interface OrderItemResponse {
   quantity: number;
   supplierId: string | null;
   supplierName: string | null;
+  // Контактна особа поставщика — ЖИВЕ значення з таблиці suppliers
+  // (а не "снімок" на момент заказу, як supplierName): контактна
+  // особа могла змінитись відтоді, а оператору треба знати, кому
+  // телефонувати ЗАРАЗ, а не хто був контактом місяць тому. null, якщо
+  // у поставщика це поле не заповнене, або якщо supplier_id обнулився
+  // (поставщика видалили — ON DELETE SET NULL, schema.sql)
+  supplierContactName: string | null;
   status: OrderItemStatus;
 }
 
@@ -170,10 +177,13 @@ export async function GET(
     // добавления, чтобы порядок в списке не "прыгал" между обновлениями
     const itemsResult = await pool.query(
       `
-      SELECT id, article, brand, name, price, quantity, supplier_id, supplier_name, status
-      FROM order_items
-      WHERE order_id = $1
-      ORDER BY created_at ASC
+      SELECT oi.id, oi.article, oi.brand, oi.name, oi.price, oi.quantity,
+             oi.supplier_id, oi.supplier_name, oi.status,
+             s.contact_name AS supplier_contact_name
+      FROM order_items oi
+      LEFT JOIN suppliers s ON s.id = oi.supplier_id
+      WHERE oi.order_id = $1
+      ORDER BY oi.created_at ASC
       `,
       [id]
     );
@@ -189,6 +199,7 @@ export async function GET(
       quantity: row.quantity,
       supplierId: row.supplier_id,
       supplierName: row.supplier_name,
+      supplierContactName: row.supplier_contact_name,
       status: row.status,
     }));
 

@@ -56,6 +56,7 @@ interface OrderItem {
   quantity: number;
   supplierId: string | null;
   supplierName: string | null;
+  supplierContactName: string | null;
   status: OrderItemStatus;
 }
 
@@ -92,6 +93,19 @@ interface CashRegisterOption {
   name: string;
   type: 'cash' | 'bank_account' | 'card';
   balance: number;
+}
+
+// Один товар у результатах пошуку для "Додати товар" — те саме, що
+// віддає GET /api/products?search=... (components/NewOrderScreen.tsx
+// вже використовує цей ендпоінт так само)
+interface AddItemProductOption {
+  id: string;
+  article: string;
+  brand: string | null;
+  name: string | null;
+  retailPrice: number;
+  stock: number;
+  supplierName: string;
 }
 
 type SaveKey = 'status' | 'ttn' | 'vehicle';
@@ -170,12 +184,21 @@ export default function OrderDetailsModal({
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [cashRegisters, setCashRegisters] = useState<CashRegisterOption[]>([]);
 
-  // ---- редактирование позиции (цена + поставщик) ----
+  // ---- редактирование позиции (цена + поставщик + кількість) ----
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editItemPrice, setEditItemPrice] = useState('');
   const [editItemSupplierId, setEditItemSupplierId] = useState('');
+  const [editItemQuantity, setEditItemQuantity] = useState('');
   const [editItemSaving, setEditItemSaving] = useState(false);
   const [editItemError, setEditItemError] = useState<string | null>(null);
+
+  // ---- додавання нової позиції в заказ (клієнт докупляє ще щось) ----
+  const [showAddItem, setShowAddItem] = useState(false);
+  const [addItemSearch, setAddItemSearch] = useState('');
+  const [addItemResults, setAddItemResults] = useState<AddItemProductOption[]>([]);
+  const [addItemSearching, setAddItemSearching] = useState(false);
+  const [addingItemId, setAddingItemId] = useState<string | null>(null);
+  const [addItemError, setAddItemError] = useState<string | null>(null);
 
   // ---- возврат позиции ----
   const [returningItemId, setReturningItemId] = useState<string | null>(null);
@@ -421,13 +444,14 @@ export default function OrderDetailsModal({
   };
 
   // ------------------------------------------------------------
-  // РЕДАКТИРОВАНИЕ ПОЗИЦИИ ЗАКАЗА (цена + поставщик)
+  // РЕДАКТИРОВАНИЕ ПОЗИЦИИ ЗАКАЗА (цена + поставщик + кількість)
   // ------------------------------------------------------------
   const openItemEdit = (item: OrderItem) => {
     setReturningItemId(null);
     setEditingItemId(item.id);
     setEditItemPrice(String(item.price));
     setEditItemSupplierId(item.supplierId || '');
+    setEditItemQuantity(String(item.quantity));
     setEditItemError(null);
   };
 
@@ -448,6 +472,11 @@ export default function OrderDetailsModal({
       setEditItemError('Выберите поставщика');
       return;
     }
+    const quantity = parseInt(editItemQuantity, 10);
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      setEditItemError('Количество должно быть целым числом больше нуля');
+      return;
+    }
 
     setEditItemSaving(true);
     setEditItemError(null);
@@ -455,7 +484,7 @@ export default function OrderDetailsModal({
       const response = await fetch(`/api/orders/${orderDetails.id}/items/${editingItemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ price, supplierId: editItemSupplierId }),
+        body: JSON.stringify({ price, supplierId: editItemSupplierId, quantity }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -472,6 +501,69 @@ export default function OrderDetailsModal({
       setEditItemError(error instanceof Error ? error.message : 'Ошибка сети при сохранении позиции');
     } finally {
       setEditItemSaving(false);
+    }
+  };
+
+  // ------------------------------------------------------------
+  // ДОДАВАННЯ НОВОЇ ПОЗИЦІЇ В ЗАКАЗ (клієнт хоче докупити щось ще)
+  // ------------------------------------------------------------
+  useEffect(() => {
+    const term = addItemSearch.trim();
+    if (!term) {
+      setAddItemResults([]);
+      return;
+    }
+    setAddItemSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/products?search=${encodeURIComponent(term)}&pageSize=8`);
+        const data = await response.json();
+        setAddItemResults(response.ok ? (data.products as AddItemProductOption[]) : []);
+      } catch {
+        setAddItemResults([]);
+      } finally {
+        setAddItemSearching(false);
+      }
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [addItemSearch]);
+
+  const closeAddItem = () => {
+    setShowAddItem(false);
+    setAddItemSearch('');
+    setAddItemResults([]);
+    setAddItemError(null);
+  };
+
+  // Кількість одразу 1 — той самий підхід, що і в "Популярні товари"
+  // на вітрині: швидке додавання, а поправити кількість/ціну можна
+  // одразу після через "✎" (той самий пенсіл, що і для інших позицій)
+  const handleAddItem = async (product: AddItemProductOption) => {
+    if (!orderDetails) return;
+    setAddingItemId(product.id);
+    setAddItemError(null);
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: product.id, quantity: 1 }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Не удалось добавить товар в заказ');
+      }
+
+      const newItem = data.item as OrderItem;
+      const nextItems = [...orderDetails.items, newItem];
+      const nextTotal = nextItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+      setOrderDetails({ ...orderDetails, items: nextItems, totalAmount: nextTotal });
+      setAddItemSearch('');
+      setAddItemResults([]);
+      onOrderChanged();
+    } catch (error) {
+      setAddItemError(error instanceof Error ? error.message : 'Ошибка сети при добавлении товара');
+    } finally {
+      setAddingItemId(null);
     }
   };
 
@@ -966,8 +1058,76 @@ export default function OrderDetailsModal({
                   <h3 className="text-xs font-semibold" style={{ color: 'var(--ink-muted)' }}>
                     СКЛАД ЗАМОВЛЕННЯ
                   </h3>
-                  <PaymentBadge paidAmount={orderDetails.paidAmount} totalAmount={orderDetails.totalAmount} />
+                  <div className="flex items-center gap-2">
+                    <PaymentBadge paidAmount={orderDetails.paidAmount} totalAmount={orderDetails.totalAmount} />
+                    {orderDetails.status !== 'shipped' && orderDetails.status !== 'cancelled' && (
+                      <button
+                        type="button"
+                        onClick={() => (showAddItem ? closeAddItem() : setShowAddItem(true))}
+                        className="text-[11px] px-2 py-1 rounded-md"
+                        style={{
+                          color: showAddItem ? 'var(--accent-ink)' : 'var(--accent)',
+                          background: showAddItem ? 'var(--accent)' : 'transparent',
+                          border: '1px solid var(--accent)',
+                        }}
+                      >
+                        + Додати товар
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {/* ---- пошук і додавання нової позиції (клієнт хоче
+                    докупити щось ще, вже після оформлення заказа) ---- */}
+                {showAddItem && (
+                  <div className="mb-3 p-3 rounded-md" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                    <input
+                      type="text"
+                      autoFocus
+                      value={addItemSearch}
+                      onChange={(e) => setAddItemSearch(e.target.value)}
+                      placeholder="Артикул або назва товару..."
+                      className="w-full px-3 py-2 text-sm rounded-md"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                    />
+                    {addItemSearching && (
+                      <p className="text-xs mt-2" style={{ color: 'var(--ink-faint)' }}>
+                        Пошук...
+                      </p>
+                    )}
+                    {addItemError && (
+                      <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
+                        {addItemError}
+                      </p>
+                    )}
+                    {addItemResults.length > 0 && (
+                      <div className="mt-2 flex flex-col gap-1.5 max-h-56 overflow-y-auto">
+                        {addItemResults.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            disabled={addingItemId === p.id}
+                            onClick={() => handleAddItem(p)}
+                            className="flex items-center justify-between gap-2 p-2 rounded-md text-left text-xs disabled:opacity-50"
+                            style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate">{p.name || p.article}</p>
+                              <p className="font-mono mt-0.5" style={{ color: 'var(--ink-faint)' }}>
+                                {p.article}
+                                {p.brand ? ` · ${p.brand}` : ''} · {p.supplierName} ·{' '}
+                                {p.stock > 0 ? `${p.stock} шт` : 'під замовлення'}
+                              </p>
+                            </div>
+                            <span className="font-mono shrink-0">
+                              {addingItemId === p.id ? 'Додавання...' : `${formatMoney(p.retailPrice)} грн`}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {orderDetails.items.length === 0 ? (
                   <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
@@ -1006,6 +1166,7 @@ export default function OrderDetailsModal({
                                       {item.article}
                                       {item.brand ? ` · ${item.brand}` : ''}
                                       {item.supplierName ? ` · ${item.supplierName}` : ''}
+                                      {item.supplierContactName ? ` (${item.supplierContactName})` : ''}
                                     </p>
                                   </td>
                                   <td className="px-3 py-2.5 align-top text-right font-mono whitespace-nowrap">
@@ -1055,7 +1216,22 @@ export default function OrderDetailsModal({
                                 {isEditing && (
                                   <tr style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
                                     <td colSpan={6} className="px-3 py-3">
-                                      <div className="grid grid-cols-2 gap-2.5 mb-2.5">
+                                      <div className="grid grid-cols-3 gap-2.5 mb-2.5">
+                                        <div>
+                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                            Кількість
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
+                                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                            value={editItemQuantity}
+                                            onChange={(e) => setEditItemQuantity(e.target.value)}
+                                            autoFocus
+                                          />
+                                        </div>
                                         <div>
                                           <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
                                             Цена за шт.
@@ -1068,7 +1244,6 @@ export default function OrderDetailsModal({
                                             style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                                             value={editItemPrice}
                                             onChange={(e) => setEditItemPrice(e.target.value)}
-                                            autoFocus
                                           />
                                         </div>
                                         <div>

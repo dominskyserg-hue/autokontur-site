@@ -5,18 +5,21 @@
 //
 // PATCH — ручное редактирование ОДНОЙ позиции внутри заказа:
 // цена, по которой она продана (price), поставщик, который её
-// отгружает (supplierId), и/или название позиции (name). Название
-// правится, например, когда прайс-лист поставщика был на русском и
-// в заказ попало русское название детали — вместо того, чтобы менять
-// его в каталоге товаров (это затронуло бы вообще все заказы с этим
-// товаром), здесь правится только "снимок" в этом конкретном заказе.
+// отгружает (supplierId), название позиции (name) и/или количество
+// (quantity) — например, клиент решил докупить ещё одну единицу того
+// же товара уже после оформления заказа. Название правится, например,
+// когда прайс-лист поставщика был на русском и в заказ попало русское
+// название детали — вместо того, чтобы менять его в каталоге товаров
+// (это затронуло бы вообще все заказы с этим товаром), здесь правится
+// только "снимок" в этом конкретном заказе.
 //
 // Тело запроса — JSON, все поля необязательны, но хотя бы одно
 // должно быть передано:
 //   { "price": 1250.5 }
 //   { "supplierId": "3fa85f64-..." }
 //   { "name": "Фільтр масляний" }
-//   { "price": 1250.5, "supplierId": "3fa85f64-...", "name": "..." }
+//   { "quantity": 3 }
+//   { "price": 1250.5, "supplierId": "3fa85f64-...", "name": "...", "quantity": 2 }
 //
 // ВАЖНО: order_items хранит "снимок" товара на момент покупки (см.
 // комментарий в schema.sql) — supplier_name это ТЕКСТ, скопированный
@@ -69,6 +72,7 @@ interface PatchOrderItemRequestBody {
   price?: number;
   supplierId?: string;
   name?: string;
+  quantity?: number;
 }
 
 // Next.js 15: params у Route Handler — это Promise, поэтому его
@@ -99,10 +103,11 @@ export async function PATCH(
   const hasPrice = body.price !== undefined;
   const hasSupplier = body.supplierId !== undefined;
   const hasName = body.name !== undefined;
+  const hasQuantity = body.quantity !== undefined;
 
-  if (!hasPrice && !hasSupplier && !hasName) {
+  if (!hasPrice && !hasSupplier && !hasName && !hasQuantity) {
     return NextResponse.json(
-      { error: 'Передайте хотя бы одно поле для изменения: price, supplierId или name.' },
+      { error: 'Передайте хотя бы одно поле для изменения: price, supplierId, name или quantity.' },
       { status: 400 }
     );
   }
@@ -114,6 +119,13 @@ export async function PATCH(
   if (hasPrice && (!Number.isFinite(body.price) || (body.price as number) < 0)) {
     return NextResponse.json(
       { error: 'Цена должна быть числом не меньше нуля.' },
+      { status: 400 }
+    );
+  }
+
+  if (hasQuantity && (!Number.isInteger(body.quantity) || (body.quantity as number) <= 0)) {
+    return NextResponse.json(
+      { error: 'Кількість має бути цілим числом більше нуля.' },
       { status: 400 }
     );
   }
@@ -148,16 +160,25 @@ export async function PATCH(
     // позиции, но и что она принадлежит именно ЭТОМУ заказу из адреса,
     // а не какому-то другому (иначе через подмену itemId в адресе
     // можно было бы случайно отредактировать чужую позицию)
+    // CTE, що змінює дані (UPDATE ... RETURNING), одразу приєднана до
+    // suppliers — щоб повернути АКТУАЛЬНЕ contact_name одним запитом,
+    // а не окремим додатковим SELECT після UPDATE
     const result = await pool.query(
       `
-      UPDATE order_items
-      SET
-        price = COALESCE($3, price),
-        supplier_id = COALESCE($4, supplier_id),
-        supplier_name = COALESCE($5, supplier_name),
-        name = COALESCE($6, name)
-      WHERE id = $1 AND order_id = $2
-      RETURNING id, article, brand, name, price, quantity, supplier_id, supplier_name, status
+      WITH updated AS (
+        UPDATE order_items
+        SET
+          price = COALESCE($3, price),
+          supplier_id = COALESCE($4, supplier_id),
+          supplier_name = COALESCE($5, supplier_name),
+          name = COALESCE($6, name),
+          quantity = COALESCE($7, quantity)
+        WHERE id = $1 AND order_id = $2
+        RETURNING id, article, brand, name, price, quantity, supplier_id, supplier_name, status
+      )
+      SELECT updated.*, s.contact_name AS supplier_contact_name
+      FROM updated
+      LEFT JOIN suppliers s ON s.id = updated.supplier_id
       `,
       [
         itemId,
@@ -166,6 +187,7 @@ export async function PATCH(
         hasSupplier ? body.supplierId : null,
         hasSupplier ? supplierName : null,
         hasName ? (body.name as string).trim() : null,
+        hasQuantity ? body.quantity : null,
       ]
     );
 
@@ -191,6 +213,7 @@ export async function PATCH(
         quantity: row.quantity,
         supplierId: row.supplier_id,
         supplierName: row.supplier_name,
+        supplierContactName: row.supplier_contact_name,
         status: row.status,
       },
     });
