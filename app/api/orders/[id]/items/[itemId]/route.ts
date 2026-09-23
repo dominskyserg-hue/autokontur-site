@@ -3,23 +3,25 @@
 // Адрес: /api/orders/[id]/items/[itemId]
 // (например /api/orders/3fa85f64-.../items/9c6a1b2d-...)
 //
-// PATCH — ручное редактирование ОДНОЙ позиции внутри заказа:
-// цена, по которой она продана (price), поставщик, который её
-// отгружает (supplierId), название позиции (name) и/или количество
-// (quantity) — например, клиент решил докупить ещё одну единицу того
-// же товара уже после оформления заказа. Название правится, например,
-// когда прайс-лист поставщика был на русском и в заказ попало русское
-// название детали — вместо того, чтобы менять его в каталоге товаров
-// (это затронуло бы вообще все заказы с этим товаром), здесь правится
-// только "снимок" в этом конкретном заказе.
+// PATCH — ручное редактирование ОДНОЙ позиции внутри заказа: цена
+// продажи (price), закупочная цена/себестоимость (costPrice — по ней
+// считается валовая прибыль в отчётах), поставщик (supplierId),
+// название позиции (name) и/или количество (quantity) — например,
+// клиент решил докупить ещё одну единицу того же товара уже после
+// оформления заказа. Название правится, например, когда прайс-лист
+// поставщика был на русском и в заказ попало русское название детали —
+// вместо того, чтобы менять его в каталоге товаров (это затронуло бы
+// вообще все заказы с этим товаром), здесь правится только "снимок"
+// в этом конкретном заказе.
 //
 // Тело запроса — JSON, все поля необязательны, но хотя бы одно
 // должно быть передано:
 //   { "price": 1250.5 }
+//   { "costPrice": 900 }
 //   { "supplierId": "3fa85f64-..." }
 //   { "name": "Фільтр масляний" }
 //   { "quantity": 3 }
-//   { "price": 1250.5, "supplierId": "3fa85f64-...", "name": "...", "quantity": 2 }
+//   { "price": 1250.5, "costPrice": 900, "supplierId": "3fa85f64-...", "name": "...", "quantity": 2 }
 //
 // ВАЖНО: order_items хранит "снимок" товара на момент покупки (см.
 // комментарий в schema.sql) — supplier_name это ТЕКСТ, скопированный
@@ -70,6 +72,7 @@ function isValidUuid(value: string): boolean {
 
 interface PatchOrderItemRequestBody {
   price?: number;
+  costPrice?: number;
   supplierId?: string;
   name?: string;
   quantity?: number;
@@ -101,13 +104,14 @@ export async function PATCH(
   }
 
   const hasPrice = body.price !== undefined;
+  const hasCostPrice = body.costPrice !== undefined;
   const hasSupplier = body.supplierId !== undefined;
   const hasName = body.name !== undefined;
   const hasQuantity = body.quantity !== undefined;
 
-  if (!hasPrice && !hasSupplier && !hasName && !hasQuantity) {
+  if (!hasPrice && !hasCostPrice && !hasSupplier && !hasName && !hasQuantity) {
     return NextResponse.json(
-      { error: 'Передайте хотя бы одно поле для изменения: price, supplierId, name или quantity.' },
+      { error: 'Передайте хотя бы одно поле для изменения: price, costPrice, supplierId, name или quantity.' },
       { status: 400 }
     );
   }
@@ -119,6 +123,13 @@ export async function PATCH(
   if (hasPrice && (!Number.isFinite(body.price) || (body.price as number) < 0)) {
     return NextResponse.json(
       { error: 'Цена должна быть числом не меньше нуля.' },
+      { status: 400 }
+    );
+  }
+
+  if (hasCostPrice && (!Number.isFinite(body.costPrice) || (body.costPrice as number) < 0)) {
+    return NextResponse.json(
+      { error: 'Закупочная цена должна быть числом не меньше нуля.' },
       { status: 400 }
     );
   }
@@ -169,12 +180,13 @@ export async function PATCH(
         UPDATE order_items
         SET
           price = COALESCE($3, price),
+          cost_price = COALESCE($8, cost_price),
           supplier_id = COALESCE($4, supplier_id),
           supplier_name = COALESCE($5, supplier_name),
           name = COALESCE($6, name),
           quantity = COALESCE($7, quantity)
         WHERE id = $1 AND order_id = $2
-        RETURNING id, article, brand, name, price, quantity, supplier_id, supplier_name, status
+        RETURNING id, article, brand, name, price, cost_price, quantity, supplier_id, supplier_name, status
       )
       SELECT updated.*, s.contact_name AS supplier_contact_name
       FROM updated
@@ -188,6 +200,7 @@ export async function PATCH(
         hasSupplier ? supplierName : null,
         hasName ? (body.name as string).trim() : null,
         hasQuantity ? body.quantity : null,
+        hasCostPrice ? body.costPrice : null,
       ]
     );
 
@@ -207,9 +220,10 @@ export async function PATCH(
         article: row.article,
         brand: row.brand,
         name: row.name,
-        // price — колонка NUMERIC, драйвер pg возвращает такие
-        // значения строкой, явно переводим в число
+        // price/cost_price — колонки NUMERIC, драйвер pg возвращает
+        // такие значения строкой, явно переводим в число
         price: parseFloat(row.price),
+        costPrice: parseFloat(row.cost_price),
         quantity: row.quantity,
         supplierId: row.supplier_id,
         supplierName: row.supplier_name,

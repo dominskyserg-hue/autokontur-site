@@ -53,6 +53,7 @@ interface OrderItem {
   brand: string | null;
   name: string | null;
   price: number;
+  costPrice: number;
   quantity: number;
   supplierId: string | null;
   supplierName: string | null;
@@ -184,9 +185,10 @@ export default function OrderDetailsModal({
   const [suppliers, setSuppliers] = useState<SupplierOption[]>([]);
   const [cashRegisters, setCashRegisters] = useState<CashRegisterOption[]>([]);
 
-  // ---- редактирование позиции (цена + поставщик + кількість) ----
+  // ---- редактирование позиции (цена продажи/закупки + поставщик + кількість) ----
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editItemPrice, setEditItemPrice] = useState('');
+  const [editItemCostPrice, setEditItemCostPrice] = useState('');
   const [editItemSupplierId, setEditItemSupplierId] = useState('');
   const [editItemQuantity, setEditItemQuantity] = useState('');
   const [editItemSaving, setEditItemSaving] = useState(false);
@@ -450,6 +452,7 @@ export default function OrderDetailsModal({
     setReturningItemId(null);
     setEditingItemId(item.id);
     setEditItemPrice(String(item.price));
+    setEditItemCostPrice(String(item.costPrice));
     setEditItemSupplierId(item.supplierId || '');
     setEditItemQuantity(String(item.quantity));
     setEditItemError(null);
@@ -468,6 +471,11 @@ export default function OrderDetailsModal({
       setEditItemError('Цена должна быть числом не меньше нуля');
       return;
     }
+    const costPrice = parseFloat(editItemCostPrice.replace(',', '.'));
+    if (!Number.isFinite(costPrice) || costPrice < 0) {
+      setEditItemError('Закупочная цена должна быть числом не меньше нуля');
+      return;
+    }
     if (!editItemSupplierId) {
       setEditItemError('Выберите поставщика');
       return;
@@ -484,7 +492,7 @@ export default function OrderDetailsModal({
       const response = await fetch(`/api/orders/${orderDetails.id}/items/${editingItemId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ price, supplierId: editItemSupplierId, quantity }),
+        body: JSON.stringify({ price, costPrice, supplierId: editItemSupplierId, quantity }),
       });
       const data = await response.json();
       if (!response.ok) {
@@ -1216,7 +1224,7 @@ export default function OrderDetailsModal({
                                 {isEditing && (
                                   <tr style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
                                     <td colSpan={6} className="px-3 py-3">
-                                      <div className="grid grid-cols-3 gap-2.5 mb-2.5">
+                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2.5">
                                         <div>
                                           <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
                                             Кількість
@@ -1234,7 +1242,7 @@ export default function OrderDetailsModal({
                                         </div>
                                         <div>
                                           <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
-                                            Цена за шт.
+                                            Ціна продажу
                                           </label>
                                           <input
                                             type="number"
@@ -1244,6 +1252,20 @@ export default function OrderDetailsModal({
                                             style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                                             value={editItemPrice}
                                             onChange={(e) => setEditItemPrice(e.target.value)}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                            Ціна закупки
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min={0}
+                                            step="any"
+                                            className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
+                                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                            value={editItemCostPrice}
+                                            onChange={(e) => setEditItemCostPrice(e.target.value)}
                                           />
                                         </div>
                                         <div>

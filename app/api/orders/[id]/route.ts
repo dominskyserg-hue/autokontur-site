@@ -90,6 +90,10 @@ interface OrderItemResponse {
   brand: string | null;
   name: string | null;
   price: number;
+  // Закупочная цена ЗА ОДНУ ШТУКУ ("снимок" cost_price на момент
+  // покупки, схема — секция 28 schema.sql) — редактируется отдельно
+  // от price (цены продажи) через тот же "✎" в составе заказа
+  costPrice: number;
   quantity: number;
   supplierId: string | null;
   supplierName: string | null;
@@ -177,7 +181,7 @@ export async function GET(
     // добавления, чтобы порядок в списке не "прыгал" между обновлениями
     const itemsResult = await pool.query(
       `
-      SELECT oi.id, oi.article, oi.brand, oi.name, oi.price, oi.quantity,
+      SELECT oi.id, oi.article, oi.brand, oi.name, oi.price, oi.cost_price, oi.quantity,
              oi.supplier_id, oi.supplier_name, oi.status,
              s.contact_name AS supplier_contact_name
       FROM order_items oi
@@ -193,9 +197,10 @@ export async function GET(
       article: row.article,
       brand: row.brand,
       name: row.name,
-      // price — колонка NUMERIC, драйвер pg возвращает такие значения
-      // строкой, явно переводим в число
+      // price/cost_price — колонки NUMERIC, драйвер pg возвращает такие
+      // значения строкой, явно переводим в число
       price: parseFloat(row.price),
+      costPrice: parseFloat(row.cost_price),
       quantity: row.quantity,
       supplierId: row.supplier_id,
       supplierName: row.supplier_name,

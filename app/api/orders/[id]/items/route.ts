@@ -124,7 +124,7 @@ export async function POST(
       `
       INSERT INTO order_items (order_id, product_id, article, brand, name, price, cost_price, quantity, supplier_id, supplier_name, status)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
-      RETURNING id, article, brand, name, price, quantity, supplier_id, supplier_name, status
+      RETURNING id, article, brand, name, price, cost_price, quantity, supplier_id, supplier_name, status
       `,
       [
         orderId,
@@ -150,9 +150,10 @@ export async function POST(
           article: row.article,
           brand: row.brand,
           name: row.name,
-          // price — колонка NUMERIC, драйвер pg возвращает такие
-          // значения строкой, явно переводим в число
+          // price/cost_price — колонки NUMERIC, драйвер pg возвращает
+          // такие значения строкой, явно переводим в число
           price: parseFloat(row.price),
+          costPrice: parseFloat(row.cost_price),
           quantity: row.quantity,
           supplierId: row.supplier_id,
           supplierName: row.supplier_name,
