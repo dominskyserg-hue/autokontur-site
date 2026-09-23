@@ -84,22 +84,21 @@ export async function POST(
   }
 
   try {
-    // Заказ не должен быть уже отгружен (склад по нему уже списан —
+    // Заказ не должен быть уже отгружен — склад по нему уже списан, и
     // "докупить" в уже отгруженный заказ означало бы отгрузить товар
-    // без реального списания остатка) или отменён
+    // без реального списания остатка (см. shipOrder() в
+    // app/api/orders/[id]/route.ts). Отменённый заказ, наоборот,
+    // добавлять можно: сама отмена ничего не списывает и не начисляет,
+    // так что дополнить его позже (например, если отменили по ошибке,
+    // а клиент всё же хочет забрать заказ) совершенно безопасно
     const orderResult = await pool.query('SELECT status FROM orders WHERE id = $1', [orderId]);
     if (orderResult.rows.length === 0) {
       return NextResponse.json({ error: 'Заказ с таким id не найден.' }, { status: 404 });
     }
     const orderStatus = orderResult.rows[0].status as string;
-    if (orderStatus === 'shipped' || orderStatus === 'cancelled') {
+    if (orderStatus === 'shipped') {
       return NextResponse.json(
-        {
-          error:
-            orderStatus === 'shipped'
-              ? 'Заказ уже отгружен — добавить в него новую позицию нельзя. Оформите отдельный заказ.'
-              : 'Заказ отменён — добавить в него новую позицию нельзя.',
-        },
+        { error: 'Заказ уже отгружен — добавить в него новую позицию нельзя. Оформите отдельный заказ.' },
         { status: 400 }
       );
     }

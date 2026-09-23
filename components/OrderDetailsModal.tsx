@@ -1060,7 +1060,7 @@ export default function OrderDetailsModal({
                   </h3>
                   <div className="flex items-center gap-2">
                     <PaymentBadge paidAmount={orderDetails.paidAmount} totalAmount={orderDetails.totalAmount} />
-                    {orderDetails.status !== 'shipped' && orderDetails.status !== 'cancelled' && (
+                    {orderDetails.status !== 'shipped' && (
                       <button
                         type="button"
                         onClick={() => (showAddItem ? closeAddItem() : setShowAddItem(true))}
