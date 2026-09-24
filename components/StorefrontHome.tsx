@@ -1141,9 +1141,26 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
   // (Головна) вже змонтована — ?cart=1 тут не допоможе: шлях не
   // змінюється, і useEffect вище з ним просто не спрацює вдруге.
   // Кнопка натомість диспетчерить цю подію напряму — той самий React-
-  // інстанс Головної, що вже живе на екрані, просто відкриває кошик
+  // інстанс Головної, що вже живе на екрані, просто відкриває кошик.
+  //
+  // ВАЖЛИВО: раз інстанс Головної не перемонтовується (модалка ж не
+  // перезавантажує сторінку), її власний cart-стан у пам'яті лишається
+  // ЗАСТАРІЛИМ на момент цієї події — AddToCartButton щойно дописав
+  // товар НАПРЯМУ в localStorage (той самий CART_STORAGE_KEY), в обхід
+  // цього React-стану. Без перечитування нижче кошик відкривався б
+  // порожнім, хоча товар в localStorage вже є (перевірено на бойовому
+  // сайті — саме так і сталось)
   useEffect(() => {
-    const handler = () => setCartOpen(true);
+    const handler = () => {
+      try {
+        const raw = window.localStorage.getItem(CART_STORAGE_KEY);
+        if (raw) setCart(JSON.parse(raw) as CartItem[]);
+      } catch {
+        // Пошкоджені дані в localStorage — не критично, кошик просто
+        // відкриється з тим станом, що вже був
+      }
+      setCartOpen(true);
+    };
     window.addEventListener('autokontur:open-cart', handler);
     return () => window.removeEventListener('autokontur:open-cart', handler);
   }, []);
