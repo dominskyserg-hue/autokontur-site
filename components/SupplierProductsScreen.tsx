@@ -154,6 +154,9 @@ export default function SupplierProductsScreen({ supplierId }: { supplierId: str
       params.set('page', String(page));
       params.set('pageSize', String(PAGE_SIZE));
       if (debouncedSearch) params.set('search', debouncedSearch);
+      // Адмін мусить бачити й приховані (is_active=false) товари цього
+      // постачальника — інакше їх неможливо було б знайти тут
+      params.set('includeInactive', '1');
 
       const response = await fetch(`/api/products?${params.toString()}`);
       const data = await response.json();

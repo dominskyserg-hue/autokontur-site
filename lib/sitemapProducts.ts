@@ -43,7 +43,7 @@ export const SITEMAP_PRODUCTS_CHUNK_SIZE = 45_000;
 export const SITEMAP_PRODUCTS_MAX_CHUNKS = 6;
 
 export async function getProductsSitemapTotalCount(): Promise<number> {
-  const result = await pool.query('SELECT COUNT(*)::int AS total FROM products');
+  const result = await pool.query('SELECT COUNT(*)::int AS total FROM products WHERE is_active = true');
   return result.rows[0]?.total ?? 0;
 }
 
@@ -55,6 +55,7 @@ export async function getProductsSitemapEntries(chunkNumber: number): Promise<Si
     `
     SELECT id, article, brand, name, updated_at
     FROM products
+    WHERE is_active = true
     ORDER BY id
     LIMIT $1 OFFSET $2
     `,

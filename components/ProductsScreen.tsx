@@ -181,6 +181,9 @@ export default function ProductsScreen() {
       params.set('pageSize', String(PAGE_SIZE));
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (supplierFilter) params.set('supplierId', supplierFilter);
+      // Адмін мусить бачити й приховані (is_active=false) товари —
+      // інакше їх неможливо було б знайти тут і повернути на вітрину
+      params.set('includeInactive', '1');
 
       const response = await fetch(`/api/products?${params.toString()}`);
       const data = await response.json();

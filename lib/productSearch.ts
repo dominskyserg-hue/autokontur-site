@@ -161,7 +161,7 @@ export async function searchProductsForBot(
     `
     SELECT p.id, p.brand, p.article, p.name, p.retail_price, p.stock, COUNT(*) OVER() AS total_count
     FROM products p
-    WHERE ${clause}
+    WHERE p.is_active = true AND ${clause}
     ORDER BY (p.stock > 0) DESC, p.retail_price ASC
     LIMIT ${limitPlaceholder}
     `,

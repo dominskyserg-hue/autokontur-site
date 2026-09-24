@@ -169,6 +169,12 @@ export async function GET(request: NextRequest) {
     const carModel = (searchParams.get('carModel') || '').trim();
     const carYear = (searchParams.get('carYear') || '').trim();
     const engineVolume = (searchParams.get('engineVolume') || '').trim();
+    // includeInactive=1 — лише для адмінських екранів (components/
+    // ProductsScreen.tsx, SupplierProductsScreen.tsx), де адмін мусить
+    // бачити й приховані (is_active=false) товари, щоб мати змогу
+    // повернути їх назад. Публічна вітрина (StorefrontHome.tsx та решта)
+    // цей параметр не передає — там приховані товари завжди виключені
+    const includeInactive = searchParams.get('includeInactive') === '1';
 
     if (supplierId && !isValidUuid(supplierId)) {
       return NextResponse.json(
@@ -182,6 +188,10 @@ export async function GET(request: NextRequest) {
     // так легко добавлять/убирать фильтры, не путаясь в нумерации $1, $2...
     const conditions: string[] = [];
     const values: unknown[] = [];
+
+    if (!includeInactive) {
+      conditions.push('p.is_active = true');
+    }
 
     if (search) {
       // Уся логіка текстового пошуку (артикул/бренд/кросс-номер/

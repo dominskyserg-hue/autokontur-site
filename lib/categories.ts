@@ -1002,6 +1002,14 @@ export const CATEGORIES: CategoryDef[] = [
 
   // ---- Комплект прокладок двигуна (повністю нова категорія деталі) ----
   {
+    // parentCategorySlug — раніше НЕ був заданий (єдиний пропуск серед
+    // усіх вузьких категорій "по машині" у файлі, перевірено окремим
+    // аналізом) — через це detectCategoryForProductName() (яка явно
+    // виключає вузькі категорії з parentCategorySlug) помилково брала
+    // ЦЮ категорію як ШИРОКУ, і перший товар з "прокладк" у назві
+    // отримував H1 "...Daewoo Lanos" незалежно від його реальної марки
+    // (знайдено на прикладі AJUSA 11059300 — товар для CITROËN)
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'lanos-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Daewoo Lanos',
     h1: 'Комплект прокладок двигуна Daewoo Lanos',
@@ -1017,6 +1025,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Daewoo Lanos',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'camry-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Toyota Camry',
     h1: 'Комплект прокладок двигуна Toyota Camry',
@@ -1042,6 +1052,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Toyota Camry',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'passat-b5-komplekt-prokladok',
     name: 'Комплект прокладок двигуна VW Passat B5',
     h1: 'Комплект прокладок двигуна VW Passat B5',
@@ -1060,6 +1072,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'VW Passat B5',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'golf-4-komplekt-prokladok',
     name: 'Комплект прокладок двигуна VW Golf 4',
     h1: 'Комплект прокладок двигуна VW Golf 4',
@@ -1075,6 +1089,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'VW Golf 4',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'corolla-e120-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Toyota Corolla E120',
     h1: 'Комплект прокладок двигуна Toyota Corolla E120',
@@ -1090,6 +1106,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Toyota Corolla E120',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'corolla-e150-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Toyota Corolla E150',
     h1: 'Комплект прокладок двигуна Toyota Corolla E150',
@@ -1105,6 +1123,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Toyota Corolla E150',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'sx4-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Suzuki SX4',
     h1: 'Комплект прокладок двигуна Suzuki SX4',
@@ -1119,6 +1139,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Suzuki SX4',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'accord-7-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Honda Accord VII',
     h1: 'Комплект прокладок двигуна Honda Accord VII',
@@ -1142,6 +1164,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Honda Accord VII',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'pajero-2-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Mitsubishi Pajero II',
     h1: 'Комплект прокладок двигуна Mitsubishi Pajero II',
@@ -1159,6 +1183,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Mitsubishi Pajero II',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'mazda6-gg-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Mazda 6 GG',
     h1: 'Комплект прокладок двигуна Mazda 6 GG',
@@ -1173,6 +1199,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Mazda 6 (GG)',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'civic-4d-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Honda Civic 4D',
     h1: 'Комплект прокладок двигуна Honda Civic 4D',
@@ -1187,6 +1215,8 @@ export const CATEGORIES: CategoryDef[] = [
     modelLabel: 'Honda Civic 4D',
   },
   {
+    // parentCategorySlug — див. коментар у lanos-komplekt-prokladok вище
+    parentCategorySlug: 'prokladky-dvyhuna',
     slug: 'prado-120-komplekt-prokladok',
     name: 'Комплект прокладок двигуна Toyota Land Cruiser Prado 120',
     h1: 'Комплект прокладок двигуна Toyota Land Cruiser Prado 120',
@@ -2556,6 +2586,89 @@ export function detectCategoryForProductName(name: string | null | undefined): C
 }
 
 // ------------------------------------------------------------
+// ВУЗЬКА КАТЕГОРІЯ "ПО МАШИНІ" ДЛЯ H1/TITLE ОДНОГО ТОВАРУ
+// (lib/productDetail.ts, buildSeoProductName) — ЗНАЙДЕНИЙ БАГ
+// ------------------------------------------------------------
+// Кілька вузьких категорій ("Комплект прокладок двигуна Daewoo
+// Lanos", "...Toyota Camry" тощо) мали ОДНАКОВИЙ matchGroups
+// [['прокладк']] — самого тільки слова "прокладка" в назві товару
+// достатньо, щоб пройти цей фільтр, БЕЗ жодної перевірки марки/моделі
+// авто. detectCategoryForProductName() бере ПЕРШУ категорію, що
+// підходить за порядком у масиві — тому будь-який товар зі словом
+// "прокладка" у назві (незалежно від його реальної марки) отримував
+// H1 із жорстко зашитим "Daewoo Lanos" (перша така категорія у
+// списку). Перевірено: AJUSA 11059300 (car_make=CITROËN) та ELRING
+// 123482 (car_make=MAZDA) обидва показували "...Daewoo Lanos".
+//
+// Виправлення — двошарове:
+//   1. Усі 12 категорій "Комплект прокладок двигуна {Модель}" тепер
+//      мають parentCategorySlug: 'prokladky-dvyhuna' — це ВИКЛЮЧАЄ їх
+//      із detectCategoryForProductName() (яка й так свідомо шукає
+//      лише широкі категорії — !c.parentCategorySlug), як і всі інші
+//      вузькі категорії "по машині" у файлі.
+//   2. detectCategoryForProductH1() нижче — окрема функція САМЕ для
+//      H1/title: спершу пробує вузькі категорії (з tecdocVehicle), але
+//      ЛИШЕ якщо марка/модель ТОВАРУ (car_make/car_model) реально
+//      збігаються з нею (narrowCategoryMatchesVehicle) — інакше
+//      відкат на звичайну широку категорію через
+//      detectCategoryForProductName() вище.
+
+// Перше "слово" моделі з офіційного запису TecDoc (напр. "LANOS /
+// SENS (KLAT)" -> "LANOS", "CAMRY Stufenheck (AVV5_, XV5_)" ->
+// "CAMRY") — наближений ключ для зіставлення з вільним текстом
+// car_model постачальника, який рідко співпадає з TecDoc дослівно
+function tecdocModelKeyword(model: string): string {
+  return model.split(/[\s([/]/)[0].trim().toUpperCase();
+}
+
+// Чи зустрічається keyword у text як ОКРЕМЕ слово (не частина іншого
+// слова) — щоб "GOLF" не спрацював на "GOLFO" абощо. Ключі коротші за
+// 3 символи свідомо ігноруємо — занадто велика ймовірність випадкового
+// збігу
+function containsWholeWord(text: string, keyword: string): boolean {
+  if (keyword.length < 3) return false;
+  const pattern = new RegExp(`(?:^|[^A-ZА-ЯЁІЇЄ0-9])${keyword}(?:[^A-ZА-ЯЁІЇЄ0-9]|$)`, 'i');
+  return pattern.test(text);
+}
+
+// Марка — ТОЧНИЙ збіг (car_make у базі й tecdocVehicle.make — той
+// самий "сирий" код постачальника, напр. "TOYOTA", "VW", "CITROEN").
+// Модель — НАБЛИЖЕНИЙ збіг (ключове слово з TecDoc-запису як ціле
+// слово десь у сирому car_model) — це не 100%-точна перевірка (TecDoc
+// і постачальники називають моделі по-різному), але вона консервативна:
+// у сумнівному випадку функція поверне false, і сторінка просто
+// покаже безпечнішу широку категорію замість чужої моделі авто
+export function narrowCategoryMatchesVehicle(
+  category: CategoryDef,
+  carMake: string | null | undefined,
+  carModel: string | null | undefined
+): boolean {
+  if (!category.tecdocVehicle || !carMake || !carModel) return false;
+  if (category.tecdocVehicle.make.toUpperCase() !== carMake.trim().toUpperCase()) return false;
+  const upperModel = carModel.toUpperCase();
+  return category.tecdocVehicle.models.some((m) => containsWholeWord(upperModel, tecdocModelKeyword(m)));
+}
+
+export function detectCategoryForProductH1(
+  name: string | null | undefined,
+  carMake: string | null | undefined,
+  carModel: string | null | undefined
+): CategoryDef | undefined {
+  if (!name) return undefined;
+  const lower = name.toLowerCase();
+  const matchesNameFilter = (c: CategoryDef) =>
+    c.matchGroups.every((group) => group.some((word) => lower.includes(word.toLowerCase()))) &&
+    !(c.excludeWords ?? []).some((word) => lower.includes(word.toLowerCase()));
+
+  const narrow = CATEGORIES.find(
+    (c) => c.tecdocVehicle && matchesNameFilter(c) && narrowCategoryMatchesVehicle(c, carMake, carModel)
+  );
+  if (narrow) return narrow;
+
+  return detectCategoryForProductName(name);
+}
+
+// ------------------------------------------------------------
 // КРОС-ЛІНКИ МІЖ СТОРІНКАМИ (components/CategoryCrossLinks.tsx)
 // ------------------------------------------------------------
 // Інші вузькі сторінки під ТУ Ж САМУ машину (напр. з "Pajero II
@@ -2709,10 +2822,14 @@ export function buildCategoryWhereClause(
   startParamIndex: number
 ): { clause: string; params: unknown[] } {
   const params: unknown[] = [];
-  const conditions = category.matchGroups.map((group, i) => {
+  // Приховані (is_active=false) товари — тестові/сміттєві записи
+  // (напр. постачальник "Тестовий постачальник") — не повинні
+  // потрапляти в жоден список категорій/марок
+  const conditions: string[] = ['p.is_active = true'];
+  conditions.push(...category.matchGroups.map((group, i) => {
     params.push(group.map((word) => `%${word}%`));
     return `p.name ILIKE ANY($${startParamIndex + i})`;
-  });
+  }));
 
   if (category.excludeWords && category.excludeWords.length > 0) {
     const excludeParamIdx = startParamIndex + params.length;

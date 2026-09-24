@@ -223,8 +223,10 @@ export function buildMakeWhereClause(make: CarMakeDef, paramIndex: number): { cl
     // p. — розраховано на запит виду "FROM products p" (не голе
     // car_make): сторінки марок JOIN'ять suppliers за delivery_time,
     // а без префіксу car_make був би неоднозначним відносно
-    // suppliers.* при такому JOIN
-    clause: `UPPER(p.car_make) = ANY($${paramIndex})`,
+    // suppliers.* при такому JOIN.
+    // p.is_active = true — приховані (тестові/сміттєві) товари не
+    // повинні потрапляти в списки за маркою
+    clause: `p.is_active = true AND UPPER(p.car_make) = ANY($${paramIndex})`,
     param: make.dbValues.map((v) => v.toUpperCase()),
   };
 }

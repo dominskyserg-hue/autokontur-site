@@ -18,7 +18,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { buildProductPath, buildProductSlug } from '@/lib/slug';
 import { getCarMakeByDbValue } from '@/lib/carMakes';
-import { detectCategoryForProductName } from '@/lib/categories';
+import { detectCategoryForProductName, detectCategoryForProductH1 } from '@/lib/categories';
 import { cleanApplicability } from '@/lib/carModelTranslation';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
@@ -87,12 +87,25 @@ export function buildSeoProductName(product: {
   const override = getSeoOverride(product.article);
   if (override?.h1) return override.h1;
 
-  const category = detectCategoryForProductName(product.name);
+  // detectCategoryForProductH1 (а не detectCategoryForProductName) —
+  // враховує вузькі категорії "по машині" (напр. "...Daewoo Lanos"),
+  // але ЛИШЕ якщо марка/модель ЦЬОГО товару реально їм відповідають
+  // (lib/categories.ts, narrowCategoryMatchesVehicle) — інакше товар
+  // з геть іншою маркою міг показати чужу модель авто в H1 (знайдений
+  // баг: AJUSA 11059300 для CITROËN показував "...Daewoo Lanos")
+  const category = detectCategoryForProductH1(product.name, product.carMake, product.carModel);
   const base = category
     ? [category.itemName ?? category.name, product.brand, product.article].filter(Boolean).join(' ')
     : product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
 
-  if (!product.carMake) return base;
+  // category.modelGroup заповнений ЛИШЕ у вузьких категорій "по
+  // машині" (широкі його ніколи не задають) — якщо base вже прийшов
+  // саме з такої категорії (тобто detectCategoryForProductH1 знайшов
+  // реальний збіг марки/моделі товару), модель авто вже є в самій
+  // назві категорії ("Комплект прокладок двигуна Suzuki SX4") — і
+  // додавати ЩЕ РАЗ "для Suzuki SX4" нижче не потрібно, вийшло б
+  // подвоєння
+  if (!product.carMake || category?.modelGroup) return base;
 
   // cleanApplicability (lib/carModelTranslation.ts) повертає null,
   // якщо застосовність ненадійна (сирий код "#..." чи нерозпізнане
@@ -157,9 +170,13 @@ export function buildSeoProductDescription(product: {
     return product.metaDescription.trim();
   }
 
+  // Раніше сюди підставлявся ще й product.deliveryTime ("сьогодні"
+  // тощо) — прибрано з тієї самої причини, що й у FAQ (lib/
+  // productDetail.ts, resolveFaqItems): сторінка кешується, а
+  // deliveryTime — термін ВІДВАНТАЖЕННЯ постачальником (не доставки
+  // покупцю) і легко застаріває чи плутає. Лишається лише сам статус
   const displayName = buildSeoProductName(product);
-  const stockPart =
-    product.stock > 0 ? 'В наявності' : `Під замовлення${product.deliveryTime ? ', ' + product.deliveryTime : ''}`;
+  const stockPart = product.stock > 0 ? 'В наявності' : 'Під замовлення';
   return `${displayName}. Ціна ${formatPriceUk(product.retailPrice)} грн. ${stockPart}, доставка по Україні, оплата при отриманні.`;
 }
 
@@ -336,7 +353,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
            s.name AS supplier_name, s.delivery_time
     FROM products p
     JOIN suppliers s ON s.id = p.supplier_id
-    WHERE p.id = $1
+    WHERE p.id = $1 AND p.is_active = true
     `,
     [id]
   );
@@ -391,6 +408,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
     WHERE p2.article = $1
       AND ($2::text IS NULL OR p2.brand ILIKE $2)
       AND p2.id <> $3
+      AND p2.is_active = true
     ORDER BY (p2.stock > 0) DESC, p2.retail_price ASC
     LIMIT 10
     `,
@@ -415,7 +433,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
 // взагалі не виконується
 const loadPairPartPath = cache(async function loadPairPartPath(article: string): Promise<string | null> {
   const result = await pool.query(
-    `SELECT id, brand, name, article FROM products WHERE article = $1 ORDER BY (stock > 0) DESC, retail_price ASC LIMIT 1`,
+    `SELECT id, brand, name, article FROM products WHERE article = $1 AND is_active = true ORDER BY (stock > 0) DESC, retail_price ASC LIMIT 1`,
     [article]
   );
   if (result.rows.length === 0) return null;
@@ -442,9 +460,9 @@ const loadCrossReferences = cache(async function loadCrossReferences(
 
   const membersResult = await pool.query(
     `
-    SELECT m.brand, m.part_number, m.part_type, m.product_id, p3.cost_price, p3.retail_price, p3.stock
+    SELECT m.brand, m.part_number, m.part_type, p3.id AS matched_product_id, p3.cost_price, p3.retail_price, p3.stock
     FROM cross_reference_members m
-    LEFT JOIN products p3 ON p3.id = m.product_id
+    LEFT JOIN products p3 ON p3.id = m.product_id AND p3.is_active = true
     WHERE m.group_id = ANY($1::uuid[])
       AND NOT (m.part_number = $2 AND m.brand ILIKE $3)
     ORDER BY m.part_type, m.brand
@@ -464,7 +482,7 @@ const loadCrossReferences = cache(async function loadCrossReferences(
     const item: CrossRefItemRaw = {
       brand: row.brand,
       partNumber: row.part_number,
-      productId: row.product_id,
+      productId: row.matched_product_id,
       costPrice: row.cost_price !== null ? parseFloat(row.cost_price) : null,
       retailPrice: row.retail_price !== null ? parseFloat(row.retail_price) : null,
       stock: row.stock,
@@ -567,7 +585,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string
     LEFT JOIN LATERAL (
       SELECT id, brand, article, name, cost_price, retail_price, stock
       FROM products p2
-      WHERE p2.article = tc.article_b AND UPPER(p2.brand) = UPPER(tc.brand_b)
+      WHERE p2.article = tc.article_b AND UPPER(p2.brand) = UPPER(tc.brand_b) AND p2.is_active = true
       ORDER BY (p2.stock > 0) DESC, p2.retail_price ASC
       LIMIT 1
     ) p ON true

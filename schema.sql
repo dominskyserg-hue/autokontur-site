@@ -404,6 +404,15 @@ CREATE TABLE IF NOT EXISTS products (
 
   stock INTEGER NOT NULL DEFAULT 0,
 
+  -- false — товар СКРЫТ с витрины: страница товара отдаёт 404,
+  -- не участвует в поиске, категориях, /marky и sitemap.xml. Тот же
+  -- принцип, что и suppliers.is_active выше — товар при этом НЕ
+  -- удаляется из базы (заказы/кросс-номера/аналитика продолжают на
+  -- него ссылаться). Используется для явно тестовых/мусорных записей
+  -- (напр. поставщик "Тестовий постачальник" — товары TEST0001-30,
+  -- ARTSEO1-3 — или строк-артефактов импорта вроде article='0')
+  is_active BOOLEAN NOT NULL DEFAULT true,
+
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
@@ -427,6 +436,7 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_title TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_description TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_description_override BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_search_attempted_at TIMESTAMPTZ;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(6, 2) NOT NULL DEFAULT 0;
 

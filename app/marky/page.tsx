@@ -58,7 +58,7 @@ async function loadCounts(): Promise<Record<string, number>> {
   const result = await pool.query(
     `SELECT UPPER(car_make) AS make_upper, COUNT(*)::int AS cnt
      FROM products
-     WHERE car_make IS NOT NULL AND car_make <> ''
+     WHERE car_make IS NOT NULL AND car_make <> '' AND is_active = true
      GROUP BY UPPER(car_make)`
   );
 
