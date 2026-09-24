@@ -167,10 +167,22 @@ export function buildSeoProductDescription(product: {
 //   1. override.title (data/seo-overrides.ts) — ПОВНИЙ рядок як є,
 //      без додавання суфіксів
 //   2. Автошаблон "{Назва деталі} — купити, ціна | DominatorParts",
-//      обрізаний по межі слова до ~65 символів (довші заголовки Google
-//      однаково обрізає в сніппеті сам, але вже посередині слова)
+//      і якщо це довше за ~65 символів (Google все одно обрізає
+//      довший заголовок у сніппеті) — скорочуємо СХОДИНКАМИ, а не
+//      одразу ріжемо назву товару:
+//        а) прибираємо " | DominatorParts" (сайт і так впізнають з
+//           favicon/домену в сніпеті — найменш цінна частина)
+//        б) якщо й далі задовго — прибираємо ", ціна" (сама ціна вже
+//           окремо видно в сніпеті через Product/Offer JSON-LD)
+//        в) і лише як останній засіб — обрізаємо саму назву товару по
+//           межі слова (з захистом від висячих прийменників, див.
+//           truncateAtWordBoundary нижче), " — купити" лишається
+//           завжди: це мінімальний заклик до дії, без нього заголовок
+//           перетворюється просто на назву деталі
 const META_TITLE_MAX_LENGTH = 65;
-const META_TITLE_SUFFIX = ' — купити, ціна | DominatorParts';
+const META_TITLE_SUFFIX_FULL = ' — купити, ціна | DominatorParts';
+const META_TITLE_SUFFIX_MID = ' — купити, ціна';
+const META_TITLE_SUFFIX_MIN = ' — купити';
 
 // Прийменники/сполучники, якими НЕ можна закінчувати обрізаний
 // заголовок — інакше після обрізки по межі слова лишається висячий
@@ -210,8 +222,20 @@ export function buildSeoMetaTitle(product: {
   if (override?.title) return override.title;
 
   const displayName = buildSeoProductName(product);
-  const base = truncateAtWordBoundary(displayName, META_TITLE_MAX_LENGTH - META_TITLE_SUFFIX.length);
-  return `${base}${META_TITLE_SUFFIX}`;
+
+  const withFullSuffix = `${displayName}${META_TITLE_SUFFIX_FULL}`;
+  if (withFullSuffix.length <= META_TITLE_MAX_LENGTH) return withFullSuffix;
+
+  const withMidSuffix = `${displayName}${META_TITLE_SUFFIX_MID}`;
+  if (withMidSuffix.length <= META_TITLE_MAX_LENGTH) return withMidSuffix;
+
+  const withMinSuffix = `${displayName}${META_TITLE_SUFFIX_MIN}`;
+  if (withMinSuffix.length <= META_TITLE_MAX_LENGTH) return withMinSuffix;
+
+  // Навіть з найкоротшим суфіксом задовго — лише тепер ріжемо саму
+  // назву товару, зберігаючи " — купити" незмінним
+  const base = truncateAtWordBoundary(displayName, META_TITLE_MAX_LENGTH - META_TITLE_SUFFIX_MIN.length);
+  return `${base}${META_TITLE_SUFFIX_MIN}`;
 }
 
 // Готові FAQ-питання/відповіді для показу на сторінці ТА для FAQPage
