@@ -80,9 +80,23 @@ interface MakeProduct {
   imageUrl: string | null;
 }
 
+// Той самий вибір сортування, що й на app/category/[slug]/page.tsx
+export type MakeSort = 'popular' | 'price_asc' | 'price_desc';
+
+function makeOrderByClause(sort: MakeSort): string {
+  if (sort === 'price_asc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price ASC';
+  if (sort === 'price_desc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC';
+  // Тайбрейк "p.name ASC" піднімав нагору товари, чия назва з прайсу
+  // постачальника починається з "(" (технічні позначки/розміри) —
+  // символ "(" за алфавітом раніше будь-якої літери й цифри.
+  // p.stock DESC — ближчий до "популярності" тайбрейк
+  return 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.stock DESC, p.brand ASC NULLS LAST, p.article ASC';
+}
+
 const loadMakeProducts = cache(async function loadMakeProducts(
   slug: string,
-  page: number
+  page: number,
+  sort: MakeSort
 ): Promise<{ products: MakeProduct[]; total: number }> {
   const make = getCarMakeBySlug(slug);
   if (!make) return { products: [], total: 0 };
@@ -100,7 +114,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${clause}
-      ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.name ASC NULLS LAST
+      ${makeOrderByClause(sort)}
       LIMIT $2 OFFSET $3
       `,
       [param, PAGE_SIZE, offset]
@@ -124,7 +138,11 @@ const loadMakeProducts = cache(async function loadMakeProducts(
 });
 
 type PageParams = { make: string };
-type PageSearchParams = { page?: string };
+type PageSearchParams = { page?: string; sort?: string };
+
+function parseSort(value: string | undefined): MakeSort {
+  return value === 'price_asc' || value === 'price_desc' ? value : 'popular';
+}
 
 export async function generateMetadata({
   params,
@@ -138,7 +156,7 @@ export async function generateMetadata({
   const make = getCarMakeBySlug(slug);
   if (!make) return {};
 
-  const { total } = await loadMakeProducts(slug, 1);
+  const { total } = await loadMakeProducts(slug, 1, 'popular');
 
   // Той самий фікс, що й у app/category/[slug]/page.tsx: без номера
   // сторінки в title/description і без canonical усі сторінки пагінації
@@ -186,14 +204,23 @@ export default async function CarMakePage({
   searchParams: Promise<PageSearchParams>;
 }) {
   const { make: slug } = await params;
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, sort: sortParam } = await searchParams;
+  const sort = parseSort(sortParam);
 
   const make = getCarMakeBySlug(slug);
   if (!make) notFound();
 
   const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
-  const { products, total } = await loadMakeProducts(slug, page);
+  const { products, total } = await loadMakeProducts(slug, page, sort);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const sortHref = (targetSort: MakeSort) => `/marky/${slug}${targetSort !== 'popular' ? `?sort=${targetSort}` : ''}`;
+  // Пагінація зберігає поточне сортування
+  const pageHref = (targetPage: number) => {
+    const q = new URLSearchParams();
+    if (sort !== 'popular') q.set('sort', sort);
+    q.set('page', String(targetPage));
+    return `/marky/${slug}?${q.toString()}`;
+  };
 
   // Моделі цієї марки, для яких уже є готові посадкові сторінки
   // (lib/categories.ts) — раніше з /marky/[make] на них не було
@@ -279,6 +306,33 @@ export default async function CarMakePage({
               ))}
             </div>
           </section>
+        )}
+
+        {/* ==================== СОРТУВАННЯ ==================== */}
+        {products.length > 0 && (
+          <div className="mb-5 flex flex-wrap items-center gap-2 text-xs" style={{ color: TECH_FAINT }}>
+            <span>Сортування:</span>
+            {(
+              [
+                ['popular', 'За популярністю'],
+                ['price_asc', 'Дешевші спершу'],
+                ['price_desc', 'Дорожчі спершу'],
+              ] as const
+            ).map(([value, label]) => (
+              <Link
+                key={value}
+                href={sortHref(value)}
+                className="rounded-full px-3 py-1.5 font-medium transition-colors"
+                style={
+                  sort === value
+                    ? { background: TECH_ACCENT_BRIGHT, color: '#0B0F17' }
+                    : { border: `1px solid ${TECH_BORDER}`, color: TECH_MUTED }
+                }
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
         )}
 
         {products.length === 0 ? (
@@ -368,7 +422,7 @@ export default async function CarMakePage({
             {totalPages > 1 && (
               <div className="mb-8 flex items-center gap-3 text-sm">
                 {page > 1 && (
-                  <Link href={`/marky/${slug}?page=${page - 1}`} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
+                  <Link href={pageHref(page - 1)} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
                     ← Попередня
                   </Link>
                 )}
@@ -376,7 +430,7 @@ export default async function CarMakePage({
                   Сторінка {page} з {totalPages}
                 </span>
                 {page < totalPages && (
-                  <Link href={`/marky/${slug}?page=${page + 1}`} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
+                  <Link href={pageHref(page + 1)} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
                     Наступна →
                   </Link>
                 )}

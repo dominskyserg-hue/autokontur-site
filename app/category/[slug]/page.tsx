@@ -97,11 +97,30 @@ interface CategoryProduct {
 // generateMetadata() і сам компонент сторінки викликають цю функцію
 // з однаковими аргументами, але SQL-запит реально піде в базу лише
 // один раз
+// Три варіанти сортування списку — за замовчуванням "популярність"
+// (фото + наявність + залишок, як і раніше), плюс явний вибір за
+// ціною для покупця, якому це важливіше за все інше
+export type CategorySort = 'popular' | 'price_asc' | 'price_desc';
+
+function categoryOrderByClause(sort: CategorySort): string {
+  if (sort === 'price_asc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price ASC';
+  if (sort === 'price_desc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC';
+  // 'popular' — товари з фото і в наявності насамперед. Тайбрейк —
+  // p.stock DESC, а не назва товару: назви беруться з прайсів
+  // постачальників як є, і частина з них починається з технічних
+  // позначок у дужках ("(180X31) Гальмівні колодки...") чи розмірів
+  // ("(R15)..."), а символ "(" за алфавітом іде РАНІШЕ будь-якої
+  // літери й цифри — такі товари завжди спливали нагору списку
+  // першими, хоча жодного стосунку до популярності це не має
+  return 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.stock DESC, p.brand ASC NULLS LAST, p.article ASC';
+}
+
 const loadCategoryProducts = cache(async function loadCategoryProducts(
   slug: string,
   page: number,
   makeSlug: string | null,
-  vehicle: VehicleFilterParams
+  vehicle: VehicleFilterParams,
+  sort: CategorySort
 ): Promise<{ products: CategoryProduct[]; total: number }> {
   const category = getCategoryBySlug(slug);
   if (!category) return { products: [], total: 0 };
@@ -148,7 +167,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${clause}
-      ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.name ASC NULLS LAST
+      ${categoryOrderByClause(sort)}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
       `,
       [...params, PAGE_SIZE, offset]
@@ -176,7 +195,11 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
 type PageParams = { slug: string };
 // model/year/engine — новий фільтр (components/CategoryVehicleFilter.tsx),
 // marka лишається як і була (курований slug марки, окремий від них)
-type PageSearchParams = { page?: string; marka?: string; model?: string; year?: string; engine?: string };
+type PageSearchParams = { page?: string; marka?: string; model?: string; year?: string; engine?: string; sort?: string };
+
+function parseSort(value: string | undefined): CategorySort {
+  return value === 'price_asc' || value === 'price_desc' ? value : 'popular';
+}
 
 export async function generateMetadata({
   params,
@@ -192,7 +215,8 @@ export async function generateMetadata({
 
   const make = marka ? getCarMakeBySlug(marka) : undefined;
   const hasModelYearEngineFilter = hasVehicleFilter({ model, year, engine });
-  const { total } = await loadCategoryProducts(slug, 1, marka ?? null, { model, year, engine });
+  // Сортування на total/title/robots не впливає — тут завжди 'popular'
+  const { total } = await loadCategoryProducts(slug, 1, marka ?? null, { model, year, engine }, 'popular');
 
   // Номер сторінки пагінації (2, 3, ...) — потрібен, щоб title і
   // description сторінки 2, 3... відрізнялись від першої сторінки:
@@ -270,7 +294,8 @@ export default async function CategoryPage({
   searchParams: Promise<PageSearchParams>;
 }) {
   const { slug } = await params;
-  const { page: pageParam, marka, model, year, engine } = await searchParams;
+  const { page: pageParam, marka, model, year, engine, sort: sortParam } = await searchParams;
+  const sort = parseSort(sortParam);
 
   const category = getCategoryBySlug(slug);
   if (!category) notFound();
@@ -292,7 +317,7 @@ export default async function CategoryPage({
   }
 
   const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
-  const { products, total } = await loadCategoryProducts(slug, page, marka ?? null, { model, year, engine });
+  const { products, total } = await loadCategoryProducts(slug, page, marka ?? null, { model, year, engine }, sort);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const hasModelYearEngineFilter = hasVehicleFilter({ model, year, engine });
@@ -305,10 +330,20 @@ export default async function CategoryPage({
   if (model) filterQuery.set('model', model);
   if (year) filterQuery.set('year', year);
   if (engine) filterQuery.set('engine', engine);
+  if (sort !== 'popular') filterQuery.set('sort', sort);
   const pageHref = (targetPage: number) => {
     const q = new URLSearchParams(filterQuery);
     q.set('page', String(targetPage));
     return `/category/${slug}?${q.toString()}`;
+  };
+  // Посилання перемикачів сортування — зберігають фільтр марки/моделі/
+  // року/двигуна, але скидають номер сторінки (нова сортована видача
+  // починається з першої сторінки)
+  const sortHref = (targetSort: CategorySort) => {
+    const q = new URLSearchParams(filterQuery);
+    q.delete('sort');
+    if (targetSort !== 'popular') q.set('sort', targetSort);
+    return `/category/${slug}${q.toString() ? `?${q.toString()}` : ''}`;
   };
 
   // ==================== SCHEMA.ORG (JSON-LD) ====================
@@ -380,6 +415,36 @@ export default async function CategoryPage({
 
         {/* ==================== ФІЛЬТР ЗА АВТОМОБІЛЕМ ==================== */}
         <CategoryVehicleFilter value={{ makeSlug: marka ?? '', model: model ?? '', year: year ?? '', engine: engine ?? '' }} />
+
+        {/* ==================== СОРТУВАННЯ ==================== */}
+        {/* Звичайні посилання (не JS-перемикач) — навіть тут кожен
+            варіант сортування має власну адресу, тому це, як і решта
+            фільтрів на сторінці, лишається crawlable */}
+        {products.length > 0 && (
+          <div className="mb-5 flex flex-wrap items-center gap-2 text-xs" style={{ color: TECH_FAINT }}>
+            <span>Сортування:</span>
+            {(
+              [
+                ['popular', 'За популярністю'],
+                ['price_asc', 'Дешевші спершу'],
+                ['price_desc', 'Дорожчі спершу'],
+              ] as const
+            ).map(([value, label]) => (
+              <Link
+                key={value}
+                href={sortHref(value)}
+                className="rounded-full px-3 py-1.5 font-medium transition-colors"
+                style={
+                  sort === value
+                    ? { background: TECH_ACCENT_BRIGHT, color: '#0B0F17' }
+                    : { border: `1px solid ${TECH_BORDER}`, color: TECH_MUTED }
+                }
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {/* ==================== СПИСОК ТОВАРІВ ==================== */}
         {products.length === 0 ? (
