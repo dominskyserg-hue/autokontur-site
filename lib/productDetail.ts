@@ -57,6 +57,32 @@ export const UUID_PATTERN =
 //     Excel-прайса постачальника) — жодна сумісність не вигадується
 // Якщо категорію розпізнати не вдалось — лишається стара поведінка
 // (назва з прайсу, або бренд+артикул, якщо назви взагалі нема)
+// Деякі постачальники дублюють у полі carModel англомовні позначки
+// сторони ("rear"/"front" замість "задній"/"передній") і подвійні
+// пробіли — виправляємо перед показом покупцю, не чіпаючи сирі дані
+// в базі (лише те, що йде у видимий H1/title/JSON-LD)
+function cleanVehicleModel(model: string): string {
+  return model
+    .replace(/\brear\b/gi, 'задній')
+    .replace(/\bfront\b/gi, 'передній')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Марка авто в базі часто записана КАПСОМ, як прислав постачальник
+// ("TOYOTA") — показуємо курировану назву з lib/carMakes.ts
+// ("Toyota"), якщо марка курована; інакше просто приводимо регістр
+// (перша літера кожного слова — велика) замість сирого капсу
+function formatCarMakeDisplay(rawMake: string): string {
+  const curated = getCarMakeByDbValue(rawMake);
+  if (curated) return curated.name;
+  return rawMake
+    .trim()
+    .split(/\s+/)
+    .map((word) => (word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : word))
+    .join(' ');
+}
+
 export function buildSeoProductName(product: {
   name: string | null;
   brand: string | null;
@@ -66,18 +92,52 @@ export function buildSeoProductName(product: {
 }): string {
   const category = detectCategoryForProductName(product.name);
   const base = category
-    ? [category.name, product.brand, product.article].filter(Boolean).join(' ')
+    ? [category.itemName ?? category.name, product.brand, product.article].filter(Boolean).join(' ')
     : product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
 
   if (!product.carMake) return base;
+
+  const rawMake = product.carMake.trim();
+  const makeDisplay = formatCarMakeDisplay(rawMake);
+  const cleanedModel = cleanVehicleModel(product.carModel?.trim() || '');
   // Деякі постачальники записують carModel уже ІЗ повторенням марки
   // всередині ("MAZDA 323 (BJ)..." при carMake "MAZDA") — без цієї
-  // перевірки вийшло б подвоєння "для MAZDA MAZDA 323...". Показуємо
-  // саму марку лише тоді, коли модель на неї ще не починається
-  const trimmedModel = product.carModel?.trim() || '';
-  const modelAlreadyHasMake = trimmedModel.toUpperCase().startsWith(product.carMake.trim().toUpperCase());
-  const vehicle = modelAlreadyHasMake ? trimmedModel : [product.carMake, trimmedModel].filter(Boolean).join(' ');
+  // перевірки вийшло б подвоєння "для Mazda MAZDA 323...". Якщо
+  // модель уже починається з марки — просто замінюємо це сире
+  // написання на курировану назву замість того, щоб додавати марку
+  // ще раз
+  const modelAlreadyHasMake = cleanedModel.toUpperCase().startsWith(rawMake.toUpperCase());
+  const vehicle = modelAlreadyHasMake
+    ? [makeDisplay, cleanedModel.slice(rawMake.length).trim()].filter(Boolean).join(' ')
+    : [makeDisplay, cleanedModel].filter(Boolean).join(' ');
   return `${base} для ${vehicle}`;
+}
+
+// Той самий принцип, що й для назви вище: якщо адмін вручну переписав
+// опис на екрані "Товари" (metaDescriptionOverride) — показуємо саме
+// його. Інакше опис ЗАВЖДИ будується з актуального шаблону
+// (buildSeoProductName), а не з того, що колись згенерував імпорт
+// прайсу — раніше тут підставлялось збережене в базі meta_description,
+// яке для більшості товарів так і лишалось старим "БРЕНД АРТИКУЛ —
+// сира_назва_з_прайсу" навіть після оновлення шаблону H1/title
+export function buildSeoProductDescription(product: {
+  name: string | null;
+  brand: string | null;
+  article: string;
+  carMake?: string | null;
+  carModel?: string | null;
+  metaDescription: string | null;
+  metaDescriptionOverride: boolean;
+  stock: number;
+  deliveryTime?: string | null;
+}): string {
+  if (product.metaDescriptionOverride && product.metaDescription?.trim()) {
+    return product.metaDescription.trim();
+  }
+  const displayName = buildSeoProductName(product);
+  const stockPart =
+    product.stock > 0 ? 'В наявності' : `Під замовлення${product.deliveryTime ? ', ' + product.deliveryTime : ''}`;
+  return `${displayName}. ${stockPart}, доставка по Україні, оплата при отриманні.`;
 }
 
 export interface ProductDetail {
@@ -89,6 +149,13 @@ export interface ProductDetail {
   stock: number;
   imageUrl: string | null;
   metaDescription: string | null;
+  // true — адмін вручну переписав meta_description на екрані "Товари"
+  // (app/api/products/[id]/route.ts). Автоматичний опис, зібраний при
+  // завантаженні прайсу (lib/priceListImport.ts, buildSeoFields), у
+  // такому разі більше НЕ підставляється при наступних завантаженнях —
+  // і так само на сторінці товару має пріоритет саме ручний варіант,
+  // а не автоматично згенерований шаблон (buildSeoProductDescription)
+  metaDescriptionOverride: boolean;
   carMake: string | null;
   // Модель авто (напр. "Camry" при carMake "Toyota") — заповнюється з
   // Excel-прайса постачальника так само, як carMake (див.
@@ -144,7 +211,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
   const result = await pool.query(
     `
     SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url,
-           p.meta_description, p.car_make, p.car_model, p.updated_at,
+           p.meta_description, p.meta_description_override, p.car_make, p.car_model, p.updated_at,
            s.name AS supplier_name, s.delivery_time
     FROM products p
     JOIN suppliers s ON s.id = p.supplier_id
@@ -166,6 +233,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     stock: row.stock,
     imageUrl: row.image_url,
     metaDescription: row.meta_description,
+    metaDescriptionOverride: Boolean(row.meta_description_override),
     carMake: row.car_make,
     carModel: row.car_model,
     supplierName: row.supplier_name,
@@ -507,6 +575,7 @@ export async function loadProductPageData(
     stock: product.stock,
     imageUrl: product.imageUrl,
     metaDescription: product.metaDescription,
+    metaDescriptionOverride: product.metaDescriptionOverride,
     carMake: product.carMake,
     carModel: product.carModel,
     supplierName: product.supplierName,

@@ -22,7 +22,7 @@ import { buildProductPath } from '@/lib/slug';
 import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { findAnyNarrowPageForVehicle } from '@/lib/categories';
-import { buildSeoProductName, type CrossRefItem, type ProductPageData, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
+import { buildSeoProductDescription, buildSeoProductName, type CrossRefItem, type ProductPageData, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import FavoriteButton from '@/components/FavoriteButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
@@ -128,7 +128,9 @@ export default function ProductDetailContent({
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
-          __html: jsonLdScript(buildSingleProductJsonLd({ ...product, name: displayName, description: product.metaDescription })),
+          __html: jsonLdScript(
+            buildSingleProductJsonLd({ ...product, name: displayName, description: buildSeoProductDescription(product) })
+          ),
         }}
       />
 

@@ -31,7 +31,7 @@
 import type { Metadata } from 'next';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
-import { UUID_PATTERN, buildSeoProductName, loadProduct, loadProductPageData } from '@/lib/productDetail';
+import { UUID_PATTERN, buildSeoProductDescription, buildSeoProductName, loadProduct, loadProductPageData } from '@/lib/productDetail';
 import ProductDetailContent, { BG, BODY_FONT, PAPER } from '@/components/ProductDetailContent';
 
 export const runtime = 'nodejs';
@@ -59,10 +59,7 @@ export async function generateMetadata({
   // сумісність тут ніколи не вигадується
   const displayName = buildSeoProductName(product);
   const title = `${displayName} купити | DominatorParts`;
-  const stockPart =
-    product.stock > 0 ? 'В наявності' : `Під замовлення${product.deliveryTime ? ', ' + product.deliveryTime : ''}`;
-  const description =
-    product.metaDescription?.trim() || `${displayName}. ${stockPart}, доставка по Україні, оплата при отриманні.`;
+  const description = buildSeoProductDescription(product);
 
   return {
     title,
