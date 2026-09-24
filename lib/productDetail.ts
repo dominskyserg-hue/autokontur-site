@@ -196,32 +196,25 @@ export function buildSeoMetaTitle(product: {
   return `${base}${META_TITLE_SUFFIX}`;
 }
 
-// Реальний термін доставки ЦЬОГО КОНКРЕТНОГО товару — підставляється
-// в FAQ-відповіді SEO-оверрайду замість токена "{{доставка}}" (див.
-// коментар біля SeoOverrideFaqItem у data/seo-overrides.ts). У самому
-// файлі оверрайду конкретний термін хардкодити не можна: він залежить
-// від наявності на складі станом на момент показу сторінки
-function buildDeliveryAnswer(product: { stock: number; deliveryTime: string | null }): string {
-  if (product.stock > 0) return 'Товар у наявності — відправляємо в день оформлення замовлення Новою Поштою.';
-  return product.deliveryTime
-    ? `Під замовлення, орієнтовний термін надходження від постачальника — ${product.deliveryTime}.`
-    : 'Товар під замовлення — напишіть нам, і ми уточнимо точний термін надходження.';
-}
-
 // Готові FAQ-питання/відповіді для показу на сторінці ТА для FAQPage
 // JSON-LD (обидва мають збігатися — buildFaqJsonLd викликається з
 // ТИМ САМИМ результатом, що й рендериться, у
 // components/ProductDetailContent.tsx). undefined — якщо в товару
 // взагалі немає FAQ в оверрайді (секція тоді не рендериться)
+//
+// РАНІШЕ тут була підстановка токена "{{доставка}}" на РЕАЛЬНИЙ термін
+// (product.stock/deliveryTime, напр. "сьогодні") — прибрано: текст
+// FAQ має лишатись правильним довго (сторінка кешується, а
+// product.deliveryTime — це термін відвантаження ПОСТАЧАЛЬНИКОМ, а не
+// доставки покупцю, і легко застаріває чи плутає). Тепер FAQ-відповіді
+// в data/seo-overrides.ts — завжди звичайний готовий текст, без токенів
 export function resolveFaqItems(
-  product: { stock: number; deliveryTime: string | null },
   overrideFaq: SeoOverrideFaqItem[] | undefined
 ): SeoOverrideFaqItem[] | undefined {
   if (!overrideFaq || overrideFaq.length === 0) return undefined;
-  const deliveryAnswer = buildDeliveryAnswer(product);
   return overrideFaq.map((item) => ({
     question: item.question,
-    answer: item.answer.replace('{{доставка}}', deliveryAnswer),
+    answer: item.answer,
     link: item.link,
   }));
 }

@@ -120,7 +120,7 @@ export default function ProductDetailContent({
   // productJsonLd (lib/structuredData.ts) більше нічого не пересчитує
   const canonicalUrl = `${SITE_URL}${buildProductPath(product.id, product)}`;
 
-  const faqItems = resolveFaqItems(product, seoOverride?.faq);
+  const faqItems = resolveFaqItems(seoOverride?.faq);
 
   return (
     <>
@@ -503,9 +503,8 @@ export default function ProductDetailContent({
 
       {/* ==================== ЧАСТІ ЗАПИТАННЯ (ручний SEO-оверрайд) ==================== */}
       {/* faqItems — той самий результат resolveFaqItems(), що й у
-          FAQPage JSON-LD вище (з уже підставленим реальним терміном
-          доставки замість токена "{{доставка}}") — видимий текст і
-          розмітка мають збігатися */}
+          FAQPage JSON-LD вище — видимий текст і розмітка мають
+          збігатися */}
       {faqItems && (
         <section className="mb-10">
           <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
