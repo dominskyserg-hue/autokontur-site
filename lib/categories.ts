@@ -2315,6 +2315,23 @@ export function getCategoryBySlug(slug: string): CategoryDef | undefined {
   return CATEGORIES.find((c) => c.slug === slug);
 }
 
+// Визначає ШИРОКУ категорію товару за його назвою (той самий принцип
+// matchGroups, що й у buildCategoryWhereClause вище, але для ОДНОГО
+// рядка в JS, а не для SQL-фільтра списку) — потрібно для хлібних
+// крихт на сторінці товару (lib/productDetail.ts): раніше крихти йшли
+// одразу "Головна / Марка / Товар" без категорії деталі взагалі,
+// хоча самі сторінки категорій ("Гальмівні колодки") вже існують.
+// Перевіряються лише ШИРОКІ категорії (без parentCategorySlug) — так
+// крихта веде на "Гальмівні колодки", а не на вузьку сторінку під
+// конкретну модель авто
+export function detectCategoryForProductName(name: string | null | undefined): CategoryDef | undefined {
+  if (!name) return undefined;
+  const lower = name.toLowerCase();
+  return CATEGORIES.find(
+    (c) => !c.parentCategorySlug && c.matchGroups.every((group) => group.some((word) => lower.includes(word.toLowerCase())))
+  );
+}
+
 // ------------------------------------------------------------
 // КРОС-ЛІНКИ МІЖ СТОРІНКАМИ (components/CategoryCrossLinks.tsx)
 // ------------------------------------------------------------
@@ -2362,6 +2379,59 @@ export function findNarrowPageForVehicle(
       c.tecdocVehicle.make.toUpperCase() === makeUpper &&
       c.tecdocVehicle.models.includes(model)
   );
+}
+
+// Той самий пошук, що й findNarrowPageForVehicle вище, але БЕЗ
+// прив'язки до конкретної широкої категорії (parentSlug) — потрібен
+// там, де заздалегідь невідомо, під яку саме широку категорію шукати
+// вузьку сторінку, а відомі лише марка + модель (напр. блок
+// "Запчастина підходить для авто" на сторінці товару,
+// components/ProductDetailContent.tsx — товар може мати вузьку
+// сторінку під зовсім іншу деталь, ніж він сам). Повертає ПЕРШУ
+// знайдену вузьку сторінку цієї моделі — для переходу з бейджа
+// застосовності досить будь-якої, а не обов'язково "тієї самої" деталі
+export function findAnyNarrowPageForVehicle(make: string, model: string): CategoryDef | undefined {
+  const makeUpper = make.trim().toUpperCase();
+  return CATEGORIES.find(
+    (c) =>
+      c.tecdocVehicle !== undefined &&
+      c.tecdocVehicle.make.toUpperCase() === makeUpper &&
+      c.tecdocVehicle.models.includes(model)
+  );
+}
+
+// ------------------------------------------------------------
+// МОДЕЛІ МАРКИ (для блоку "Моделі {марка}" на /marky/[make])
+// ------------------------------------------------------------
+// Курований список моделей, для яких уже є готові вузькі SEO-сторінки
+// (tecdocVehicle+modelGroup) під цю марку — по одній посадковій
+// сторінці на модель (перша категорія в її modelGroup). Раніше на
+// /marky/[make] не було ЖОДНОГО посилання на ці вже готові сторінки
+// моделей — Google міг знайти їх лише через sitemap, а не через
+// внутрішні посилання зі сторінки марки
+export interface ModelLanding {
+  modelGroup: string;
+  modelLabel: string;
+  slug: string;
+}
+
+export function getModelLandingsForMake(makeDbValues: string[]): ModelLanding[] {
+  const upperValues = makeDbValues.map((v) => v.toUpperCase());
+  const seen = new Map<string, ModelLanding>();
+
+  for (const category of CATEGORIES) {
+    if (!category.tecdocVehicle || !category.modelGroup || !category.modelLabel) continue;
+    if (!upperValues.includes(category.tecdocVehicle.make.toUpperCase())) continue;
+    if (seen.has(category.modelGroup)) continue;
+
+    seen.set(category.modelGroup, {
+      modelGroup: category.modelGroup,
+      modelLabel: category.modelLabel,
+      slug: category.slug,
+    });
+  }
+
+  return Array.from(seen.values());
 }
 
 // ------------------------------------------------------------

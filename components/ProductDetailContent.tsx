@@ -21,6 +21,7 @@ import { TELEGRAM_BOT_USERNAME } from '@/lib/telegramNotify';
 import { buildProductPath } from '@/lib/slug';
 import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
+import { findAnyNarrowPageForVehicle } from '@/lib/categories';
 import type { CrossRefItem, ProductPageData, TecdocCompatibilityItem, TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import FavoriteButton from '@/components/FavoriteButton';
@@ -438,9 +439,20 @@ function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
     </>
   );
 
-  return item.makeSlug ? (
+  // Спершу пробуємо знайти вже готову посадкову сторінку САМЕ ЦІЄЇ
+  // моделі (напр. "/category/mazda-6-gg-halmivni-kolodky") — раніше
+  // бейдж ЗАВЖДИ вів на загальну сторінку марки ("/marky/mazda"),
+  // однаково для всіх моделей цієї марки в списку застосовності, що
+  // виглядало як однакове посилання, повторене багато разів. Якщо
+  // готової сторінки під цю модель ще нема — лишається старий
+  // фолбек на сторінку марки; якщо марка взагалі некурована — просто
+  // текст без посилання
+  const narrowPage = item.model ? findAnyNarrowPageForVehicle(item.makeRaw, item.model) : undefined;
+  const href = narrowPage ? `/category/${narrowPage.slug}` : item.makeSlug ? `/marky/${item.makeSlug}` : null;
+
+  return href ? (
     <Link
-      href={`/marky/${item.makeSlug}`}
+      href={href}
       className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
       style={{ ...badgeStyle, color: ACCENT }}
       title={title}

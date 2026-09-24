@@ -33,6 +33,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DEPARTMENTS, type DepartmentDef } from '@/lib/departments';
 import { getCategoryBySlug } from '@/lib/categories';
@@ -365,6 +366,17 @@ interface CategoryGridSectionProps {
   onOpenVinRequest?: (category: string, selection: VehicleSelection | null) => void;
 }
 
+// motion(Link) — картка розділу рендериться СПРАВЖНІМ <a href="...">
+// (Link від Next.js), а не <button>: раніше тут був motion.button з
+// onClick, який відкривав модалку, і жодного href взагалі — Google не
+// переходить по onClick-обробниках без href, тому ці 18 карток на
+// Головній для нього були глухим кутом, попри те, що самі сторінки
+// категорій/розділів вже існують і чекають на посилання. onClick
+// нижче й далі відкриває модалку уточнення авто для живого покупця
+// (preventDefault зупиняє перехід за href до цього моменту) — Google ж
+// перехід по href не виконує, а просто читає адресу і йде по ній сам
+const MotionLink = motion.create(Link);
+
 export default function CategoryGridSection({
   title = 'Розділи',
   subtitle = 'Каталог за системами авто',
@@ -415,12 +427,19 @@ export default function CategoryGridSection({
             const isHovered = hoveredSlug === department.slug;
 
             return (
-              <motion.button
+              <MotionLink
                 key={department.slug}
-                type="button"
+                href={resolveDestination(department, null)}
                 onMouseEnter={() => setHoveredSlug(department.slug)}
                 onMouseLeave={() => setHoveredSlug((current) => (current === department.slug ? null : current))}
-                onClick={() => setActiveDepartment(department)}
+                onClick={(e: React.MouseEvent) => {
+                  // Живому покупцю спершу пропонуємо уточнити авто в
+                  // модалці — той самий сценарій, що й був. Google по
+                  // onClick не ходить, тому для нього href вище
+                  // лишається звичайним крawlable-посиланням
+                  e.preventDefault();
+                  setActiveDepartment(department);
+                }}
                 whileHover={{ y: -4 }}
                 whileTap={{ scale: 0.96 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 24 }}
@@ -452,7 +471,7 @@ export default function CategoryGridSection({
                     </motion.span>
                   )}
                 </AnimatePresence>
-              </motion.button>
+              </MotionLink>
             );
           })}
         </div>

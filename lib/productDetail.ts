@@ -18,6 +18,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { buildProductPath, buildProductSlug } from '@/lib/slug';
 import { getCarMakeByDbValue } from '@/lib/carMakes';
+import { detectCategoryForProductName } from '@/lib/categories';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -256,6 +257,12 @@ export interface TecdocCrossItem {
 // без посилання в нікуди
 export interface TecdocCompatibilityItem {
   make: string;
+  // Сире значення марки з tecdoc_compatibility.make (напр. "VW", а не
+  // курована "Volkswagen" з make вище) — потрібне окремо, бо саме в
+  // такому написанні марка збережена в CategoryDef.tecdocVehicle.make
+  // (lib/categories.ts) і саме його звіряє findAnyNarrowPageForVehicle
+  // при пошуку посадкової сторінки моделі для бейджа застосовності
+  makeRaw: string;
   makeSlug: string | null;
   // Реальна назва моделі (напр. "AVENSIS Liftback (_T22_)") — TecDoc
   // зберігає її аж до конкретного кузова/шасі. Порожній рядок (не
@@ -371,6 +378,7 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
       // є в курованому списку lib/carMakes.ts (напр. "MERCEDES-BENZ" з
       // TecDoc -> "Mercedes-Benz") — інакше сирий текст із TecDoc як є
       make: carMake?.name || row.make,
+      makeRaw: row.make,
       makeSlug: carMake?.slug || null,
       model: row.model || '',
       yearFrom: row.year_from,
@@ -498,8 +506,16 @@ export async function loadProductPageData(
   }));
 
   const make = getCarMakeByDbValue(product.carMake);
+  // Категорія деталі ("Гальмівні колодки") — раніше крихти йшли одразу
+  // "Головна / Марка / Товар" без неї, хоча сторінка категорії вже
+  // існує (app/category/[slug]/page.tsx). detectCategoryForProductName
+  // визначає категорію тим самим способом (matchGroups), яким
+  // побудований сам каталог — товар без розпізнаного типу деталі
+  // просто лишається без цієї крихти
+  const category = detectCategoryForProductName(product.name);
   const breadcrumbItems: BreadcrumbItem[] = [
     { name: 'Головна', url: SITE_URL },
+    ...(category ? [{ name: category.name, url: `${SITE_URL}/category/${category.slug}` }] : []),
     ...(make ? [{ name: make.name, url: `${SITE_URL}/marky/${make.slug}` }] : []),
     {
       name: `${product.brand ? product.brand + ' ' : ''}${product.article}`,

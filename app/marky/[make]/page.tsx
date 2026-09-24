@@ -16,6 +16,7 @@ import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CAR_MAKES, getCarMakeBySlug, buildMakeWhereClause } from '@/lib/carMakes';
+import { getModelLandingsForMake } from '@/lib/categories';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
@@ -194,6 +195,11 @@ export default async function CarMakePage({
   const { products, total } = await loadMakeProducts(slug, page);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
+  // Моделі цієї марки, для яких уже є готові посадкові сторінки
+  // (lib/categories.ts) — раніше з /marky/[make] на них не було
+  // жодного посилання, Google міг знайти їх лише через sitemap
+  const modelLandings = getModelLandingsForMake(make.dbValues);
+
   // Порядок ТОЧНО повторює видиму <nav> нижче — Google звіряє одне з
   // іншим
   const breadcrumbItems = [
@@ -248,6 +254,32 @@ export default async function CarMakePage({
             Що потрібно на ТО для {make.name} →
           </Link>
         </header>
+
+        {/* ==================== МОДЕЛІ МАРКИ ==================== */}
+        {/* Посилання на вже готові посадкові сторінки конкретних
+            моделей (lib/categories.ts, getModelLandingsForMake) —
+            раніше з цієї сторінки на них не було жодного посилання,
+            і Google міг знайти їх лише через sitemap, а не через
+            внутрішню навігацію сайту */}
+        {modelLandings.length > 0 && (
+          <section className="mb-8">
+            <h2 className="mb-3 text-sm font-semibold" style={{ color: TECH_FAINT }}>
+              Моделі {make.name}
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {modelLandings.map((model) => (
+                <Link
+                  key={model.modelGroup}
+                  href={`/category/${model.slug}`}
+                  className="rounded-full px-3.5 py-2 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+                  style={{ border: `1px solid ${TECH_BORDER}`, color: TECH_ACCENT_BRIGHT, background: TECH_SURFACE_2 }}
+                >
+                  {model.modelLabel}
+                </Link>
+              ))}
+            </div>
+          </section>
+        )}
 
         {products.length === 0 ? (
           <div
