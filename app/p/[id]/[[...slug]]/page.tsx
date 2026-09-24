@@ -31,7 +31,7 @@
 import type { Metadata } from 'next';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
-import { UUID_PATTERN, loadProduct, loadProductPageData } from '@/lib/productDetail';
+import { UUID_PATTERN, buildSeoProductName, loadProduct, loadProductPageData } from '@/lib/productDetail';
 import ProductDetailContent, { BG, BODY_FONT, PAPER } from '@/components/ProductDetailContent';
 
 export const runtime = 'nodejs';
@@ -51,20 +51,18 @@ export async function generateMetadata({
   if (!product) return {};
 
   const canonicalUrl = `${SITE_URL}${buildProductPath(id, product)}`;
-  const displayName = product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ');
-  const brandArticle = [product.brand, product.article].filter(Boolean).join(' ');
-  const title = `${brandArticle}${product.name ? ' — ' + product.name : ''} купити | DominatorParts`;
-  // Модель авто додаємо в опис ЛИШЕ якщо вона реально є в товару в базі
-  // (car_make/car_model заповнюються з Excel-прайса постачальника) —
-  // ніколи не вигадуємо сумісність, якої в базі немає
-  const carSuffix = product.carMake
-    ? ` для ${[product.carMake, product.carModel].filter(Boolean).join(' ')}`
-    : '';
+  // displayName — той самий шаблон "Категорія Бренд Артикул [для Марка
+  // Модель]", що й H1 на сторінці (components/ProductDetailContent.tsx,
+  // buildSeoProductName у lib/productDetail.ts) — title і опис мають
+  // збігатись із видимим H1, а не показувати щось інше. "для Марка
+  // Модель" додається функцією ЛИШЕ якщо ці дані реально є в товару —
+  // сумісність тут ніколи не вигадується
+  const displayName = buildSeoProductName(product);
+  const title = `${displayName} купити | DominatorParts`;
   const stockPart =
     product.stock > 0 ? 'В наявності' : `Під замовлення${product.deliveryTime ? ', ' + product.deliveryTime : ''}`;
   const description =
-    product.metaDescription?.trim() ||
-    `${brandArticle}${product.name ? ' — ' + product.name : ''}${carSuffix}. ${stockPart}, доставка по Україні, оплата при отриманні.`;
+    product.metaDescription?.trim() || `${displayName}. ${stockPart}, доставка по Україні, оплата при отриманні.`;
 
   return {
     title,

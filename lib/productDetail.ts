@@ -41,6 +41,45 @@ globalThis.pgPool = pool;
 export const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// ------------------------------------------------------------
+// SEO-ШАБЛОН НАЗВИ ТОВАРУ (H1, <title>, Product.name у JSON-LD)
+// ------------------------------------------------------------
+// Назва товару приходить з прайсу постачальника як є — часто
+// російською і без згадки марки/моделі авто ("G1/ТОРМОЗНЫЕ КОЛОДКИ").
+// Замість такого тексту в H1/title показуємо шаблон "Категорія Бренд
+// Артикул [для Марка Модель]":
+//   - Категорія — визначена ТИМ САМИМ способом (matchGroups), яким уже
+//     побудований каталог і хлібні крихти (detectCategoryForProductName)
+//     — це не вигадка, а вже наявна в коді класифікація, тому тип
+//     деталі спотворити тут не можна
+//   - "для Марка Модель" додається, ЛИШЕ якщо ці дані вже реально є в
+//     товару в базі (products.car_make/car_model, заповнюються з
+//     Excel-прайса постачальника) — жодна сумісність не вигадується
+// Якщо категорію розпізнати не вдалось — лишається стара поведінка
+// (назва з прайсу, або бренд+артикул, якщо назви взагалі нема)
+export function buildSeoProductName(product: {
+  name: string | null;
+  brand: string | null;
+  article: string;
+  carMake?: string | null;
+  carModel?: string | null;
+}): string {
+  const category = detectCategoryForProductName(product.name);
+  const base = category
+    ? [category.name, product.brand, product.article].filter(Boolean).join(' ')
+    : product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
+
+  if (!product.carMake) return base;
+  // Деякі постачальники записують carModel уже ІЗ повторенням марки
+  // всередині ("MAZDA 323 (BJ)..." при carMake "MAZDA") — без цієї
+  // перевірки вийшло б подвоєння "для MAZDA MAZDA 323...". Показуємо
+  // саму марку лише тоді, коли модель на неї ще не починається
+  const trimmedModel = product.carModel?.trim() || '';
+  const modelAlreadyHasMake = trimmedModel.toUpperCase().startsWith(product.carMake.trim().toUpperCase());
+  const vehicle = modelAlreadyHasMake ? trimmedModel : [product.carMake, trimmedModel].filter(Boolean).join(' ');
+  return `${base} для ${vehicle}`;
+}
+
 export interface ProductDetail {
   id: string;
   article: string;

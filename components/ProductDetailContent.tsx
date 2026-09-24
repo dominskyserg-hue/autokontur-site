@@ -22,7 +22,7 @@ import { buildProductPath } from '@/lib/slug';
 import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { findAnyNarrowPageForVehicle } from '@/lib/categories';
-import type { CrossRefItem, ProductPageData, TecdocCompatibilityItem, TecdocCrossItem } from '@/lib/productDetail';
+import { buildSeoProductName, type CrossRefItem, type ProductPageData, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import FavoriteButton from '@/components/FavoriteButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
@@ -80,9 +80,8 @@ function StockBadge({ stock }: { stock: number }) {
 // підпис, який ввів адмін (label), або запасний варіант за номером
 // фото, якщо підпис ще не заповнили — так alt ніколи не повторюється
 // на двох різних фото одного товару
-function buildGalleryPhotos(product: ProductPageData['product'], images: ProductPageData['images']): GalleryPhoto[] {
+function buildGalleryPhotos(product: ProductPageData['product'], images: ProductPageData['images'], displayName: string): GalleryPhoto[] {
   const brandArticle = [product.brand, product.article].filter(Boolean).join(' ');
-  const displayName = product.name?.trim() || brandArticle;
   const prefix = brandArticle ? `${brandArticle} — ` : '';
 
   const photos: GalleryPhoto[] = [];
@@ -105,8 +104,8 @@ export default function ProductDetailContent({
   tecdocCompatibility,
   breadcrumbItems,
 }: ProductPageData) {
-  const displayName = product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ');
-  const galleryPhotos = buildGalleryPhotos(product, images);
+  const displayName = buildSeoProductName(product);
+  const galleryPhotos = buildGalleryPhotos(product, images, displayName);
 
   return (
     <>
@@ -129,7 +128,7 @@ export default function ProductDetailContent({
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
-          __html: jsonLdScript(buildSingleProductJsonLd({ ...product, description: product.metaDescription })),
+          __html: jsonLdScript(buildSingleProductJsonLd({ ...product, name: displayName, description: product.metaDescription })),
         }}
       />
 
