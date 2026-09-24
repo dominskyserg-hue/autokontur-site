@@ -16,7 +16,7 @@
 // ============================================================
 
 import Link from 'next/link';
-import { Send } from 'lucide-react';
+import { Send, Truck, Banknote, RotateCcw } from 'lucide-react';
 import { TELEGRAM_BOT_USERNAME } from '@/lib/telegramNotify';
 import { buildProductPath } from '@/lib/slug';
 import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
@@ -128,7 +128,9 @@ export default function ProductDetailContent({
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildSingleProductJsonLd(product)) }}
+        dangerouslySetInnerHTML={{
+          __html: jsonLdScript(buildSingleProductJsonLd({ ...product, description: product.metaDescription })),
+        }}
       />
 
       <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ fontFamily: BODY_FONT, color: FAINT }}>
@@ -184,6 +186,33 @@ export default function ProductDetailContent({
               Термін поставки: {product.deliveryTime}
             </p>
           )}
+
+          {/* ==================== ДОСТАВКА / ОПЛАТА / ПОВЕРНЕННЯ ==================== */}
+          {/* Реальні умови з /delivery і /returns (site_pages у базі) —
+              текст, а не вигадані обіцянки: замовлення в наявності
+              відправляються в день оформлення, оплата післяплатою при
+              отриманні, 14 днів на повернення товару належної якості
+              за Законом України "Про захист прав споживачів" (та сама
+              цифра, що і в hasMerchantReturnPolicy, lib/structuredData.ts) */}
+          <div
+            className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs"
+            style={{ fontFamily: BODY_FONT, color: MUTED }}
+          >
+            {product.stock > 0 && (
+              <span className="inline-flex items-center gap-1.5">
+                <Truck className="h-3.5 w-3.5" style={{ color: ACCENT }} />
+                Відправка сьогодні
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1.5">
+              <Banknote className="h-3.5 w-3.5" style={{ color: ACCENT }} />
+              Оплата при отриманні
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <RotateCcw className="h-3.5 w-3.5" style={{ color: ACCENT }} />
+              14 днів на повернення
+            </span>
+          </div>
 
           <div className="flex flex-wrap items-center gap-3">
             <AddToCartButton

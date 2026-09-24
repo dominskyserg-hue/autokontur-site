@@ -53,7 +53,7 @@ import { FileSearch, ArrowRight, ShieldCheck, Copy, Check, Layers, Banknote, Sea
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { FAQ_ITEMS } from '@/lib/faq';
-import { TESTIMONIALS, TESTIMONIALS_SOURCE_URL, TESTIMONIALS_RATING, TESTIMONIALS_COUNT_PER_YEAR } from '@/lib/testimonials';
+import { TESTIMONIALS, TESTIMONIALS_SOURCE_URL, TESTIMONIALS_RATING, TESTIMONIALS_COUNT_PER_YEAR, type Testimonial } from '@/lib/testimonials';
 import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
 import { normalizePhone } from '@/lib/phoneNormalize';
@@ -104,6 +104,16 @@ interface CartItem {
   quantity: number;
   stock: number;
 }
+
+// Розбиваємо відгуки на дві групи ОДИН РАЗ на рівні модуля (список
+// статичний, lib/testimonials.ts) — справжній текст покупця показуємо
+// як цитату, готові пункти без тексту (їх більшість — 6 з 8, і в них
+// однаковий набір пунктів) виводимо окремим компактним списком нижче
+// в секції "Відгуки" (замінили: instructions were showing tag-only
+// entries as if they were a quoted review, що виглядало як однаковий
+// шаблонний відгук, скопійований кілька разів)
+const TEXT_TESTIMONIALS = TESTIMONIALS.filter((item): item is Testimonial & { text: string } => Boolean(item.text));
+const TAG_ONLY_TESTIMONIALS = TESTIMONIALS.filter((item) => !item.text);
 
 const CART_STORAGE_KEY = 'autokontur-cart';
 const VIEW_MODE_STORAGE_KEY = 'autokontur-view-mode';
@@ -2541,33 +2551,67 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
               </a>
             </div>
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {TESTIMONIALS.map((item, index) => (
-                <div
-                  key={index}
-                  className="flex flex-col gap-2.5 rounded-xl p-4"
-                  style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
-                >
-                  <div className="flex items-center gap-0.5">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} size={12} fill="#FBBF24" style={{ color: '#FBBF24' }} />
-                    ))}
-                  </div>
-                  {item.text ? (
+            {/* Відгуки з власним текстом ("Ребята молодцы, рекомендую...")
+                показуємо як звичайні цитати — це справжні слова покупця.
+                Решта покупців на Avto.pro просто відмічають готові пункти
+                при оцінці замовлення, без власного тексту — раніше ці
+                пункти виводились у ТОМУ Ж форматі, що й цитата ("«Швидкий
+                прийом замовлення · Товар в наявності...»"), і через те, що
+                набір пунктів у 6 з 8 покупців співпав, виглядало як
+                однаковий шаблонний відгук, скопійований шість разів.
+                Тепер вони йдуть окремим компактним списком нижче, у
+                вигляді самих пунктів-бейджів — чесно як "що відмітили
+                покупці", а не як вигадані однакові цитати */}
+            {TEXT_TESTIMONIALS.length > 0 && (
+              <div className="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {TEXT_TESTIMONIALS.map((item, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-col gap-2.5 rounded-xl p-4"
+                    style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
+                  >
+                    <div className="flex items-center gap-0.5">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star key={i} size={12} fill="#FBBF24" style={{ color: '#FBBF24' }} />
+                      ))}
+                    </div>
                     <p className="text-sm leading-snug" style={{ fontFamily: SANS_TECH, color: TECH_INK }}>
                       «{item.text}»
                     </p>
-                  ) : (
-                    <p className="text-sm leading-snug" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-                      {item.tags.join(' · ')}
+                    <p className="mt-auto text-xs" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                      {item.author} · {item.date}
                     </p>
-                  )}
-                  <p className="mt-auto text-xs" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
-                    {item.author} · {item.date}
-                  </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {TAG_ONLY_TESTIMONIALS.length > 0 && (
+              <div className="rounded-xl p-4" style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}>
+                <p className="mb-3 text-xs font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                  Ще {TAG_ONLY_TESTIMONIALS.length} замовлень із оцінкою 5★ на Avto.pro — без власного тексту, лише
+                  готові пункти, які покупець відмічає при оцінці:
+                </p>
+                <div className="flex flex-col gap-2">
+                  {TAG_ONLY_TESTIMONIALS.map((item, index) => (
+                    <div key={index} className="flex flex-wrap items-center gap-1.5 text-xs">
+                      <span className="shrink-0 font-medium" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                        {item.author}:
+                      </span>
+                      {item.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full px-2 py-0.5"
+                          style={{ fontFamily: SANS_TECH, background: TECH_SURFACE, color: TECH_FAINT, border: `1px solid ${TECH_BORDER}` }}
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
 
           {/* ==================== ПОПУЛЯРНІ ТОВАРИ ==================== */}

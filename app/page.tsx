@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import StorefrontHome from '@/components/StorefrontHome';
 import { FAQ_ITEMS } from '@/lib/faq';
 import { SITE_URL } from '@/lib/siteConfig';
+import { buildOrganizationJsonLd, buildWebSiteJsonLd, jsonLdScript } from '@/lib/structuredData';
 
 // Захист від спроби зібрати сторінку заздалегідь під час білда на
 // Vercel (де немає доступу до бази) — той самий прийом, що й у
@@ -118,6 +119,19 @@ export default async function Home() {
   return (
     <>
       <FaqStructuredData />
+      {/* Organization + WebSite — лише на Головній (не на кожній
+          сторінці), як і рекомендує Google: одна сторінка з розміткою
+          власника сайту й пошуку достатня для всього домену */}
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildOrganizationJsonLd(initialSettings.phone)) }}
+      />
+      <script
+        type="application/ld+json"
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildWebSiteJsonLd()) }}
+      />
       <StorefrontHome initialSettings={initialSettings} />
     </>
   );

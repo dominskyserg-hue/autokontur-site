@@ -25,6 +25,13 @@ export interface SchemaProduct {
   name: string | null;
   retailPrice: number;
   stock: number;
+  // Необов'язкові — заповнені лише там, де реально є в даних (сторінка
+  // одного товару має і фото, і meta_description; списки категорій/
+  // марок мають лише фото, без опису для кожного товару). Google не
+  // вимагає ці поля обов'язково, але рекомендує додавати, якщо вони
+  // реально є — вигадувати їх, коли даних нема, ми НЕ будемо
+  imageUrl?: string | null;
+  description?: string | null;
 }
 
 // Дуже поширений випадок саме в автозапчастинах (особливо стартери й
@@ -50,6 +57,22 @@ function priceValidUntil(): string {
 
 // Експортована — сторінка одного товару (app/p/[id]/[[...slug]]) бере
 // цю саму функцію напряму, без обгортки в ItemList/ListItem
+// Умови повернення — РЕАЛЬНИЙ текст із сторінки /returns (site_pages
+// у базі, components/InfoPage.tsx): 14 днів на повернення товару
+// належної якості згідно Закону України "Про захист прав споживачів".
+// Винесено сюди єдиним джерелом, а не продубльовано в кожному виклику —
+// якщо термін повернення колись зміниться, правити лише тут
+const RETURN_POLICY = {
+  '@type': 'MerchantReturnPolicy',
+  applicableCountry: 'UA',
+  returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+  merchantReturnDays: 14,
+  returnMethod: 'https://schema.org/ReturnByMail',
+  // Товар належної якості (не бракований) покупець повертає за свій
+  // рахунок — так само, як і в самому тексті /returns
+  returnFees: 'https://schema.org/ReturnShippingFees',
+} as const;
+
 export function productJsonLd(product: SchemaProduct) {
   const displayName =
     product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
@@ -59,8 +82,14 @@ export function productJsonLd(product: SchemaProduct) {
   return {
     '@type': 'Product',
     sku: product.article,
+    // mpn (Manufacturer Part Number) — для автозапчастин це той самий
+    // артикул, що й sku вище: у цьому каталозі немає окремого
+    // "внутрішнього" номера, відмінного від номера виробника
+    mpn: product.article,
     name: displayName,
     ...(product.brand ? { brand: { '@type': 'Brand', name: product.brand } } : {}),
+    ...(product.imageUrl ? { image: product.imageUrl } : {}),
+    ...(product.description ? { description: product.description } : {}),
     url,
     offers: {
       '@type': 'Offer',
@@ -77,6 +106,7 @@ export function productJsonLd(product: SchemaProduct) {
         ? 'https://schema.org/RefurbishedCondition'
         : 'https://schema.org/NewCondition',
       priceValidUntil: priceValidUntil(),
+      hasMerchantReturnPolicy: RETURN_POLICY,
     },
   };
 }
@@ -103,6 +133,52 @@ export function buildProductListJsonLd(products: SchemaProduct[]) {
       position: index + 1,
       item: productJsonLd(product),
     })),
+  };
+}
+
+// Organization + WebSite (з SearchAction) — обидва рекомендовані Google
+// саме на Головній (а не на кожній сторінці): показують пошуковику,
+// хто власник сайту (для Knowledge Panel/логотипу в видачі) і що на
+// сайті є свій пошук (може дати "sitelinks search box" прямо в
+// результатах пошуку Google). Раніше на сайті не було жодного з них
+export function buildOrganizationJsonLd(phone: string | null) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'DominatorParts',
+    url: SITE_URL,
+    logo: `${SITE_URL}/apple-touch-icon.png`,
+    ...(phone
+      ? {
+          contactPoint: {
+            '@type': 'ContactPoint',
+            telephone: phone,
+            contactType: 'customer service',
+            areaServed: 'UA',
+            availableLanguage: ['uk', 'ru'],
+          },
+        }
+      : {}),
+  };
+}
+
+// target — той самий "/?article=..." deep-link, який вже вміє
+// відкривати StorefrontHome.tsx (виконує пошук одразу при завантаженні
+// сторінки, див. коментар біля useEffect з window.location.search) —
+// окремої server-rendered сторінки результатів пошуку на сайті нема,
+// тому для sitelinks search box використовуємо саме цей робочий
+// deep-link, а не вигадану адресу
+export function buildWebSiteJsonLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    name: 'DominatorParts',
+    url: SITE_URL,
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${SITE_URL}/?article={search_term_string}`,
+      'query-input': 'required name=search_term_string',
+    },
   };
 }
 
