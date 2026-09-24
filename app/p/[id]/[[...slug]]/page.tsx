@@ -33,6 +33,7 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import { UUID_PATTERN, buildSeoProductDescription, buildSeoProductName, loadProduct, loadProductPageData } from '@/lib/productDetail';
 import ProductDetailContent, { BG, BODY_FONT, PAPER } from '@/components/ProductDetailContent';
+import SiteHeader from '@/components/SiteHeader';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -80,6 +81,7 @@ export default async function ProductPage({ params }: { params: Promise<PagePara
 
   return (
     <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+      <SiteHeader />
       <div className="max-w-5xl mx-auto px-5 md:px-8 py-8">
         <ProductDetailContent {...data} />
       </div>

@@ -27,6 +27,7 @@ import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPric
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
 import CategoryVehicleFilter from '@/components/CategoryVehicleFilter';
+import SiteHeader from '@/components/SiteHeader';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { buildVehicleWhereClause, hasVehicleFilter, type VehicleFilterParams } from '@/lib/vehicleFilter';
@@ -391,6 +392,7 @@ export default async function CategoryPage({
           dangerouslySetInnerHTML={{ __html: jsonLdScript(buildProductListJsonLd(products)) }}
         />
       )}
+      <SiteHeader />
       <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
         {/* ==================== ХЛІБНІ КРИХТИ ==================== */}
         <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>

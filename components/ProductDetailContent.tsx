@@ -139,7 +139,13 @@ export default function ProductDetailContent({
           <span key={item.url}>
             {index > 0 && ' / '}
             {index < breadcrumbItems.length - 1 ? (
-              <Link href={item.url.replace(SITE_URL, '')} className="transition-colors hover:text-[#60A5FA]" style={{ color: MUTED }}>
+              // item.url.replace(SITE_URL, '') дає '/category/...' чи
+              // '/marky/...' для решти крихт, але для самої першої
+              // ("Головна", url === SITE_URL) даватиме ПОРОЖНІЙ рядок —
+              // <Link href=""> веде нікуди (лишається на тій самій
+              // сторінці) замість переходу на Головну, тому порожній
+              // результат окремо підміняємо на '/'
+              <Link href={item.url.replace(SITE_URL, '') || '/'} className="transition-colors hover:text-[#60A5FA]" style={{ color: MUTED }}>
                 {item.name}
               </Link>
             ) : (

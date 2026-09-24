@@ -24,6 +24,7 @@ import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import SiteHeader from '@/components/SiteHeader';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
@@ -214,6 +215,7 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
           dangerouslySetInnerHTML={{ __html: jsonLdScript(buildProductListJsonLd(uniqueProducts)) }}
         />
       )}
+      <SiteHeader />
       <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
         <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
           <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>

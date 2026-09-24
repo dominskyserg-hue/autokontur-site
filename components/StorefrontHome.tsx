@@ -707,6 +707,15 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
   // до того как реальные данные оттуда успели подгрузиться
   const [cartLoaded, setCartLoaded] = useState(false);
 
+  // id товара, который только что добавили в корзину кнопкой на
+  // карточке (список/каталог) — используется, чтобы на пару секунд
+  // показать на кнопке галочку вместо иконки корзины, а не сразу
+  // распахивать панель корзины (раньше addToCart() всегда делал
+  // setCartOpen(true), из-за чего корзина открывалась при каждом клике
+  // "Купити" на карточке — пользователь просил вместо этого просто
+  // анимацию добавления на самой кнопке)
+  const [justAddedId, setJustAddedId] = useState<string | null>(null);
+
   // ---- форма оформления заказа (внутри панели корзины) ----
   // Имя, фамилия, телефон, город и адрес відділення Нової Пошти —
   // обов'язкові (потрібні для доставки), коментар — необов'язковий
@@ -816,7 +825,14 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
         },
       ];
     });
-    setCartOpen(true);
+
+    // Вместо распахивания панели корзины — короткая анимация на самой
+    // кнопке (галочка вместо иконки корзины ~1.2с), см. justAddedId
+    // выше
+    setJustAddedId(product.id);
+    window.setTimeout(() => {
+      setJustAddedId((current) => (current === product.id ? null : current));
+    }, 1200);
   };
 
   const removeFromCart = (id: string) => {
@@ -2421,14 +2437,14 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                               onClick={() => addToCart(product)}
                               aria-label="Додати в кошик"
                               title="Додати в кошик"
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-shadow hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
+                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
                               style={
                                 product.stock > 0
-                                  ? { background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }
+                                  ? { background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', transform: justAddedId === product.id ? 'scale(1.12)' : 'scale(1)' }
                                   : { background: TECH_SURFACE_2, color: TECH_FAINT }
                               }
                             >
-                              <CartIcon />
+                              {justAddedId === product.id ? <CheckIcon /> : <CartIcon />}
                             </button>
                           </div>
                         ))}
@@ -2542,8 +2558,17 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                                 : { fontFamily: SANS_TECH, background: TECH_SURFACE, color: TECH_FAINT }
                             }
                           >
-                            <CartIcon />
-                            До кошика
+                            {justAddedId === product.id ? (
+                              <>
+                                <CheckIcon />
+                                Додано
+                              </>
+                            ) : (
+                              <>
+                                <CartIcon />
+                                До кошика
+                              </>
+                            )}
                           </button>
                         </div>
                       ))}
@@ -2773,14 +2798,14 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                         onClick={() => addToCart(product)}
                         aria-label="Додати в кошик"
                         title="Додати в кошик"
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-shadow hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
                         style={
                           product.stock > 0
-                            ? { background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }
+                            ? { background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', transform: justAddedId === product.id ? 'scale(1.12)' : 'scale(1)' }
                             : { background: TECH_SURFACE, color: TECH_FAINT }
                         }
                       >
-                        <CartIcon />
+                        {justAddedId === product.id ? <CheckIcon /> : <CartIcon />}
                       </button>
                     </div>
                   </div>

@@ -5,10 +5,12 @@
 // ============================================================
 
 import { BG, PAPER, BODY_FONT } from '@/components/ProductDetailContent';
+import SiteHeader from '@/components/SiteHeader';
 
 export default function ProductPageLoading() {
   return (
     <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
+      <SiteHeader />
       <div className="max-w-5xl mx-auto px-5 md:px-8 py-8">
         <div className="flex flex-col items-center justify-center py-24 gap-4">
           <div
