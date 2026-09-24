@@ -63,6 +63,23 @@ export const UUID_PATTERN =
 // ("TOYOTA") — показуємо курировану назву з lib/carMakes.ts
 // ("Toyota"), якщо марка курована; інакше просто приводимо регістр
 // (перша літера кожного слова — велика) замість сирого капсу
+// Чи зустрічається brand як ОКРЕМЕ слово в text (регістронезалежно) —
+// потрібно, щоб не додавати бренд деталі ЩЕ РАЗ у H1, коли він і так
+// уже є в назві вузької категорії ("...Suzuki SX4" + бренд "SUZUKI").
+// На відміну від подібної перевірки в lib/categories.ts
+// (containsWholeWord, ігнорує ключі коротші за 3 символи — там це
+// ключові слова моделі з TecDoc), тут довжина не обмежена: бренди на
+// кшталт "VW" — реальні, короткі за визначенням
+function brandMatchesWord(text: string, brand: string): boolean {
+  const trimmedBrand = brand.trim();
+  if (!trimmedBrand) return false;
+  // Екрануємо спецсимволи regex — бренд це вільний текст з прайсу
+  // постачальника, а не заздалегідь довірений патерн
+  const escaped = trimmedBrand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`(?:^|[^A-ZА-ЯЁІЇЄ0-9])${escaped}(?:[^A-ZА-ЯЁІЇЄ0-9]|$)`, 'i');
+  return pattern.test(text);
+}
+
 function formatCarMakeDisplay(rawMake: string): string {
   const curated = getCarMakeByDbValue(rawMake);
   if (curated) return curated.name;
@@ -94,8 +111,17 @@ export function buildSeoProductName(product: {
   // з геть іншою маркою міг показати чужу модель авто в H1 (знайдений
   // баг: AJUSA 11059300 для CITROËN показував "...Daewoo Lanos")
   const category = detectCategoryForProductH1(product.name, product.carMake, product.carModel);
+  const categoryLabel = category ? category.itemName ?? category.name : null;
+  // Вузькі категорії "по машині" вже містять марку авто в самій назві
+  // ("...Suzuki SX4") — якщо бренд деталі (product.brand) ТОЙ САМИЙ, що
+  // й ця марка (напр. деталь від офіційного виробника авто, продається
+  // під його ж брендом — "SUZUKI 2478479C10" для категорії "...Suzuki
+  // SX4"), додавати бренд ще раз не треба: вийшло б "...Suzuki SX4
+  // SUZUKI 2478479C10" — те саме слово двічі
+  const brandDuplicatesCategoryName =
+    Boolean(category?.modelGroup) && Boolean(product.brand) && Boolean(categoryLabel) && brandMatchesWord(categoryLabel!, product.brand!);
   const base = category
-    ? [category.itemName ?? category.name, product.brand, product.article].filter(Boolean).join(' ')
+    ? [categoryLabel, brandDuplicatesCategoryName ? null : product.brand, product.article].filter(Boolean).join(' ')
     : product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
 
   // category.modelGroup заповнений ЛИШЕ у вузьких категорій "по
