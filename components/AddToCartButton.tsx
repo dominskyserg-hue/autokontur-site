@@ -15,10 +15,15 @@
 // ============================================================
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { trackAddToCart } from '@/lib/analytics';
 
 const CART_STORAGE_KEY = 'autokontur-cart';
+
+// Подія, якою ця кнопка каже вже змонтованій Головній (components/
+// StorefrontHome.tsx) відкрити панель кошика НАПРЯМУ, без навігації —
+// точна назва події має збігатись в обох файлах
+const OPEN_CART_EVENT = 'autokontur:open-cart';
 
 interface CartItem {
   id: string;
@@ -43,6 +48,7 @@ interface AddToCartButtonProps {
 
 export default function AddToCartButton({ product }: AddToCartButtonProps) {
   const [added, setAdded] = useState(false);
+  const router = useRouter();
 
   const handleAdd = () => {
     try {
@@ -83,19 +89,76 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
     }
   };
 
+  // Ця кнопка рендериться у ТРЬОХ різних місцях, і "перейти в кошик"
+  // мусить поводитись по-різному в кожному:
+  //   1. Окрема сторінка товару (app/p/[id]/...) — Головної на екрані
+  //      взагалі нема, потрібна СПРАВЖНЯ навігація на "/?cart=1"
+  //   2. Модальне вікно товару НАД Головною (app/@modal/(.)p/...,
+  //      покупець клікнув картку прямо на "/") — Головна вже
+  //      змонтована ПІД модальним вікном (той самий React-інстанс,
+  //      той самий стан), а просте посилання на "/?cart=1" тут нічого
+  //      б не закрило: шлях лишається тим самим "/", міняється лише
+  //      query-рядок, а Next.js не перемонтовує паралельний слот
+  //      @modal заради самої лише зміни query — модальне вікно
+  //      лишалось би висіти поверх уже відкритого кошика (саме це і
+  //      трапилось на бойовому сайті: покупець побачив "зависання").
+  //      Тут відкриваємо кошик ПОДІЄЮ напряму (Головна вже живе на
+  //      сторінці) і просто закриваємо модалку router.back()
+  //   3. Модальне вікно товару НАД категорією/маркою — там Головної
+  //      взагалі нема на екрані, тому, як і у випадку 1, потрібна
+  //      справжня навігація на "/?cart=1"
+  const goToCart = () => {
+    // window.location.pathname тут НЕ підказка: коли товар відкрито в
+    // модалці, Next.js (intercepting routes) міняє адресний рядок на
+    // адресу товару ("/p/...") незалежно від того, що насправді під
+    // модалкою — перевіряємо тому прапорець, який сама Головна
+    // виставляє собі при монтуванні (components/StorefrontHome.tsx)
+    const isHomeMountedUnderneath = window.__storefrontHomeMounted === true;
+    const isInModal = document.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+
+    // Безпечно диспетчерити завжди: якщо Головна не змонтована,
+    // слухача просто немає, і подія нікуди не потрапляє
+    window.dispatchEvent(new Event(OPEN_CART_EVENT));
+
+    // Модалку, якщо вона є, ЗАВЖДИ закриваємо саме router.back() —
+    // тим самим способом, що й components/ProductModalShell.tsx.
+    // Спроба замінити це на router.push('/?cart=1') виявилась
+    // ненадійною: коли модалка відкрита НЕ над Головною (над
+    // категорією/маркою), програмна навігація на новий шлях іноді не
+    // скидає паралельний слот @modal, і модалка лишається висіти
+    // поверх нової сторінки — той самий "зависає" ефект, який ми й
+    // виправляємо
+    if (isInModal) {
+      router.back();
+    }
+
+    if (!isHomeMountedUnderneath) {
+      // Головної на екрані нема (окрема сторінка товару — case 1, або
+      // модалка була над категорією/маркою — case 3) — після
+      // закриття модалки (якщо вона була) усе одно потрібна справжня
+      // навігація на Головну з кошиком. setTimeout — дати
+      // router.back() встигнути застосуватись, перш ніж push піде
+      // поверх нього
+      if (isInModal) {
+        window.setTimeout(() => router.push('/?cart=1'), 60);
+      } else {
+        router.push('/?cart=1');
+      }
+    }
+  };
+
   if (added) {
     return (
       <div className="flex items-center gap-3 text-sm">
         <span style={{ color: '#34D399' }}>✓ Додано в кошик</span>
-        {/* ?cart=1 — components/StorefrontHome.tsx сам відкриває панель
-            кошика при завантаженні Головної з цим параметром (той
-            самий підхід, що й ?vin=1 для заявки підбору за VIN).
-            Раніше тут був просто href="/" — покупець потрапляв на
-            Головну, а сам кошик лишався закритим, і кнопка виглядала
-            "не працює" */}
-        <Link href="/?cart=1" className="font-semibold underline" style={{ color: '#60A5FA' }}>
+        <button
+          type="button"
+          onClick={goToCart}
+          className="font-semibold underline"
+          style={{ color: '#60A5FA', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
           Перейти в кошик →
-        </Link>
+        </button>
       </div>
     );
   }

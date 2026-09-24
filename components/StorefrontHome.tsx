@@ -105,6 +105,14 @@ interface CartItem {
   stock: number;
 }
 
+declare global {
+  interface Window {
+    // Прапорець "Головна змонтована" — див. коментар біля useEffect,
+    // що його виставляє, нижче. Читає components/AddToCartButton.tsx
+    __storefrontHomeMounted?: boolean;
+  }
+}
+
 // Розбиваємо відгуки на дві групи ОДИН РАЗ на рівні модуля (список
 // статичний, lib/testimonials.ts) — справжній текст покупця показуємо
 // як цитату, готові пункти без тексту (їх більшість — 6 з 8, і в них
@@ -1124,6 +1132,36 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
     if (params.get('cart') !== '1') return;
     setCartOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ---- перехід із кнопки "Перейти в кошик" У МОДАЛЬНОМУ ВІКНІ товару
+  //      над Головною (components/AddToCartButton.tsx) ----
+  // Коли товар відкрито в модалці ПРЯМО над Головною (та сама адреса
+  // "/", лише з перехопленим маршрутом /p/... поверх), ця сторінка
+  // (Головна) вже змонтована — ?cart=1 тут не допоможе: шлях не
+  // змінюється, і useEffect вище з ним просто не спрацює вдруге.
+  // Кнопка натомість диспетчерить цю подію напряму — той самий React-
+  // інстанс Головної, що вже живе на екрані, просто відкриває кошик
+  useEffect(() => {
+    const handler = () => setCartOpen(true);
+    window.addEventListener('autokontur:open-cart', handler);
+    return () => window.removeEventListener('autokontur:open-cart', handler);
+  }, []);
+
+  // Прапорець "Головна зараз реально змонтована на екрані" —
+  // components/AddToCartButton.tsx звіряється з ним, щоб зрозуміти,
+  // чи можна відкрити кошик подією напряму (це safe лише тоді, коли
+  // цей самий інстанс Головної вже живе під модальним вікном товару),
+  // чи потрібна справжня навігація на "/?cart=1". Адресний рядок тут
+  // НЕ підказка: коли товар відкрито в модалці над Головною, Next.js
+  // (intercepting routes) міняє URL на адресу товару ("/p/...") навіть
+  // попри те, що насправді рендериться саме ця, Головна, сторінка —
+  // window.location.pathname === '/' у такому разі вже НЕ спрацював би
+  useEffect(() => {
+    window.__storefrontHomeMounted = true;
+    return () => {
+      window.__storefrontHomeMounted = false;
+    };
   }, []);
 
   // Підбір за автомобілем — марка обов'язкова (без неї запит повернув
