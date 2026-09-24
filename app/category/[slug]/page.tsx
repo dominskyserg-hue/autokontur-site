@@ -105,14 +105,17 @@ export type CategorySort = 'popular' | 'price_asc' | 'price_desc';
 function categoryOrderByClause(sort: CategorySort): string {
   if (sort === 'price_asc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price ASC';
   if (sort === 'price_desc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC';
-  // 'popular' — товари з фото і в наявності насамперед. Тайбрейк —
-  // p.stock DESC, а не назва товару: назви беруться з прайсів
-  // постачальників як є, і частина з них починається з технічних
-  // позначок у дужках ("(180X31) Гальмівні колодки...") чи розмірів
-  // ("(R15)..."), а символ "(" за алфавітом іде РАНІШЕ будь-якої
-  // літери й цифри — такі товари завжди спливали нагору списку
-  // першими, хоча жодного стосунку до популярності це не має
-  return 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.stock DESC, p.brand ASC NULLS LAST, p.article ASC';
+  // 'popular' — товари з фото і в наявності насамперед. Тайбрейк
+  // СПЕРШУ був p.name ASC (проблема з "(180X31)..." — див. коментар
+  // вище в історії), потім p.stock DESC — але виявилось, що це теж
+  // погана ідея: значення products.stock прийшли з прайсів різних
+  // постачальників, і в одного з них ("T1HO") воно чомусь величезне
+  // саме у дорогих товарів (300+ одиниць BMW-деталі за 15 000+ грн) —
+  // це підняло найдорожчі товари категорії на перші місця, що
+  // виглядає як "популярність = найдорожче", а не навпаки. Ціна за
+  // зростанням — найбезпечніший тайбрейк: не залежить від сумнівних
+  // даних постачальника і показує спершу типові, доступні товари
+  return 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.retail_price ASC';
 }
 
 const loadCategoryProducts = cache(async function loadCategoryProducts(
@@ -201,6 +204,26 @@ function parseSort(value: string | undefined): CategorySort {
   return value === 'price_asc' || value === 'price_desc' ? value : 'popular';
 }
 
+// Вставляє "— сторінка N" ПЕРЕД назвою бренду в кінці title, а не
+// після неї. category.metaTitle завжди закінчується на "| DominatorParts"
+// — раніше суфікс пагінації просто дописувався в самий кінець рядка
+// ("...| DominatorParts — сторінка 2"), через що назва магазину
+// опинялась усередині title замість кінця, що виглядає неохайно і в
+// самій вкладці браузера, і в видачі Google
+function insertPageSuffix(title: string, pageNumber: number): string {
+  if (pageNumber <= 1) return title;
+  const suffix = ` — сторінка ${pageNumber}`;
+  const separatorIndex = title.lastIndexOf(' | DominatorParts');
+  if (separatorIndex !== -1) {
+    return title.slice(0, separatorIndex) + suffix + title.slice(separatorIndex);
+  }
+  const dashIndex = title.lastIndexOf(' — DominatorParts');
+  if (dashIndex !== -1) {
+    return title.slice(0, dashIndex) + suffix + title.slice(dashIndex);
+  }
+  return `${title}${suffix}`;
+}
+
 export async function generateMetadata({
   params,
   searchParams,
@@ -237,9 +260,7 @@ export async function generateMetadata({
   const canonicalPath = `${SITE_URL}/category/${slug}${canonicalQueryString ? `?${canonicalQueryString}` : ''}`;
 
   return {
-    title: make
-      ? `${category.name} ${make.name} купити — DominatorParts${pageSuffix}`
-      : `${category.metaTitle}${pageSuffix}`,
+    title: insertPageSuffix(make ? `${category.name} ${make.name} купити — DominatorParts` : category.metaTitle, pageNumber),
     description: make
       ? `${category.name} для ${make.name} в наявності: оригінал та перевірені аналоги. Доставка по всій Україні.${pageSuffix}`
       : `${category.metaDescription}${pageSuffix}`,

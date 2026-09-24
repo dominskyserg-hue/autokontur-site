@@ -39,26 +39,34 @@ export const DEPARTMENTS: DepartmentDef[] = [
       'motorni-olyvy',
     ],
   },
-  { slug: 'dvyhun-detali', name: 'Деталі двигуна', categorySlugs: [] },
-  { slug: 'palyvna', name: 'Паливна система', categorySlugs: [] },
-  { slug: 'vypusk', name: 'Система випуску', categorySlugs: [] },
-  { slug: 'oholodzhennya', name: 'Система охолодження', categorySlugs: [] },
+  { slug: 'dvyhun-detali', name: 'Деталі двигуна', categorySlugs: ['prokladky-dvyhuna'] },
+  { slug: 'palyvna', name: 'Паливна система', categorySlugs: ['palyvna-systema'] },
+  { slug: 'vypusk', name: 'Система випуску', categorySlugs: ['systema-vypusku'] },
+  { slug: 'oholodzhennya', name: 'Система охолодження', categorySlugs: ['systema-oholodzhennya'] },
+  // dvyhun-v-zbori ("Двигун в зборі" — цілі контрактні двигуни) лишається
+  // порожнім навмисно: перевірено запитом до бази, товарів із такою
+  // назвою в каталозі практично немає (одиниці) — на відміну від решти
+  // розділів нижче, де знайшлися тисячі реальних товарів
   { slug: 'dvyhun-v-zbori', name: 'Двигун в зборі', categorySlugs: [] },
-  { slug: 'opalennya', name: 'Опалення і клімат', categorySlugs: [] },
-  { slug: 'transmisiya', name: 'Трансмісія і КПП', categorySlugs: [] },
+  { slug: 'opalennya', name: 'Опалення і клімат', categorySlugs: ['opalennya-klimat'] },
+  { slug: 'transmisiya', name: 'Трансмісія і КПП', categorySlugs: ['transmisiya-kpp'] },
   {
     slug: 'hodova',
     name: 'Ходова, підвіска',
     categorySlugs: ['amortyzatory', 'sailentbloky-vazhelia', 'vtulky-stabilizatora', 'kulovi-opory', 'pidshypnyky-matochyny'],
   },
-  { slug: 'kuzov', name: 'Деталі кузова', categorySlugs: [] },
-  { slug: 'kriplennya', name: "Кріплення і кронштейни", categorySlugs: [] },
+  { slug: 'kuzov', name: 'Деталі кузова', categorySlugs: ['kuzov-detali'] },
+  { slug: 'kriplennya', name: "Кріплення і кронштейни", categorySlugs: ['kriplennya-kronshteiny'] },
   { slug: 'halmivna', name: 'Гальмівна система', categorySlugs: ['halmivni-kolodky', 'halmivni-dysky'] },
   { slug: 'kermo', name: 'Кермове управління', categorySlugs: ['kermove-upravlinnya'] },
   { slug: 'salon', name: 'Елементи салону', categorySlugs: ['salonni-filtry'] },
+  // dysky ("Колісні диски" — легкосплавні/штамповані ОБОДИ, а не
+  // halmivni-dysky) і bezpeka лишаються порожніми: перевірено запитом
+  // до бази — товарів під ці два розділи в каталозі одиниці (29 і 50
+  // відповідно), окрема сторінка категорії поки не виправдана
   { slug: 'dysky', name: 'Колісні диски', categorySlugs: [] },
   { slug: 'bezpeka', name: 'Система безпеки', categorySlugs: [] },
-  { slug: 'elektro', name: 'Електрообладнання', categorySlugs: [] },
+  { slug: 'elektro', name: 'Електрообладнання', categorySlugs: ['generatory-startery'] },
   { slug: 'aksesuary', name: 'Аксесуари', categorySlugs: [] },
 ];
 

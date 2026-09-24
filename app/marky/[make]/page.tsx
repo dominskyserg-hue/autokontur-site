@@ -86,11 +86,12 @@ export type MakeSort = 'popular' | 'price_asc' | 'price_desc';
 function makeOrderByClause(sort: MakeSort): string {
   if (sort === 'price_asc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price ASC';
   if (sort === 'price_desc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC';
-  // Тайбрейк "p.name ASC" піднімав нагору товари, чия назва з прайсу
-  // постачальника починається з "(" (технічні позначки/розміри) —
-  // символ "(" за алфавітом раніше будь-якої літери й цифри.
-  // p.stock DESC — ближчий до "популярності" тайбрейк
-  return 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.stock DESC, p.brand ASC NULLS LAST, p.article ASC';
+  // Той самий тайбрейк, що й у app/category/[slug]/page.tsx — ціна за
+  // зростанням: p.name ASC піднімав нагору товари з назвою на "(", а
+  // p.stock DESC виявився ще гіршим (одного з постачальників значення
+  // stock величезне саме у найдорожчих товарів, і "популярне" ставало
+  // "найдорожче" — див. детальний коментар у app/category/[slug]/page.tsx)
+  return 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.retail_price ASC';
 }
 
 const loadMakeProducts = cache(async function loadMakeProducts(
@@ -167,7 +168,9 @@ export async function generateMetadata({
   const canonicalPath = pageNumber > 1 ? `${SITE_URL}/marky/${slug}?page=${pageNumber}` : `${SITE_URL}/marky/${slug}`;
 
   return {
-    title: `Запчастини ${make.name} купити з доставкою — DominatorParts${pageSuffix}`,
+    // pageSuffix встромляється ПЕРЕД "— DominatorParts", а не після:
+    // назва магазину має лишатись у самому кінці title
+    title: `Запчастини ${make.name} купити з доставкою${pageSuffix} — DominatorParts`,
     description: `Автозапчастини ${make.name} в наявності: оригінал та перевірені аналоги. Пошук за артикулом, швидка доставка по всій Україні.${pageSuffix}`,
     robots: total === 0 ? { index: false, follow: true } : undefined,
     alternates: { canonical: canonicalPath },

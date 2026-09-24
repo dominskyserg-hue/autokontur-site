@@ -114,6 +114,9 @@ interface CartItem {
 // шаблонний відгук, скопійований кілька разів)
 const TEXT_TESTIMONIALS = TESTIMONIALS.filter((item): item is Testimonial & { text: string } => Boolean(item.text));
 const TAG_ONLY_TESTIMONIALS = TESTIMONIALS.filter((item) => !item.text);
+// Унікальні пункти серед TAG_ONLY_TESTIMONIALS — показуємо один раз
+// замість того, щоб повторювати той самий набір у кожного з 6 покупців
+const UNIQUE_TAG_ONLY_LABELS = Array.from(new Set(TAG_ONLY_TESTIMONIALS.flatMap((item) => item.tags)));
 
 const CART_STORAGE_KEY = 'autokontur-cart';
 const VIEW_MODE_STORAGE_KEY = 'autokontur-view-mode';
@@ -2588,28 +2591,31 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
 
             {TAG_ONLY_TESTIMONIALS.length > 0 && (
               <div className="rounded-xl p-4" style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}>
-                <p className="mb-3 text-xs font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
-                  Ще {TAG_ONLY_TESTIMONIALS.length} замовлень із оцінкою 5★ на Avto.pro — без власного тексту, лише
-                  готові пункти, які покупець відмічає при оцінці:
+                {/* Один агрегований рядок замість окремого рядка на
+                    кожного покупця — у 6 з 8 замовлень збігається
+                    весь набір тегів, і навіть у "чесному" форматі
+                    (не цитата) шість рядків поспіль з одними й тими ж
+                    4 пунктами все одно виглядали як повторення. Тут —
+                    унікальні пункти один раз + перелік, хто саме їх
+                    відмітив */}
+                <p className="mb-2 text-xs font-medium" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                  Ще {TAG_ONLY_TESTIMONIALS.length} замовлень з оцінкою 5★ на Avto.pro — без власного тексту, покупці
+                  відмітили готові пункти:
                 </p>
-                <div className="flex flex-col gap-2">
-                  {TAG_ONLY_TESTIMONIALS.map((item, index) => (
-                    <div key={index} className="flex flex-wrap items-center gap-1.5 text-xs">
-                      <span className="shrink-0 font-medium" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-                        {item.author}:
-                      </span>
-                      {item.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full px-2 py-0.5"
-                          style={{ fontFamily: SANS_TECH, background: TECH_SURFACE, color: TECH_FAINT, border: `1px solid ${TECH_BORDER}` }}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
+                <div className="mb-2.5 flex flex-wrap gap-1.5 text-xs">
+                  {UNIQUE_TAG_ONLY_LABELS.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full px-2 py-0.5"
+                      style={{ fontFamily: SANS_TECH, background: TECH_SURFACE, color: TECH_MUTED, border: `1px solid ${TECH_BORDER}` }}
+                    >
+                      {tag}
+                    </span>
                   ))}
                 </div>
+                <p className="text-xs" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                  {TAG_ONLY_TESTIMONIALS.map((item) => item.author).join(', ')}
+                </p>
               </div>
             )}
           </div>
