@@ -59,7 +59,10 @@ export const DEPARTMENTS: DepartmentDef[] = [
   { slug: 'kriplennya', name: "Кріплення і кронштейни", categorySlugs: ['kriplennya-kronshteiny'] },
   { slug: 'halmivna', name: 'Гальмівна система', categorySlugs: ['halmivni-kolodky', 'halmivni-dysky'] },
   { slug: 'kermo', name: 'Кермове управління', categorySlugs: ['kermove-upravlinnya'] },
-  { slug: 'salon', name: 'Елементи салону', categorySlugs: ['salonni-filtry'] },
+  // Раніше називався "Елементи салону" — назва обіцяла ширше (оббивка,
+  // накладки, органайзери), ніж насправді є в categorySlugs (тільки
+  // фільтр). Перейменовано під те, що товар підтверджує
+  { slug: 'salon', name: 'Салонні фільтри', categorySlugs: ['salonni-filtry'] },
   // dysky ("Колісні диски" — легкосплавні/штамповані ОБОДИ, а не
   // halmivni-dysky) і bezpeka лишаються порожніми: перевірено запитом
   // до бази — товарів під ці два розділи в каталозі одиниці (29 і 50
