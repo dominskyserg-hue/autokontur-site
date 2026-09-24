@@ -1110,6 +1110,22 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---- перехід із кнопки "Перейти в кошик" на сторінці товару
+  //      (components/AddToCartButton.tsx, ?cart=1) ----
+  // Кошик — це локальний стан ЦІЄЇ сторінки (Головної), а не окрема
+  // сторінка/маршрут, тому кнопка на сторінці товару не могла просто
+  // відкрити його напряму — вела на Головну, а кошик там лишався
+  // закритим (?cart=1 і рахувалось, ба навіть не читалось). Самі
+  // товари в кошику підвантажаться автоматично — вони й так лежать у
+  // тому самому localStorage (CART_STORAGE_KEY), незалежно від цього
+  // параметра, ефектом вище
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('cart') !== '1') return;
+    setCartOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Підбір за автомобілем — марка обов'язкова (без неї запит повернув
   // би взагалі весь каталог), модель, рік і об'єм двигуна —
   // необов'язкові уточнення поверх марки

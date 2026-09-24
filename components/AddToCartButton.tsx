@@ -87,7 +87,13 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
     return (
       <div className="flex items-center gap-3 text-sm">
         <span style={{ color: '#34D399' }}>✓ Додано в кошик</span>
-        <Link href="/" className="font-semibold underline" style={{ color: '#60A5FA' }}>
+        {/* ?cart=1 — components/StorefrontHome.tsx сам відкриває панель
+            кошика при завантаженні Головної з цим параметром (той
+            самий підхід, що й ?vin=1 для заявки підбору за VIN).
+            Раніше тут був просто href="/" — покупець потрапляв на
+            Головну, а сам кошик лишався закритим, і кнопка виглядала
+            "не працює" */}
+        <Link href="/?cart=1" className="font-semibold underline" style={{ color: '#60A5FA' }}>
           Перейти в кошик →
         </Link>
       </div>
