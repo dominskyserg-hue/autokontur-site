@@ -80,8 +80,13 @@ const RETURN_POLICY = {
   merchantReturnDays: 14,
   returnMethod: 'https://schema.org/ReturnByMail',
   // Товар належної якості (не бракований) покупець повертає за свій
-  // рахунок — так само, як і в самому тексті /returns
-  returnFees: 'https://schema.org/ReturnShippingFees',
+  // рахунок — так само, як і в самому тексті /returns.
+  // ReturnFeesCustomerResponsibility (а не ReturnShippingFees) — бо
+  // ReturnShippingFees за специфікацією Google означає конкретну
+  // фіксовану суму витрат на повернення (тоді обов'язкове ще й поле
+  // returnShippingFeesAmount), якої в нас немає — покупець просто сам
+  // оплачує повернення без наперед відомої суми
+  returnFees: 'https://schema.org/ReturnFeesCustomerResponsibility',
 } as const;
 
 export function productJsonLd(product: SchemaProduct) {

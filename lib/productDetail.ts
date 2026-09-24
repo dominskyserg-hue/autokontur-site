@@ -172,13 +172,31 @@ export function buildSeoProductDescription(product: {
 const META_TITLE_MAX_LENGTH = 65;
 const META_TITLE_SUFFIX = ' — купити, ціна | DominatorParts';
 
+// Прийменники/сполучники, якими НЕ можна закінчувати обрізаний
+// заголовок — інакше після обрізки по межі слова лишається висячий
+// прийменник ("Амортизатор Sachs ARTSEO2 для — купити..." замість
+// "...для Toyota Corolla — купити...", справжній баг, знайдений на
+// товарі ARTSEO2: buildSeoProductName додає "для {марка модель}", і
+// якщо саме на цьому місці проходить межа 65 символів, обрізка по
+// останньому пробілу лишає "для" самим останнім словом)
+const DANGLING_TRAILING_WORD_RE = /\s+(для|і|та|з|із|на|до|від|по|як|що|в|у|або)$/i;
+
 function truncateAtWordBoundary(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   const truncated = text.slice(0, maxLength);
   const lastSpace = truncated.lastIndexOf(' ');
   // lastSpace > 20 — не обрізати зовсім коротко, якщо пробіл трапився
   // на самому початку (напр. в одного довгого слова без пробілів)
-  return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated).trim();
+  let result = (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated).trim();
+  // Прибираємо висячий прийменник/сполучник в самому кінці (може
+  // лишитись і ПІСЛЯ обрізки по пробілу вище) — цикл на випадок двох
+  // коротких слів підряд, хоч на практиці досить одного проходу
+  let withoutDangling = result.replace(DANGLING_TRAILING_WORD_RE, '');
+  while (withoutDangling !== result && withoutDangling.trim()) {
+    result = withoutDangling;
+    withoutDangling = result.replace(DANGLING_TRAILING_WORD_RE, '');
+  }
+  return result;
 }
 
 export function buildSeoMetaTitle(product: {
