@@ -277,6 +277,13 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
   const [telegramGroupUrl, setTelegramGroupUrl] = useState<string | null>(initialSettings?.telegramGroupUrl || null);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
 
+  // ---- мобільне меню шапки (☰) ----
+  // На мобільному (<640px) в шапці ховаються посилання "Категорії" і
+  // "Марки авто" та телефон/години роботи (класи hidden sm:flex /
+  // hidden md:flex нижче) — без цієї кнопки покупець з телефону не мав
+  // куди їх подіти взагалі
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
   // ---- блок "Популярні товари" на головній (товари з фото, в наявності) ----
   const [popularProducts, setPopularProducts] = useState<Product[]>([]);
 
@@ -297,10 +304,14 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
         if (data.settings) {
           if (data.settings.shopName) {
             setShopName(data.settings.shopName);
-            // Обновляем и заголовок вкладки браузера — метаданные в
-            // app/layout.tsx статичные и заданы на этапе сборки,
-            // а название магазина настраивается уже после, в базе
-            document.title = `${data.settings.shopName} — автозапчастини з доставкою по Україні`;
+            // document.title тут раніше свідомо перезаписувався на
+            // "{shopName} — автозапчастини з доставкою по Україні" —
+            // але це затирало серверний SEO-заголовок з app/page.tsx
+            // ("Автозапчастини купити в Україні — інтернет-магазин
+            // DominatorParts"), і Google бачив два різні title Головної
+            // (сирий HTML і той, що зʼявляється за мить після fetch).
+            // Назва магазину в шапці сайту оновлюється через shopName
+            // вище — самого заголовка вкладки браузера це не стосується
           }
           if (data.settings.phone) setPhone(data.settings.phone);
           if (data.settings.workingHours) setWorkingHours(data.settings.workingHours);
@@ -1284,8 +1295,67 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                   </span>
                 )}
               </button>
+
+              {/* ---- Мобільне меню (☰) ---- */}
+              {/* Показується лише нижче за sm (640px) — саме там ховаються
+                  "Категорії", "Марки авто" і телефон/години роботи вище,
+                  і без цієї кнопки на них не було жодного способу перейти
+                  з телефону */}
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen((open) => !open)}
+                aria-expanded={mobileMenuOpen}
+                aria-label="Меню"
+                className="flex sm:hidden items-center justify-center rounded-lg p-2 transition-colors hover:bg-white/5"
+                style={{ color: TECH_INK }}
+              >
+                <MenuIcon open={mobileMenuOpen} />
+              </button>
             </div>
           </div>
+
+          {/* ---- Розкрите мобільне меню ---- */}
+          {mobileMenuOpen && (
+            <div
+              className="sm:hidden px-5 pb-4 flex flex-col gap-1"
+              style={{ borderTop: `1px solid ${TECH_BORDER}` }}
+            >
+              <Link
+                href="/category"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-white/5"
+                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+              >
+                Категорії
+              </Link>
+              <Link
+                href="/marky"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-white/5"
+                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+              >
+                Марки авто
+              </Link>
+              <a
+                href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-white/5"
+                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+              >
+                <Send className="h-4 w-4" style={{ color: TECH_ACCENT_BRIGHT }} />
+                Написати в Telegram
+              </a>
+              <a
+                href={`tel:${phone.replace(/[^\d+]/g, '')}`}
+                className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors hover:bg-white/5"
+                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+              >
+                <PhoneIcon />
+                {phone} · {workingHours}
+              </a>
+            </div>
+          )}
         </header>
 
         {/* ==================== ПАНЕЛЬ КОРЗИНИ (Sidebar) ==================== */}
@@ -1549,7 +1619,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
               </div>
 
               <h1
-                className="text-4xl md:text-5xl lg:text-[3.2rem] leading-[1.05] mb-5"
+                className="text-[2rem] sm:text-4xl md:text-5xl lg:text-[3.2rem] leading-[1.05] mb-5"
                 style={{ fontFamily: DISPLAY_FONT_TECH, fontWeight: 600, letterSpacing: '-0.01em', color: '#fff', textWrap: 'balance' }}
               >
                 АВТОЗАПЧАСТИНИ ДЛЯ ІНОМАРОК.
@@ -3694,6 +3764,23 @@ function PhoneIcon() {
         strokeWidth="1.6"
         strokeLinejoin="round"
       />
+    </svg>
+  );
+}
+
+// Гамбургер-кнопка мобільного меню (components/StorefrontHome.tsx —
+// шапка) — перемикається на іконку хрестика через проп open
+function MenuIcon({ open }: { open: boolean }) {
+  if (open) {
+    return (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M5 5l14 14M19 5 5 19" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

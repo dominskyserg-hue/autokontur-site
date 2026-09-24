@@ -14,6 +14,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Pool } from 'pg';
 import { CAR_MAKES } from '@/lib/carMakes';
+import { SITE_URL } from '@/lib/siteConfig';
 import { TECH_BG, TECH_SURFACE_2, TECH_BORDER, TECH_INK, TECH_MUTED, TECH_FAINT, TECH_DISPLAY_FONT, TECH_BODY_FONT } from '@/lib/techTheme';
 
 export const runtime = 'nodejs';
@@ -49,6 +50,7 @@ export const metadata: Metadata = {
   title: 'Запчастини за маркою авто — DominatorParts',
   description:
     'Автозапчастини для Toyota, Nissan, Mitsubishi, Hyundai, Mazda, Honda та інших марок. Оригінал та аналоги, доставка по всій Україні.',
+  alternates: { canonical: `${SITE_URL}/marky` },
 };
 
 async function loadCounts(): Promise<Record<string, number>> {

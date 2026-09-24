@@ -186,7 +186,7 @@ export async function generateMetadata({
   searchParams: Promise<PageSearchParams>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const { marka, model, year, engine } = await searchParams;
+  const { page: pageParam, marka, model, year, engine } = await searchParams;
   const category = getCategoryBySlug(slug);
   if (!category) return {};
 
@@ -194,11 +194,31 @@ export async function generateMetadata({
   const hasModelYearEngineFilter = hasVehicleFilter({ model, year, engine });
   const { total } = await loadCategoryProducts(slug, 1, marka ?? null, { model, year, engine });
 
+  // Номер сторінки пагінації (2, 3, ...) — потрібен, щоб title і
+  // description сторінки 2, 3... відрізнялись від першої сторінки:
+  // раніше всі сторінки пагінації однієї категорії (?page=2, ?page=3...)
+  // мали ІДЕНТИЧНІ title/description, і Google вважав їх дублями
+  const pageNumber = Math.max(1, parseInt(pageParam || '1', 10) || 1);
+  const pageSuffix = pageNumber > 1 ? ` — сторінка ${pageNumber}` : '';
+
+  // Канонічна адреса цієї ж сторінки (та сама категорія, та сама марка
+  // якщо вона є, той самий номер сторінки) — раніше canonical не
+  // проставлявся зовсім ні для "чистої" категорії, ні для пагінації,
+  // ні для варіанту з маркою, і Google бачив ?page=2, ?page=3...
+  // однієї категорії як сторінки-дублі одна одної
+  const canonicalQuery = new URLSearchParams();
+  if (make) canonicalQuery.set('marka', make.slug);
+  if (pageNumber > 1) canonicalQuery.set('page', String(pageNumber));
+  const canonicalQueryString = canonicalQuery.toString();
+  const canonicalPath = `${SITE_URL}/category/${slug}${canonicalQueryString ? `?${canonicalQueryString}` : ''}`;
+
   return {
-    title: make ? `${category.name} ${make.name} купити — DominatorParts` : category.metaTitle,
+    title: make
+      ? `${category.name} ${make.name} купити — DominatorParts${pageSuffix}`
+      : `${category.metaTitle}${pageSuffix}`,
     description: make
-      ? `${category.name} для ${make.name} в наявності: оригінал та перевірені аналоги. Доставка по всій Україні.`
-      : category.metaDescription,
+      ? `${category.name} для ${make.name} в наявності: оригінал та перевірені аналоги. Доставка по всій Україні.${pageSuffix}`
+      : `${category.metaDescription}${pageSuffix}`,
     // Порожня категорія (поки що немає жодного відповідного товару в
     // каталозі) навмисно не індексується — сторінка без товарів
     // виглядає для Google як "тонкий" неякісний контент і може
@@ -216,7 +236,7 @@ export async function generateMetadata({
     // (без моделі/року/двигуна) під цю умову НЕ підпадає — то давніша,
     // уже проіндексована поведінка, яку свідомо не чіпаємо
     robots: total === 0 || hasModelYearEngineFilter ? { index: false, follow: true } : undefined,
-    alternates: hasModelYearEngineFilter ? { canonical: `${SITE_URL}/category/${slug}` } : undefined,
+    alternates: { canonical: hasModelYearEngineFilter ? `${SITE_URL}/category/${slug}` : canonicalPath },
   };
 }
 

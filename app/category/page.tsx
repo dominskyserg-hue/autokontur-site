@@ -12,12 +12,14 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CATEGORIES } from '@/lib/categories';
+import { SITE_URL } from '@/lib/siteConfig';
 import { TECH_BG, TECH_SURFACE_2, TECH_BORDER, TECH_INK, TECH_MUTED, TECH_FAINT, TECH_DISPLAY_FONT, TECH_BODY_FONT } from '@/lib/techTheme';
 
 export const metadata: Metadata = {
   title: 'Категорії автозапчастин для іномарок — DominatorParts',
   description:
     'Запчастини для іномарок за категоріями: гальмівні колодки та диски, амортизатори, сайлентблоки, фільтри, свічки та інші деталі для Toyota, Ford, Volkswagen, Audi, Skoda з доставкою по Україні.',
+  alternates: { canonical: `${SITE_URL}/category` },
 };
 
 export default function CategoryIndexPage() {

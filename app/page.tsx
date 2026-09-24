@@ -4,6 +4,7 @@ import type { Metadata } from 'next';
 import { Pool } from 'pg';
 import StorefrontHome from '@/components/StorefrontHome';
 import { FAQ_ITEMS } from '@/lib/faq';
+import { SITE_URL } from '@/lib/siteConfig';
 
 // Захист від спроби зібрати сторінку заздалегідь під час білда на
 // Vercel (де немає доступу до бази) — той самий прийом, що й у
@@ -81,6 +82,7 @@ export const metadata: Metadata = {
   title: 'Автозапчастини купити в Україні — інтернет-магазин DominatorParts',
   description:
     'Понад 20 000 автозапчастин для іномарок в наявності. Оригінальні деталі та перевірені аналоги, підбір за VIN-кодом, доставка по всій Україні Новою поштою.',
+  alternates: { canonical: SITE_URL },
 };
 
 // Розмітка FAQPage (schema.org) для Google — за тими самими

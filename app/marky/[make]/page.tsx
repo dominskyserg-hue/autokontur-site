@@ -127,19 +127,31 @@ type PageSearchParams = { page?: string };
 
 export async function generateMetadata({
   params,
+  searchParams,
 }: {
   params: Promise<PageParams>;
+  searchParams: Promise<PageSearchParams>;
 }): Promise<Metadata> {
   const { make: slug } = await params;
+  const { page: pageParam } = await searchParams;
   const make = getCarMakeBySlug(slug);
   if (!make) return {};
 
   const { total } = await loadMakeProducts(slug, 1);
 
+  // Той самий фікс, що й у app/category/[slug]/page.tsx: без номера
+  // сторінки в title/description і без canonical усі сторінки пагінації
+  // однієї марки (?page=2, ?page=3...) мали ІДЕНТИЧНІ title/description
+  // і жодного canonical — Google бачив їх як дублі
+  const pageNumber = Math.max(1, parseInt(pageParam || '1', 10) || 1);
+  const pageSuffix = pageNumber > 1 ? ` — сторінка ${pageNumber}` : '';
+  const canonicalPath = pageNumber > 1 ? `${SITE_URL}/marky/${slug}?page=${pageNumber}` : `${SITE_URL}/marky/${slug}`;
+
   return {
-    title: `Запчастини ${make.name} купити з доставкою — DominatorParts`,
-    description: `Автозапчастини ${make.name} в наявності: оригінал та перевірені аналоги. Пошук за артикулом, швидка доставка по всій Україні.`,
+    title: `Запчастини ${make.name} купити з доставкою — DominatorParts${pageSuffix}`,
+    description: `Автозапчастини ${make.name} в наявності: оригінал та перевірені аналоги. Пошук за артикулом, швидка доставка по всій Україні.${pageSuffix}`,
     robots: total === 0 ? { index: false, follow: true } : undefined,
+    alternates: { canonical: canonicalPath },
   };
 }
 
