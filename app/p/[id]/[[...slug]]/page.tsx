@@ -31,7 +31,7 @@
 import type { Metadata } from 'next';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
-import { UUID_PATTERN, buildSeoProductDescription, buildSeoProductName, loadProduct, loadProductPageData } from '@/lib/productDetail';
+import { UUID_PATTERN, buildSeoMetaTitle, buildSeoProductDescription, loadProduct, loadProductPageData } from '@/lib/productDetail';
 import ProductDetailContent, { BG, BODY_FONT, PAPER } from '@/components/ProductDetailContent';
 import SiteHeader from '@/components/SiteHeader';
 
@@ -52,14 +52,14 @@ export async function generateMetadata({
   if (!product) return {};
 
   const canonicalUrl = `${SITE_URL}${buildProductPath(id, product)}`;
-  // displayName — той самий шаблон "Категорія Бренд Артикул [для Марка
-  // Модель]", що й H1 на сторінці (components/ProductDetailContent.tsx,
-  // buildSeoProductName у lib/productDetail.ts) — title і опис мають
-  // збігатись із видимим H1, а не показувати щось інше. "для Марка
-  // Модель" додається функцією ЛИШЕ якщо ці дані реально є в товару —
-  // сумісність тут ніколи не вигадується
-  const displayName = buildSeoProductName(product);
-  const title = `${displayName} купити | DominatorParts`;
+  // title/description — обидва враховують ручний SEO-оверрайд товару
+  // (data/seo-overrides.ts) з найвищим пріоритетом, інакше будуються
+  // з того самого шаблону, що й видимий H1 на сторінці
+  // (components/ProductDetailContent.tsx, buildSeoProductName у
+  // lib/productDetail.ts) — title і опис мають збігатись із видимим
+  // контентом, а не показувати щось інше. "для Марка Модель" і ціна
+  // в описі — ЛИШЕ реальні дані товару, сумісність тут не вигадується
+  const title = buildSeoMetaTitle(product);
   const description = buildSeoProductDescription(product);
 
   return {

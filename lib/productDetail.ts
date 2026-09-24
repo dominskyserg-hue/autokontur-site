@@ -24,6 +24,7 @@ import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import { getSeoOverride, type SeoOverride, type SeoOverrideFaqItem } from '@/data/seo-overrides';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -79,6 +80,13 @@ export function buildSeoProductName(product: {
   carMake?: string | null;
   carModel?: string | null;
 }): string {
+  // Ручний SEO-оверрайд (data/seo-overrides.ts) — якщо для артикула
+  // заданий h1, він ПОВНІСТЮ перекриває автошаблон нижче: вигадати
+  // такий точний людський текст ("Кронштейн радара сліпих зон
+  // Golf 7") автоматично неможливо, тому це свідомо ручний контент
+  const override = getSeoOverride(product.article);
+  if (override?.h1) return override.h1;
+
   const category = detectCategoryForProductName(product.name);
   const base = category
     ? [category.itemName ?? category.name, product.brand, product.article].filter(Boolean).join(' ')
@@ -108,13 +116,28 @@ export function buildSeoProductName(product: {
   return `${base} для ${vehicle}`;
 }
 
-// Той самий принцип, що й для назви вище: якщо адмін вручну переписав
-// опис на екрані "Товари" (metaDescriptionOverride) — показуємо саме
-// його. Інакше опис ЗАВЖДИ будується з актуального шаблону
-// (buildSeoProductName), а не з того, що колись згенерував імпорт
-// прайсу — раніше тут підставлялось збережене в базі meta_description,
-// яке для більшості товарів так і лишалось старим "БРЕНД АРТИКУЛ —
-// сира_назва_з_прайсу" навіть після оновлення шаблону H1/title
+// Ціна для meta description/title — той самий формат округлення
+// (Math.ceil, без копійок), що й видима ціна на сторінці
+// (formatMoney у components/ProductDetailContent.tsx) і ціна в Offer
+// JSON-LD (lib/structuredData.ts) — щоб текст ніде не розходився з
+// тим, що покупець реально бачить
+function formatPriceUk(price: number): string {
+  return Math.ceil(price).toLocaleString('uk-UA');
+}
+
+// Пріоритет опису (від найвищого до найнижчого):
+//   1. Ручний SEO-оверрайд (data/seo-overrides.ts, override.description) —
+//      повний готовий текст, вигаданий свідомо і перевірений людиною
+//   2. Старе ручне поле products.meta_description_override (екран
+//      адміна "Товари") — АЛЕ тільки якщо для артикула взагалі НЕМАЄ
+//      запису в SEO_OVERRIDES: якщо запис є (навіть без свого
+//      description), файловий оверрайд вважається новим єдиним
+//      джерелом правди, і застаріле поле з бази свідомо ігнорується —
+//      інакше для товарів на кшталт 5G6907455A й далі показувалась би
+//      стара російська meta_description з бази, хоч на цю сторінку і
+//      написали новий український опис
+//   3. Автошаблон — назва (buildSeoProductName, теж враховує override.h1
+//      вище) + РЕАЛЬНА ціна товару + наявність/термін доставки
 export function buildSeoProductDescription(product: {
   name: string | null;
   brand: string | null;
@@ -125,14 +148,82 @@ export function buildSeoProductDescription(product: {
   metaDescriptionOverride: boolean;
   stock: number;
   deliveryTime?: string | null;
+  retailPrice: number;
 }): string {
-  if (product.metaDescriptionOverride && product.metaDescription?.trim()) {
+  const override = getSeoOverride(product.article);
+  if (override?.description) return override.description;
+
+  if (!override && product.metaDescriptionOverride && product.metaDescription?.trim()) {
     return product.metaDescription.trim();
   }
+
   const displayName = buildSeoProductName(product);
   const stockPart =
     product.stock > 0 ? 'В наявності' : `Під замовлення${product.deliveryTime ? ', ' + product.deliveryTime : ''}`;
-  return `${displayName}. ${stockPart}, доставка по Україні, оплата при отриманні.`;
+  return `${displayName}. Ціна ${formatPriceUk(product.retailPrice)} грн. ${stockPart}, доставка по Україні, оплата при отриманні.`;
+}
+
+// <title> сторінки товару. Пріоритет той самий, що й в описі вище:
+//   1. override.title (data/seo-overrides.ts) — ПОВНИЙ рядок як є,
+//      без додавання суфіксів
+//   2. Автошаблон "{Назва деталі} — купити, ціна | DominatorParts",
+//      обрізаний по межі слова до ~65 символів (довші заголовки Google
+//      однаково обрізає в сніппеті сам, але вже посередині слова)
+const META_TITLE_MAX_LENGTH = 65;
+const META_TITLE_SUFFIX = ' — купити, ціна | DominatorParts';
+
+function truncateAtWordBoundary(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  const truncated = text.slice(0, maxLength);
+  const lastSpace = truncated.lastIndexOf(' ');
+  // lastSpace > 20 — не обрізати зовсім коротко, якщо пробіл трапився
+  // на самому початку (напр. в одного довгого слова без пробілів)
+  return (lastSpace > 20 ? truncated.slice(0, lastSpace) : truncated).trim();
+}
+
+export function buildSeoMetaTitle(product: {
+  name: string | null;
+  brand: string | null;
+  article: string;
+  carMake?: string | null;
+  carModel?: string | null;
+}): string {
+  const override = getSeoOverride(product.article);
+  if (override?.title) return override.title;
+
+  const displayName = buildSeoProductName(product);
+  const base = truncateAtWordBoundary(displayName, META_TITLE_MAX_LENGTH - META_TITLE_SUFFIX.length);
+  return `${base}${META_TITLE_SUFFIX}`;
+}
+
+// Реальний термін доставки ЦЬОГО КОНКРЕТНОГО товару — підставляється
+// в FAQ-відповіді SEO-оверрайду замість токена "{{доставка}}" (див.
+// коментар біля SeoOverrideFaqItem у data/seo-overrides.ts). У самому
+// файлі оверрайду конкретний термін хардкодити не можна: він залежить
+// від наявності на складі станом на момент показу сторінки
+function buildDeliveryAnswer(product: { stock: number; deliveryTime: string | null }): string {
+  if (product.stock > 0) return 'Товар у наявності — відправляємо в день оформлення замовлення Новою Поштою.';
+  return product.deliveryTime
+    ? `Під замовлення, орієнтовний термін надходження від постачальника — ${product.deliveryTime}.`
+    : 'Товар під замовлення — напишіть нам, і ми уточнимо точний термін надходження.';
+}
+
+// Готові FAQ-питання/відповіді для показу на сторінці ТА для FAQPage
+// JSON-LD (обидва мають збігатися — buildFaqJsonLd викликається з
+// ТИМ САМИМ результатом, що й рендериться, у
+// components/ProductDetailContent.tsx). undefined — якщо в товару
+// взагалі немає FAQ в оверрайді (секція тоді не рендериться)
+export function resolveFaqItems(
+  product: { stock: number; deliveryTime: string | null },
+  overrideFaq: SeoOverrideFaqItem[] | undefined
+): SeoOverrideFaqItem[] | undefined {
+  if (!overrideFaq || overrideFaq.length === 0) return undefined;
+  const deliveryAnswer = buildDeliveryAnswer(product);
+  return overrideFaq.map((item) => ({
+    question: item.question,
+    answer: item.answer.replace('{{доставка}}', deliveryAnswer),
+    link: item.link,
+  }));
 }
 
 export interface ProductDetail {
@@ -278,6 +369,23 @@ const loadOtherOffers = cache(async function loadOtherOffers(
     stock: row.stock,
     supplierName: row.supplier_name,
   }));
+});
+
+// Посилання на "парну деталь" (напр. лівий/правий варіант тієї самої
+// запчастини) — з SEO-оверрайду товару (data/seo-overrides.ts,
+// override.pairPart.article). Перевіряємо, чи такий артикул РЕАЛЬНО є
+// в каталозі: якщо є — покажемо клікабельне посилання, якщо ні —
+// просто текст без посилання (нічого не вигадуємо). Викликається
+// ЛИШЕ коли override.pairPart заданий — для решти товарів цей запит
+// взагалі не виконується
+const loadPairPartPath = cache(async function loadPairPartPath(article: string): Promise<string | null> {
+  const result = await pool.query(
+    `SELECT id, brand, name, article FROM products WHERE article = $1 ORDER BY (stock > 0) DESC, retail_price ASC LIMIT 1`,
+    [article]
+  );
+  if (result.rows.length === 0) return null;
+  const row = result.rows[0];
+  return buildProductPath(row.id, { brand: row.brand, name: row.name, article: row.article });
 });
 
 // OEM/кросс-номери — та сама модель "груп взаємозамінності", що і в
@@ -507,6 +615,17 @@ export interface ProductPageData {
   tecdocCrosses: TecdocCrossItem[];
   tecdocCompatibility: TecdocCompatibilityItem[];
   breadcrumbItems: BreadcrumbItem[];
+  // Ручний SEO-оверрайд товару (data/seo-overrides.ts) — undefined,
+  // якщо для артикула запису немає (переважна більшість товарів).
+  // h1/title/description із нього вже враховані вище (buildSeoProductName/
+  // buildSeoProductDescription/buildSeoMetaTitle) — тут прокидається
+  // ЦІЛИМ, щоб ProductDetailContent.tsx міг вивести решту секцій
+  // (longDescription/specs/applicability/faq)
+  seoOverride: SeoOverride | undefined;
+  // Посилання на "парну деталь" з override.pairPart, якщо вона реально
+  // є в каталозі (loadPairPartPath) — null, якщо оверрайду/пари немає
+  // або товару з таким артикулом у базі не знайшлось
+  pairPartPath: string | null;
 }
 
 // Повний набір даних для рендеру товару — і на повній сторінці, і в
@@ -533,13 +652,20 @@ export async function loadProductPageData(
     permanentRedirect(buildProductPath(id, product));
   }
 
-  const [images, rawOtherOffers, rawCrossRefs, rawTecdocCrosses, tecdocCompatibility] = await Promise.all([
-    loadProductImages(id),
-    loadOtherOffers(product),
-    loadCrossReferences(product),
-    loadTecdocCrosses(product.article),
-    loadTecdocCompatibility(product.article),
-  ]);
+  const seoOverride = getSeoOverride(product.article);
+
+  const [images, rawOtherOffers, rawCrossRefs, rawTecdocCrosses, tecdocCompatibility, pairPartPath] =
+    await Promise.all([
+      loadProductImages(id),
+      loadOtherOffers(product),
+      loadCrossReferences(product),
+      loadTecdocCrosses(product.article),
+      loadTecdocCompatibility(product.article),
+      // Запит на пару виконуємо ЛИШЕ якщо оверрайд її взагалі задає —
+      // для решти товарів (без seoOverride.pairPart) зайвий SQL-запит
+      // на кожен показ сторінки не потрібен
+      seoOverride?.pairPart ? loadPairPartPath(seoOverride.pairPart.article) : Promise.resolve(null),
+    ]);
 
   // Персональна ціна покупця (customer_pricing_rules) — застосовується
   // ТУТ, ОКРЕМИМ фінальним кроком поверх уже завантажених "сирих" даних
@@ -626,5 +752,15 @@ export async function loadProductPageData(
     },
   ];
 
-  return { product: personalizedProduct, images, otherOffers, crossRefs, tecdocCrosses, tecdocCompatibility, breadcrumbItems };
+  return {
+    product: personalizedProduct,
+    images,
+    otherOffers,
+    crossRefs,
+    tecdocCrosses,
+    tecdocCompatibility,
+    breadcrumbItems,
+    seoOverride,
+    pairPartPath,
+  };
 }

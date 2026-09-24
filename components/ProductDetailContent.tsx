@@ -19,10 +19,10 @@ import Link from 'next/link';
 import { Send, Truck, Banknote, RotateCcw } from 'lucide-react';
 import { TELEGRAM_BOT_USERNAME } from '@/lib/telegramNotify';
 import { buildProductPath } from '@/lib/slug';
-import { buildBreadcrumbJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
+import { buildBreadcrumbJsonLd, buildFaqJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { findAnyNarrowPageForVehicle } from '@/lib/categories';
-import { buildSeoProductDescription, buildSeoProductName, type CrossRefItem, type ProductPageData, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
+import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import FavoriteButton from '@/components/FavoriteButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
@@ -103,9 +103,24 @@ export default function ProductDetailContent({
   tecdocCrosses,
   tecdocCompatibility,
   breadcrumbItems,
+  seoOverride,
+  pairPartPath,
 }: ProductPageData) {
   const displayName = buildSeoProductName(product);
   const galleryPhotos = buildGalleryPhotos(product, images, displayName);
+
+  // Той самий canonical URL, що й <link rel="canonical"> у
+  // generateMetadata (app/p/[id]/[[...slug]]/page.tsx) — рахується з
+  // СИРИХ product.brand/name/article (buildProductPath), а НЕ з
+  // displayName. Раніше тут передавали в JSON-LD name: displayName і
+  // давали Product.url/Offer.url пересчитатись ЗАНОВО з цього
+  // displayName — для товарів з довгим SEO-заголовком (категорія чи
+  // override.h1) це давало ІНШИЙ слаг, ніж справжній canonical (баг:
+  // артикул у слазі задвоювався). Тепер url передається явно —
+  // productJsonLd (lib/structuredData.ts) більше нічого не пересчитує
+  const canonicalUrl = `${SITE_URL}${buildProductPath(product.id, product)}`;
+
+  const faqItems = resolveFaqItems(product, seoOverride?.faq);
 
   return (
     <>
@@ -129,10 +144,26 @@ export default function ProductDetailContent({
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
           __html: jsonLdScript(
-            buildSingleProductJsonLd({ ...product, name: displayName, description: buildSeoProductDescription(product) })
+            buildSingleProductJsonLd({
+              ...product,
+              name: displayName,
+              description: buildSeoProductDescription(product),
+              url: canonicalUrl,
+            })
           ),
         }}
       />
+      {/* FAQPage — лише якщо в товару є FAQ через SEO-оверрайд
+          (data/seo-overrides.ts). items тут — ТОЧНО ті самі, що
+          рендеряться нижче видимим акордеоном (секція "Часті
+          запитання") — Google звіряє розмітку з видимим текстом */}
+      {faqItems && (
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: jsonLdScript(buildFaqJsonLd(faqItems)) }}
+        />
+      )}
 
       <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ fontFamily: BODY_FONT, color: FAINT }}>
         {breadcrumbItems.map((item, index) => (
@@ -188,9 +219,17 @@ export default function ProductDetailContent({
             <StockBadge stock={product.stock} />
           </div>
 
+          {/* "Термін поставки" тут — це термін, за який постачальник
+              відвантажує товар ПІСЛЯ того, як ми зробимо в нього
+              замовлення (напр. "сьогодні" = постачальник відправляє
+              в той самий день) — а НЕ термін, за який товар потрапить
+              до покупця. Раніше напис був просто "Термін поставки:
+              {X}" одразу під бейджем "Під замовлення" — це читалось
+              як суперечність ("під замовлення" + "сьогодні" поруч).
+              Уточнене формулювання прибирає цю двозначність */}
           {product.stock <= 0 && product.deliveryTime && (
             <p className="mb-4 text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
-              Термін поставки: {product.deliveryTime}
+              Очікуваний термін відвантаження постачальником: {product.deliveryTime}
             </p>
           )}
 
@@ -262,6 +301,100 @@ export default function ProductDetailContent({
           </a>
         </div>
       </div>
+
+      {/* ==================== ОПИС (ручний SEO-оверрайд) ==================== */}
+      {/* Розгорнутий опис товару — ЛИШЕ якщо для артикула є запис у
+          data/seo-overrides.ts (override.longDescription). Автоматично
+          такий текст не генерується: сторінка не знає, наприклад, що
+          конкретний кронштейн — саме для радара Side Assist, а не
+          якоїсь іншої деталі, вигадувати це небезпечно */}
+      {seoOverride?.longDescription && (
+        <section className="mb-10">
+          <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
+            Опис
+          </h2>
+          <p className="max-w-3xl text-sm leading-relaxed" style={{ fontFamily: BODY_FONT, color: MUTED }}>
+            {seoOverride.longDescription}
+          </p>
+        </section>
+      )}
+
+      {/* ==================== ХАРАКТЕРИСТИКИ (ручний SEO-оверрайд) ==================== */}
+      {seoOverride?.specs && seoOverride.specs.length > 0 && (
+        <section className="mb-10">
+          <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
+            Характеристики
+          </h2>
+          <div className="max-w-2xl overflow-hidden rounded-xl" style={{ border: `1px solid ${BORDER_SOFT}` }}>
+            <table className="w-full text-sm" style={{ fontFamily: BODY_FONT }}>
+              <tbody>
+                {seoOverride.specs.map((spec, index) => (
+                  <tr key={spec.label} style={index > 0 ? { borderTop: `1px solid ${BORDER_SOFT}` } : undefined}>
+                    <td className="w-1/3 px-4 py-2.5 align-top" style={{ color: FAINT }}>
+                      {spec.label}
+                    </td>
+                    <td className="px-4 py-2.5" style={{ color: PAPER }}>
+                      {spec.value}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* Парна деталь (напр. лівий/правий варіант) — якщо
+              pairPartPath знайдено в каталозі (lib/productDetail.ts,
+              loadPairPartPath), показуємо посиланням, інакше просто
+              текстом без посилання */}
+          {seoOverride.pairPart && (
+            <p className="mt-3 max-w-2xl text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
+              {pairPartPath ? (
+                <Link href={pairPartPath} className="font-medium" style={{ color: ACCENT }}>
+                  {seoOverride.pairPart.note}
+                </Link>
+              ) : (
+                seoOverride.pairPart.note
+              )}
+            </p>
+          )}
+        </section>
+      )}
+
+      {/* ==================== СУМІСНІСТЬ (ручний SEO-оверрайд) ==================== */}
+      {/* НЕ те саме, що секція "Запчастина підходить для авто" нижче —
+          та будується автоматично з офіційного дампа TecDoc
+          (tecdoc_compatibility), а ця — ручний список конкретних
+          моделей з SEO-оверрайду, коли автоматичних даних по товару
+          взагалі немає (як у цього кронштейна — car_make/car_model
+          порожні, TecDoc-записів теж нема) */}
+      {seoOverride?.applicability && seoOverride.applicability.length > 0 && (
+        <section className="mb-10">
+          <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
+            Підходить для
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {seoOverride.applicability.map((item) =>
+              item.makeSlug ? (
+                <Link
+                  key={item.label}
+                  href={`/marky/${item.makeSlug}`}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+                  style={{ fontFamily: BODY_FONT, border: `1px solid ${BORDER_SOFT}`, color: ACCENT }}
+                >
+                  {item.label}
+                </Link>
+              ) : (
+                <span
+                  key={item.label}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium"
+                  style={{ fontFamily: BODY_FONT, border: `1px solid ${BORDER_SOFT}`, color: FAINT }}
+                >
+                  {item.label}
+                </span>
+              )
+            )}
+          </div>
+        </section>
+      )}
 
       {/* ==================== ІНШІ ПРОПОЗИЦІЇ НА ЦЮ Ж ДЕТАЛЬ ==================== */}
       {/* Той самий бренд+артикул зустрічається в декількох
@@ -363,6 +496,52 @@ export default function ProductDetailContent({
                 key={`${item.make}-${item.model}-${item.yearFrom ?? ''}-${item.yearTo ?? ''}-${item.engine}-${index}`}
                 item={item}
               />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ==================== ЧАСТІ ЗАПИТАННЯ (ручний SEO-оверрайд) ==================== */}
+      {/* faqItems — той самий результат resolveFaqItems(), що й у
+          FAQPage JSON-LD вище (з уже підставленим реальним терміном
+          доставки замість токена "{{доставка}}") — видимий текст і
+          розмітка мають збігатися */}
+      {faqItems && (
+        <section className="mb-10">
+          <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
+            Часті запитання
+          </h2>
+          <div className="flex flex-col gap-2">
+            {faqItems.map((item) => (
+              <details
+                key={item.question}
+                className="group rounded-xl px-4 py-3"
+                style={{ background: SURFACE_GLASS, border: `1px solid ${BORDER_SOFT}` }}
+              >
+                <summary
+                  className="flex cursor-pointer select-none items-center justify-between gap-3 text-sm font-medium [&::-webkit-details-marker]:hidden"
+                  style={{ fontFamily: BODY_FONT, color: PAPER }}
+                >
+                  {item.question}
+                  <span className="shrink-0 transition-transform duration-200 group-open:rotate-45" style={{ color: ACCENT }} aria-hidden="true">
+                    +
+                  </span>
+                </summary>
+                <p className="mt-2 text-sm leading-relaxed" style={{ fontFamily: BODY_FONT, color: MUTED }}>
+                  {item.answer}
+                </p>
+                {item.link && (
+                  <a
+                    href={item.link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="mt-2 inline-block text-sm font-medium underline"
+                    style={{ fontFamily: BODY_FONT, color: ACCENT }}
+                  >
+                    {item.link.label} →
+                  </a>
+                )}
+              </details>
             ))}
           </div>
         </section>

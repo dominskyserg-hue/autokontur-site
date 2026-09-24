@@ -32,6 +32,17 @@ export interface SchemaProduct {
   // реально є — вигадувати їх, коли даних нема, ми НЕ будемо
   imageUrl?: string | null;
   description?: string | null;
+  // Явний canonical URL товару — якщо переданий, використовується
+  // ЗАМІСТЬ автоматичного пересчёту через buildProductPath(id, {brand,
+  // name, article}). Потрібен сторінці ОДНОГО товару
+  // (components/ProductDetailContent.tsx): там у name підставляється
+  // ВІДОБРАЖУВАНЕ SEO-назва (з префіксом категорії або з H1 з
+  // SEO-оверрайду), яка НЕ збігається зі слагом справжнього canonical —
+  // без цього поля Product.url/Offer.url розходились би з
+  // <link rel="canonical"> (був саме такий баг: слаг з JSON-LD
+  // задвоював артикул). Списки категорій/марок (buildProductListJsonLd)
+  // це поле не передають — там name і так сирий, розбіжності нема
+  url?: string;
 }
 
 // Дуже поширений випадок саме в автозапчастинах (особливо стартери й
@@ -42,7 +53,7 @@ export interface SchemaProduct {
 const REFURBISHED_PATTERN = /реставрац|відновлен|восстановлен|б\/у/i;
 
 function productUrl(product: SchemaProduct): string {
-  return `${SITE_URL}${buildProductPath(product.id, product)}`;
+  return product.url ?? `${SITE_URL}${buildProductPath(product.id, product)}`;
 }
 
 // priceValidUntil — Google рекомендує вказувати цю дату для Offer,
@@ -199,6 +210,26 @@ export function buildBreadcrumbJsonLd(items: BreadcrumbItem[]) {
       position: index + 1,
       name: item.name,
       item: item.url,
+    })),
+  };
+}
+
+// Розмітка FAQPage — для товарів, у яких є FAQ через SEO-оверрайд
+// (data/seo-overrides.ts, components/ProductDetailContent.tsx). Той
+// самий принцип, що й для FaqStructuredData на Головній (app/page.tsx):
+// items мають ТОЧНО збігатися з видимим текстом на сторінці, інакше
+// Google може проігнорувати розмітку
+export function buildFaqJsonLd(items: { question: string; answer: string }[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.answer,
+      },
     })),
   };
 }
