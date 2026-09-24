@@ -19,6 +19,7 @@ import { Pool } from 'pg';
 import { buildProductPath, buildProductSlug } from '@/lib/slug';
 import { getCarMakeByDbValue } from '@/lib/carMakes';
 import { detectCategoryForProductName } from '@/lib/categories';
+import { cleanApplicability } from '@/lib/carModelTranslation';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -57,32 +58,6 @@ export const UUID_PATTERN =
 //     Excel-прайса постачальника) — жодна сумісність не вигадується
 // Якщо категорію розпізнати не вдалось — лишається стара поведінка
 // (назва з прайсу, або бренд+артикул, якщо назви взагалі нема)
-// Деякі постачальники дублюють у полі carModel англомовні позначки
-// сторони ("rear"/"front" замість "задній"/"передній") і подвійні
-// пробіли — виправляємо перед показом покупцю, не чіпаючи сирі дані
-// в базі (лише те, що йде у видимий H1/title/JSON-LD)
-function cleanVehicleModel(model: string): string {
-  return model
-    .replace(/\brear\b/gi, 'задній')
-    .replace(/\bfront\b/gi, 'передній')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// Частина постачальників пишуть carModel зовсім не як людську назву
-// моделі, а як технічний код TecDoc ("#T17#, #E10# переднего рычага
-// задний") — з символами "#" і навіть російськими словами впереміш
-// з українським перекладом front/rear вище. Показати таке покупцю як
-// "для ..." було б гірше, ніж не показати нічого: "#T17#" виглядає як
-// зламаний текст, а не як марка/модель. Ознаки ненадійного тексту:
-//   - символ "#" (заглушка коду кузова/шасі в дампах TecDoc)
-//   - літери, яких немає в українській абетці, але є в російській
-//     (ы/э/ъ/ё) — сигнал, що це сирий російський текст постачальника,
-//     а не назва моделі
-function isUnreliableVehicleModel(model: string): boolean {
-  return model.includes('#') || /[ыэъё]/i.test(model);
-}
-
 // Марка авто в базі часто записана КАПСОМ, як прислав постачальник
 // ("TOYOTA") — показуємо курировану назву з lib/carMakes.ts
 // ("Toyota"), якщо марка курована; інакше просто приводимо регістр
@@ -111,16 +86,15 @@ export function buildSeoProductName(product: {
 
   if (!product.carMake) return base;
 
-  const rawModel = product.carModel?.trim() || '';
-  if (isUnreliableVehicleModel(rawModel)) {
-    // Модель — сирий код чи російський текст постачальника: краще
-    // взагалі не показувати "для ...", ніж показати зламаний вигляд
-    return base;
-  }
+  // cleanApplicability (lib/carModelTranslation.ts) повертає null,
+  // якщо застосовність ненадійна (сирий код "#..." чи нерозпізнане
+  // російське слово) — тоді "для ..." взагалі не додається, краще
+  // взагалі не показати застосовність, ніж показати зламаний текст
+  const cleanedModel = cleanApplicability(product.carModel);
+  if (cleanedModel === null) return base;
 
   const rawMake = product.carMake.trim();
   const makeDisplay = formatCarMakeDisplay(rawMake);
-  const cleanedModel = cleanVehicleModel(rawModel);
   // Деякі постачальники записують carModel уже ІЗ повторенням марки
   // всередині ("MAZDA 323 (BJ)..." при carMake "MAZDA") — без цієї
   // перевірки вийшло б подвоєння "для Mazda MAZDA 323...". Якщо
