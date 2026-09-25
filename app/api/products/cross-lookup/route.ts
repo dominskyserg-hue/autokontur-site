@@ -35,6 +35,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { isAdminRequest } from '@/lib/adminSession';
 import { Pool } from 'pg';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
@@ -81,8 +82,9 @@ interface ProductSummary {
   imageUrl: string | null;
   retailPrice: number;
   stock: number;
-  supplierId: string;
-  supplierName: string;
+  // Только для админки (isAdminRequest) — покупателю не отдаются
+  supplierId?: string;
+  supplierName?: string;
 }
 
 const PRODUCT_SUMMARY_SELECT = `
@@ -105,6 +107,12 @@ function mapProductRow(row: Record<string, unknown>): ProductSummary {
 
 export async function GET(request: NextRequest) {
   try {
+    // Поставщик (id/название) и скрытые товары — только для админки.
+    // Роут публичный (middleware.ts), поэтому сессию проверяем здесь
+    const isAdmin = await isAdminRequest(request);
+    const activeOnly = isAdmin ? '' : ' AND p.is_active = true';
+    const publicView = (item: ProductSummary): ProductSummary =>
+      isAdmin ? item : { ...item, supplierId: undefined, supplierName: undefined };
     const searchParams = request.nextUrl.searchParams;
     const rawArticle = (searchParams.get('article') || '').trim();
     const brand = (searchParams.get('brand') || '').trim();
@@ -124,10 +132,10 @@ export async function GET(request: NextRequest) {
     }
 
     const exactResult = await pool.query(
-      `SELECT ${PRODUCT_SUMMARY_SELECT} FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${exactWhere}`,
+      `SELECT ${PRODUCT_SUMMARY_SELECT} FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${exactWhere}${activeOnly}`,
       exactValues
     );
-    const exactMatch = exactResult.rows.map(mapProductRow);
+    const exactMatch = exactResult.rows.map(mapProductRow).map(publicView);
 
     // ---- 2. Найти группу(ы) взаимозаменяемости для искомой детали ----
     // Без указанного бренда номер мог принадлежать НЕСКОЛЬКИМ разным
@@ -161,13 +169,13 @@ export async function GET(request: NextRequest) {
         JOIN suppliers s ON s.id = p.supplier_id
         WHERE m.group_id = ANY($1::uuid[])
           AND NOT (m.part_number = $2 ${brand ? 'AND m.brand ILIKE $3' : ''})
-          AND p.stock > 0
+          AND p.stock > 0${activeOnly}
         `,
         brand ? [groupIds, article, brand] : [groupIds, article]
       );
 
       for (const row of othersResult.rows) {
-        const product = mapProductRow(row);
+        const product = publicView(mapProductRow(row));
         if (row.part_type === 'oem') {
           oemEquivalents.push(product);
         } else {

@@ -135,8 +135,9 @@ interface ProductResponse {
   // supplier_markup_rules и products.discount_percent. 0 — скидки нет
   discountPercent: number;
   stock: number;
-  supplierId: string;
-  supplierName: string;
+  // supplierId/supplierName — тоже ТОЛЬКО для админки (isAdminRequest)
+  supplierId?: string;
+  supplierName?: string;
   // Термін поставки під замовлення ЦЬОГО постачальника (suppliers.
   // delivery_time) — вільний текст, напр. "2-3 дні". Показується на
   // вітрині ТІЛЬКИ якщо товару немає в наявності (stock = 0), див.
@@ -163,13 +164,18 @@ export async function GET(request: NextRequest) {
 
     const offset = (page - 1) * pageSize;
 
+    // Роут публичный (его вызывает витрина), а те же данные читают и
+    // админские экраны — закупочная цена, поставщик, скрытые товары и
+    // фильтр по поставщику доступны ТОЛЬКО с валидной админской сессией
+    const isAdmin = await isAdminRequest(request);
+
     // ---- разбор фильтров ----
     const search = (searchParams.get('search') || '').trim();
     // featured=true — витрина головної сторінки (components/StorefrontHome.tsx,
     // блок "Популярні товари"): короткий добір товарів з фото замість
     // звичайного алфавітного перегляду каталогу (див. orderBySql нижче)
     const featured = searchParams.get('featured') === 'true';
-    const supplierId = (searchParams.get('supplierId') || '').trim();
+    const supplierId = isAdmin ? (searchParams.get('supplierId') || '').trim() : '';
     const carMake = (searchParams.get('carMake') || '').trim();
     const carModel = (searchParams.get('carModel') || '').trim();
     const carYear = (searchParams.get('carYear') || '').trim();
@@ -179,7 +185,7 @@ export async function GET(request: NextRequest) {
     // бачити й приховані (is_active=false) товари, щоб мати змогу
     // повернути їх назад. Публічна вітрина (StorefrontHome.tsx та решта)
     // цей параметр не передає — там приховані товари завжди виключені
-    const includeInactive = searchParams.get('includeInactive') === '1';
+    const includeInactive = isAdmin && searchParams.get('includeInactive') === '1';
 
     if (supplierId && !isValidUuid(supplierId)) {
       return NextResponse.json(
@@ -322,8 +328,7 @@ export async function GET(request: NextRequest) {
     // components/CustomerDashboard.tsx) — рахуємо ПАРАЛЕЛЬНО з основним
     // запитом товарів (незалежні один від одного), щоб не додавати
     // зайву затримку. Застосовується нижче, при мапінгу рядків
-    const [isAdmin, customerPricingRule, result] = await Promise.all([
-      isAdminRequest(request),
+    const [customerPricingRule, result] = await Promise.all([
       getCustomerPricingRule(pool, request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value),
       pool.query(
       `
@@ -382,8 +387,7 @@ export async function GET(request: NextRequest) {
       retailPrice: computeCustomerPrice(parseFloat(row.cost_price), parseFloat(row.retail_price), customerPricingRule),
       discountPercent: parseFloat(row.discount_percent),
       stock: row.stock,
-      supplierId: row.supplier_id,
-      supplierName: row.supplier_name,
+      ...(isAdmin ? { supplierId: row.supplier_id, supplierName: row.supplier_name } : {}),
       deliveryTime: row.delivery_time,
       updatedAt: row.updated_at,
     }));
