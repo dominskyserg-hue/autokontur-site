@@ -33,10 +33,27 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import { UUID_PATTERN, buildSeoMetaTitle, buildSeoProductDescription, loadProduct, loadProductPageData } from '@/lib/productDetail';
 import ProductDetailContent, { BG, BODY_FONT, PAPER } from '@/components/ProductDetailContent';
-import SiteHeader from '@/components/SiteHeader';
+import { Pool } from 'pg';
+import SiteHeaderFull from '@/components/SiteHeaderFull';
+import SiteFooter from '@/components/SiteFooter';
+import { getSiteContactSettings } from '@/lib/siteSettings';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+declare global {
+  // eslint-disable-next-line no-var
+  var pgPool: Pool | undefined;
+}
+
+const pool =
+  globalThis.pgPool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+    max: 3,
+  });
+
+globalThis.pgPool = pool;
 
 type PageParams = { id: string; slug?: string[] };
 
@@ -77,14 +94,17 @@ export async function generateMetadata({
 
 export default async function ProductPage({ params }: { params: Promise<PageParams> }) {
   const { id, slug } = await params;
-  const data = await loadProductPageData(id, slug);
+  const [data, settings] = await Promise.all([loadProductPageData(id, slug), getSiteContactSettings(pool)]);
 
+  // Повна шапка (пошук, кошик, телефон, Telegram, меню) і підвал — як на
+  // Головній: сторінка товару часто ПЕРША, яку бачить покупець з Google
   return (
     <div className="min-h-screen" style={{ background: BG, color: PAPER, fontFamily: BODY_FONT }}>
-      <SiteHeader />
-      <div className="max-w-5xl mx-auto px-5 md:px-8 py-8">
+      <SiteHeaderFull shopName={settings.shopName} phone={settings.phone} workingHours={settings.workingHours} />
+      <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-8">
         <ProductDetailContent {...data} />
       </div>
+      <SiteFooter shopName={settings.shopName} phone={settings.phone} workingHours={settings.workingHours} />
     </div>
   );
 }

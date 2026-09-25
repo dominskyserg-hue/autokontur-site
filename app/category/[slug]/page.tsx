@@ -29,7 +29,7 @@ import CategoryCrossLinks from '@/components/CategoryCrossLinks';
 import { findHubsForNarrowCategory, hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
 import CategoryVehicleFilter from '@/components/CategoryVehicleFilter';
-import SiteHeader from '@/components/SiteHeader';
+import SiteHeaderServer from '@/components/SiteHeaderServer';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { buildVehicleWhereClause, hasVehicleFilter, type VehicleFilterParams } from '@/lib/vehicleFilter';
@@ -398,7 +398,7 @@ export default async function CategoryPage({
           dangerouslySetInnerHTML={{ __html: jsonLdScript(buildProductListJsonLd(products)) }}
         />
       )}
-      <SiteHeader />
+      <SiteHeaderServer />
       <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
         {/* ==================== ХЛІБНІ КРИХТИ ==================== */}
         <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>

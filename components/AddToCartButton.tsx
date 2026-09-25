@@ -72,6 +72,9 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
           ];
 
       window.localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(nextCart));
+      // Лічильник кошика в шапці сторінки товару (components/SiteHeaderFull.tsx,
+      // CART_UPDATED_EVENT) — оновлюється одразу, без перезавантаження
+      window.dispatchEvent(new Event('autokontur:cart-updated'));
 
       // Аналитика (Google Analytics 4 + Meta Pixel) — событие
       // "добавление в корзину", см. lib/analytics.ts

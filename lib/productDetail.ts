@@ -18,7 +18,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { buildProductPath, buildProductSlug } from '@/lib/slug';
 import { getCarMakeByDbValue } from '@/lib/carMakes';
-import { detectCategoryForProductName, detectCategoryForProductH1 } from '@/lib/categories';
+import { detectCategoryForProductName, detectCategoryForProductH1, getCategoryBySlug } from '@/lib/categories';
 import { cleanApplicability } from '@/lib/carModelTranslation';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { buildDisplayProductNameDetailed } from '@/lib/productNameTranslation';
@@ -924,6 +924,21 @@ export interface ProductPageData {
   // назви — так російський оригінал лишається на сторінці для пошуку.
   // У JSON-LD навмисно НЕ потрапляє
   supplierCatalogName: string | null;
+  // Широка категорія деталі (крихти, іконка заглушки без фото, "Схожі
+  // товари") — null, якщо тип деталі не розпізнано
+  category: { slug: string; name: string } | null;
+  similarProducts: SimilarProduct[];
+}
+
+// Товар у блоці "Схожі товари" (ціна вже персональна, без costPrice)
+export interface SimilarProduct {
+  id: string;
+  article: string;
+  brand: string | null;
+  name: string | null;
+  imageUrl: string | null;
+  stock: number;
+  retailPrice: number;
 }
 
 // Повний набір даних для рендеру товару — і на повній сторінці, і в
@@ -1033,18 +1048,17 @@ export async function loadProductPageData(
     stock: item.stock,
   }));
 
-  const make = getCarMakeByDbValue(product.carMake);
-  // Категорія деталі ("Гальмівні колодки") — раніше крихти йшли одразу
-  // "Головна / Марка / Товар" без неї, хоча сторінка категорії вже
-  // існує (app/category/[slug]/page.tsx). detectCategoryForProductName
-  // визначає категорію тим самим способом (matchGroups), яким
-  // побудований сам каталог — товар без розпізнаного типу деталі
-  // просто лишається без цієї крихти
-  const category = detectCategoryForProductName(product.name);
+  // Категорія деталі ("Гальмівні колодки") — тим самим способом
+  // (matchGroups), яким побудований сам каталог, але по ОЧИЩЕНІЙ назві
+  // (КРОК 1: без службового префікса "A3/", без КАПСУ) і, якщо своєї назви
+  // немає, — по назві з іншого прайсу того ж артикула. Крихти (рішення
+  // власника): Головна › Категорія › Бренд Артикул — без марки авто
+  const category = detectCategoryForProductName(
+    buildCleanProductName(product.name) ?? buildCleanProductName(product.fallbackName)
+  );
   const breadcrumbItems: BreadcrumbItem[] = [
     { name: 'Головна', url: SITE_URL },
     ...(category ? [{ name: category.name, url: `${SITE_URL}/category/${category.slug}` }] : []),
-    ...(make ? [{ name: make.name, url: `${SITE_URL}/marky/${make.slug}` }] : []),
     {
       name: `${product.brand ? product.brand + ' ' : ''}${product.article}`,
       url: `${SITE_URL}${buildProductPath(id, product)}`,
@@ -1060,6 +1074,17 @@ export async function loadProductPageData(
   const supplierCatalogName =
     stage1Name && stage1Name.length >= 3 && stage1Name.toLowerCase() !== nameInH1.toLowerCase() ? stage1Name : null;
 
+  const similarRaw = category ? await loadSimilarProducts(category.slug, product.id) : [];
+  const similarProducts: SimilarProduct[] = similarRaw.map((item) => ({
+    id: item.id,
+    article: item.article,
+    brand: item.brand,
+    name: item.name,
+    imageUrl: item.imageUrl,
+    stock: item.stock,
+    retailPrice: computeCustomerPrice(item.costPrice, item.retailPrice, customerPricingRule),
+  }));
+
   return {
     product: personalizedProduct,
     images,
@@ -1071,5 +1096,64 @@ export async function loadProductPageData(
     seoOverride,
     pairPartPath,
     supplierCatalogName,
+    category: category ? { slug: category.slug, name: category.name } : null,
+    similarProducts,
   };
 }
+
+// ------------------------------------------------------------
+// "Схожі товари" — 8 товарів тієї ж категорії, лише в наявності, спершу
+// з фото. Ті самі ключові слова категорії (matchGroups/excludeWords), що
+// й сторінка категорії, але пошук по p.name_search (нижній регістр,
+// pg_trgm GIN-індекс) — інакше ILIKE по p.name перечитував би весь
+// каталог на КОЖНОМУ показі товару. Не більше одного товару з тим самим
+// бренд+артикул (одна деталь у кількох постачальників)
+// ------------------------------------------------------------
+const loadSimilarProducts = cache(async function loadSimilarProducts(
+  categorySlug: string,
+  excludeId: string
+): Promise<Array<SimilarProduct & { costPrice: number }>> {
+  const category = getCategoryBySlug(categorySlug);
+  if (!category) return [];
+  const params: unknown[] = [excludeId];
+  const conditions = ['p.is_active = true', 'p.stock > 0', 'p.id <> $1'];
+  for (const group of category.matchGroups) {
+    params.push(group.map((word) => `%${word.toLowerCase()}%`));
+    conditions.push(`p.name_search ILIKE ANY($${params.length}::text[])`);
+  }
+  if (category.excludeWords?.length) {
+    params.push(category.excludeWords.map((word) => `%${word.toLowerCase()}%`));
+    conditions.push(`NOT (p.name_search ILIKE ANY($${params.length}::text[]))`);
+  }
+  // Беремо 60 кандидатів (спершу з фото) і прибираємо дублі бренд+артикул
+  // у JS — DISTINCT ON у SQL змушував би сортувати ВСІ товари категорії
+  const result = await pool.query(
+    `
+    SELECT p.id, p.article, p.brand, p.name, p.image_url, p.stock, p.cost_price, p.retail_price
+    FROM products p
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY (p.image_url IS NOT NULL) DESC
+    LIMIT 60
+    `,
+    params
+  );
+  const seen = new Set<string>();
+  return result.rows
+    .filter((row) => {
+      const key = `${(row.brand ?? '').toUpperCase()}|${row.article}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .map((row) => ({
+      id: row.id,
+      article: row.article,
+      brand: row.brand,
+      name: row.name,
+      imageUrl: row.image_url,
+      stock: row.stock,
+      costPrice: parseFloat(row.cost_price),
+      retailPrice: parseFloat(row.retail_price),
+    }))
+    .slice(0, 8);
+});

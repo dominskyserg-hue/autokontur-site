@@ -16,18 +16,19 @@
 // ============================================================
 
 import Link from 'next/link';
-import { Send, Truck, Banknote, RotateCcw } from 'lucide-react';
+import { Send, Truck, Banknote, RotateCcw, ScanSearch } from 'lucide-react';
 import { TELEGRAM_BOT_USERNAME } from '@/lib/telegramNotify';
 import { buildProductPath } from '@/lib/slug';
 import { buildBreadcrumbJsonLd, buildFaqJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { findAnyNarrowPageForVehicle } from '@/lib/categories';
-import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
+import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import FavoriteButton from '@/components/FavoriteButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
 import ProductGallery, { type GalleryPhoto } from '@/components/ProductGallery';
+import { getCategoryIcon } from '@/lib/categoryIcons';
 
 export const BG = '#0B0F17';
 export const PANEL_SOFT = '#1B2436';
@@ -106,6 +107,8 @@ export default function ProductDetailContent({
   seoOverride,
   pairPartPath,
   supplierCatalogName,
+  category,
+  similarProducts,
 }: ProductPageData) {
   const displayName = buildSeoProductName(product);
   const galleryPhotos = buildGalleryPhotos(product, images, displayName);
@@ -123,12 +126,30 @@ export default function ProductDetailContent({
 
   const faqItems = resolveFaqItems(seoOverride?.faq);
 
-  // Рядки блоку "Характеристики": ручні (seoOverride.specs) + "Назва в
-  // каталозі постачальника" (лише якщо відрізняється від підсумкової)
-  const specRows: Array<{ label: string; value: string }> = [
+  // OEM/крос-номери для рядка характеристик — лише куровані адміном
+  // (cross_reference_members), не більше 6; повний масовий список TecDoc —
+  // окремим блоком "Аналоги" нижче
+  const oemNumbers = [...crossRefs.oem, ...crossRefs.aftermarket]
+    .slice(0, 6)
+    .map((item) => `${item.brand} ${item.partNumber}`)
+    .join(', ');
+
+  // Рядки блоку "Характеристики" (рішення власника): бренд, артикул,
+  // категорія, стан, OEM/крос-номери; далі ручні (seoOverride.specs) і
+  // "Назва в каталозі постачальника" (лише якщо відрізняється від H1)
+  const specRows: Array<{ label: string; value: string; href?: string }> = [
+    { label: 'Бренд', value: product.brand || 'Без бренду' },
+    { label: 'Артикул', value: product.article },
+    ...(category ? [{ label: 'Категорія', value: category.name, href: `/category/${category.slug}` }] : []),
+    { label: 'Стан', value: 'Новий' },
+    ...(oemNumbers ? [{ label: 'OEM / крос-номери', value: oemNumbers }] : []),
     ...(seoOverride?.specs ?? []),
     ...(supplierCatalogName ? [{ label: 'Назва в каталозі постачальника', value: supplierCatalogName }] : []),
   ];
+
+  // Даних про сумісність немає ні з TecDoc, ні з ручного оверрайду —
+  // замість порожнього місця пропонуємо перевірити сумісність за VIN
+  const hasCompatibility = tecdocCompatibility.length > 0 || Boolean(seoOverride?.applicability?.length);
 
   return (
     <>
@@ -194,9 +215,11 @@ export default function ProductDetailContent({
         ))}
       </nav>
 
-      <div className="mb-10 grid grid-cols-1 gap-8 md:grid-cols-[280px_1fr]">
+      <div className="mb-10 grid grid-cols-1 gap-6 md:grid-cols-[300px_1fr] md:gap-8">
         {/* ==================== ФОТО ==================== */}
-        <ProductGallery photos={galleryPhotos} />
+        {/* Без фото — компактна заглушка з іконкою категорії (≤180px на
+            мобільному, квадрат 300px на десктопі), див. ProductGallery */}
+        <ProductGallery photos={galleryPhotos} categorySlug={category?.slug} categoryName={category?.name} />
 
         {/* ==================== ІНФОРМАЦІЯ ==================== */}
         <div>
@@ -327,7 +350,7 @@ export default function ProductDetailContent({
         </section>
       )}
 
-      {/* ==================== ХАРАКТЕРИСТИКИ (ручний SEO-оверрайд) ==================== */}
+      {/* ==================== ХАРАКТЕРИСТИКИ ==================== */}
       {specRows.length > 0 && (
         <section className="mb-10">
           <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
@@ -341,8 +364,14 @@ export default function ProductDetailContent({
                     <td className="w-1/3 px-4 py-2.5 align-top" style={{ color: FAINT }}>
                       {spec.label}
                     </td>
-                    <td className="px-4 py-2.5" style={{ color: PAPER }}>
-                      {spec.value}
+                    <td className="px-4 py-2.5" style={{ color: PAPER, fontFamily: spec.label === 'Артикул' ? MONO_FONT : undefined }}>
+                      {spec.href ? (
+                        <Link href={spec.href} className="underline decoration-dotted underline-offset-2" style={{ color: ACCENT }}>
+                          {spec.value}
+                        </Link>
+                      ) : (
+                        spec.value
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -474,7 +503,8 @@ export default function ProductDetailContent({
           список одразу, а розгортає його за бажанням */}
       {tecdocCrosses.length > 0 && (
         <section className="mb-10">
-          <details className="group">
+          {/* Короткий список (≤ 6) розгорнутий одразу — ховати нічого */}
+          <details className="group" open={tecdocCrosses.length <= 6}>
             <summary
               className="mb-3 flex cursor-pointer select-none items-center gap-2 text-lg font-semibold [&::-webkit-details-marker]:hidden"
               style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}
@@ -482,7 +512,7 @@ export default function ProductDetailContent({
               <span className="inline-block transition-transform duration-200 group-open:rotate-90" style={{ color: ACCENT }} aria-hidden="true">
                 ▸
               </span>
-              Аналоги та OEM-номери
+              Аналоги
               <span className="text-sm font-normal" style={{ fontFamily: BODY_FONT, color: FAINT }}>
                 ({tecdocCrosses.length})
               </span>
@@ -508,6 +538,92 @@ export default function ProductDetailContent({
           </div>
         </section>
       )}
+
+      {/* ==================== ПЕРЕВІРИТИ СУМІСНІСТЬ ЗА VIN ==================== */}
+      {/* Даних про сумісність немає — замість порожнечі пропонуємо
+          перевірити за VIN: менеджер у Telegram або форма підбору */}
+      {!hasCompatibility && (
+        <section className="mb-10 rounded-2xl p-5" style={{ background: SURFACE_GLASS, border: `1px solid ${BORDER_SOFT}` }}>
+          <h2 className="mb-2 flex items-center gap-2 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
+            <ScanSearch className="h-5 w-5" style={{ color: ACCENT }} />
+            Перевірити сумісність за VIN
+          </h2>
+          <p className="mb-4 max-w-2xl text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
+            Для цієї деталі немає даних про сумісність у каталозі. Надішліть VIN-код авто — менеджер перевірить, чи підходить
+            вона саме вашій машині.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={`https://t.me/${TELEGRAM_BOT_USERNAME}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold"
+              style={{ fontFamily: BODY_FONT, background: 'rgba(59,130,246,0.15)', color: ACCENT, border: '1px solid rgba(59,130,246,0.35)' }}
+            >
+              <Send className="h-4 w-4" />
+              Надіслати VIN у Telegram
+            </a>
+            <Link
+              href="/pidbir-za-vin"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition-colors hover:bg-white/5"
+              style={{ fontFamily: BODY_FONT, border: `1px solid ${BORDER_SOFT}`, color: MUTED }}
+            >
+              Підбір за VIN на сайті →
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* ==================== СХОЖІ ТОВАРИ ==================== */}
+      {similarProducts.length > 0 && category && (
+        <section className="mb-10">
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
+              Схожі товари
+            </h2>
+            <Link href={`/category/${category.slug}`} className="text-sm" style={{ fontFamily: BODY_FONT, color: ACCENT }}>
+              Усі: {category.name} →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {similarProducts.map((item) => (
+              <SimilarProductCard key={item.id} item={item} categorySlug={category.slug} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ==================== ДОСТАВКА І ОПЛАТА ==================== */}
+      {/* Ті самі реальні умови, що й під кнопками (з /delivery і /returns) */}
+      <section className="mb-10">
+        <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
+          Доставка і оплата
+        </h2>
+        <ul className="flex max-w-2xl flex-col gap-2.5 text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
+          <li className="flex items-start gap-2.5">
+            <Truck className="mt-0.5 h-4 w-4 shrink-0" style={{ color: ACCENT }} />
+            <span>
+              Доставка Новою Поштою по всій Україні. Товари в наявності відправляємо в день замовлення.{' '}
+              <Link href="/delivery" className="underline" style={{ color: ACCENT }}>
+                Детальніше
+              </Link>
+            </span>
+          </li>
+          <li className="flex items-start gap-2.5">
+            <Banknote className="mt-0.5 h-4 w-4 shrink-0" style={{ color: ACCENT }} />
+            <span>Оплата при отриманні у відділенні — перевіряєте деталь, потім платите.</span>
+          </li>
+          <li className="flex items-start gap-2.5">
+            <RotateCcw className="mt-0.5 h-4 w-4 shrink-0" style={{ color: ACCENT }} />
+            <span>
+              14 днів на повернення товару належної якості.{' '}
+              <Link href="/returns" className="underline" style={{ color: ACCENT }}>
+                Умови повернення
+              </Link>
+            </span>
+          </li>
+        </ul>
+      </section>
 
       {/* ==================== ЧАСТІ ЗАПИТАННЯ (ручний SEO-оверрайд) ==================== */}
       {/* faqItems — той самий результат resolveFaqItems(), що й у
@@ -554,6 +670,38 @@ export default function ProductDetailContent({
         </section>
       )}
     </>
+  );
+}
+
+// Картка в "Схожі товари": фото (або іконка категорії), бренд · артикул,
+// назва як у H1 товару, ціна
+function SimilarProductCard({ item, categorySlug }: { item: SimilarProduct; categorySlug: string }) {
+  const Icon = getCategoryIcon(categorySlug);
+  const name = buildSeoProductName({ name: item.name, brand: item.brand, article: item.article });
+  return (
+    <Link
+      href={buildProductPath(item.id, item)}
+      className="flex flex-col rounded-xl p-3 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+      style={{ background: SURFACE_GLASS, border: `1px solid ${BORDER_SOFT}` }}
+    >
+      <div className="mb-2.5 flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg" style={{ background: PANEL_SOFT }}>
+        {item.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={item.imageUrl} alt={name} loading="lazy" className="h-full w-full object-cover" />
+        ) : (
+          <Icon className="h-10 w-10" strokeWidth={1.3} style={{ color: FAINT }} aria-hidden="true" />
+        )}
+      </div>
+      <div className="mb-1 truncate text-[11px] font-bold uppercase tracking-wide" style={{ fontFamily: BODY_FONT, color: ACCENT }}>
+        {item.brand || 'Без бренду'} <span style={{ fontFamily: MONO_FONT, color: MUTED, fontWeight: 500 }}>{item.article}</span>
+      </div>
+      <div className="mb-2 line-clamp-2 text-xs" style={{ fontFamily: BODY_FONT, color: PAPER }}>
+        {name}
+      </div>
+      <div className="mt-auto" style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, fontSize: 16, color: '#fff' }}>
+        {formatMoney(item.retailPrice)} грн
+      </div>
+    </Link>
   );
 }
 

@@ -13,6 +13,7 @@
 // ============================================================
 
 import { useState } from 'react';
+import { getCategoryIcon } from '@/lib/categoryIcons';
 
 const PANEL_SOFT = '#1B2436';
 const BORDER_SOFT = 'rgba(255,255,255,0.1)';
@@ -24,9 +25,46 @@ export interface GalleryPhoto {
   alt: string;
 }
 
-export default function ProductGallery({ photos }: { photos: GalleryPhoto[] }) {
+const MUTED = '#94A3B8';
+
+// Товар без жодного фото: замість великого порожнього квадрата —
+// компактна заглушка з іконкою категорії деталі і підписом. На мобільному
+// вона не вища за 180px (раніше займала весь перший екран), на десктопі —
+// квадрат у лівій колонці ~300px (ширину задає сітка сторінки товару)
+function NoPhotoPlaceholder({ categorySlug, categoryName }: { categorySlug?: string | null; categoryName?: string | null }) {
+  const Icon = getCategoryIcon(categorySlug);
+  return (
+    <div
+      className="flex h-[180px] w-full flex-col items-center justify-center gap-3 rounded-2xl px-4 text-center md:h-auto md:aspect-square"
+      style={{ background: PANEL_SOFT, border: `1px solid ${BORDER_SOFT}` }}
+    >
+      <Icon className="h-12 w-12 md:h-16 md:w-16" strokeWidth={1.3} style={{ color: ACCENT }} aria-hidden="true" />
+      {categoryName && (
+        <div className="text-xs font-medium" style={{ color: MUTED }}>
+          {categoryName}
+        </div>
+      )}
+      <div className="text-[11px]" style={{ color: FAINT }}>
+        Фото уточнюйте у менеджера
+      </div>
+    </div>
+  );
+}
+
+export default function ProductGallery({
+  photos,
+  categorySlug,
+  categoryName,
+}: {
+  photos: GalleryPhoto[];
+  // Категорія деталі — для іконки заглушки, якщо фото немає
+  categorySlug?: string | null;
+  categoryName?: string | null;
+}) {
   const [activeIndex, setActiveIndex] = useState(0);
   const active = photos[activeIndex] ?? photos[0];
+
+  if (!active) return <NoPhotoPlaceholder categorySlug={categorySlug} categoryName={categoryName} />;
 
   return (
     <div>
