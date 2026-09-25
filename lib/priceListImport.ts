@@ -20,6 +20,7 @@ import * as XLSX from 'xlsx';
 import { Pool, PoolClient } from 'pg';
 import { after } from 'next/server';
 import { rebuildUkrainianCorpusSafely } from '@/lib/corpusBuilder';
+import { refreshVehicleMakesForSupplier } from '@/lib/vehicleMakeIndex';
 import { getCategoryBySlug, productMatchesCategory } from '@/lib/categories';
 
 // ------------------------------------------------------------
@@ -624,10 +625,16 @@ export async function importPriceListForSupplier(
   // H1, lib/corpusBuilder.ts) — ПІСЛЯ відповіді, щоб не затримувати імпорт.
   // after() працює лише всередині запиту Next.js; поза ним (напр. локальний
   // скрипт) просто запускаємо у фоні
+  // Те саме для таблиці "марка авто -> товари" (пошук, lib/vehicleMakeIndex.ts) —
+  // лише товари цього постачальника
+  const afterImport = async () => {
+    await refreshVehicleMakesForSupplier(pool, supplierId);
+    await rebuildUkrainianCorpusSafely(pool);
+  };
   try {
-    after(() => rebuildUkrainianCorpusSafely(pool));
+    after(afterImport);
   } catch {
-    void rebuildUkrainianCorpusSafely(pool);
+    void afterImport();
   }
 
   return { addedCount, updatedCount, productsFound: uniqueProducts.length };

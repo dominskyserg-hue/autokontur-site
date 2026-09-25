@@ -95,43 +95,41 @@ export async function buildTextSearchClause(
 
     // "Сумісність з авто": (1) власні поля товару АБО (2) TecDoc. Це
     // дві окремі гілки (кожна з власним індексом), а не OR в одній
-    const addCarCompatBranches = (includeModel: boolean): void => {
+    // Гілки лише за МАРКОЮ (+ рік). Раніше була ще "точна" гілка з моделлю,
+    // але вона завжди вужча за цю (та сама умова + модель), тож в UNION
+    // нічого не додавала — прибрана; тому й модель у product_vehicle_makes
+    // не зберігається
+    const addCarCompatBranches = (): void => {
       values.push(carRef.makeDbValues);
       const ownParts = [`UPPER(p.car_make) = ANY($${startParamIndex + values.length - 1}::text[])`];
-      values.push(carRef.makeDbValues);
-      const tecdocParts = [`UPPER(tc2.make) = ANY($${startParamIndex + values.length - 1}::text[])`];
-
-      if (includeModel && carRef.modelHint) {
-        values.push(`%${carRef.modelHint}%`);
-        ownParts.push(`p.car_model ILIKE $${startParamIndex + values.length - 1}`);
-        values.push(`%${carRef.modelHint}%`);
-        tecdocParts.push(`tc2.model ILIKE $${startParamIndex + values.length - 1}`);
-      }
+      values.push(carRef.makeDbValues.map((make) => make.toUpperCase()));
+      // product_vehicle_makes — заздалегідь обчислений збіг tecdoc_compatibility
+      // з products (lib/vehicleMakeIndex.ts); make там уже UPPER(...)
+      const tecdocParts = [`pvm.make = ANY($${startParamIndex + values.length - 1}::text[])`];
 
       if (carRef.year) {
         values.push(`%${carRef.year}%`);
         ownParts.push(`p.car_year ILIKE $${startParamIndex + values.length - 1}`);
         values.push(carRef.year);
         tecdocParts.push(
-          `$${startParamIndex + values.length - 1}::int BETWEEN COALESCE(tc2.year_from, 1900) AND COALESCE(tc2.year_to, 2100)`
+          `$${startParamIndex + values.length - 1}::int BETWEEN COALESCE(pvm.year_from, 1900) AND COALESCE(pvm.year_to, 2100)`
         );
       }
 
       const categoryPart = categoryClauseSql ? `${categoryClauseSql} AND ` : '';
       branches.push(`SELECT p.id FROM products p WHERE ${categoryPart}${ownParts.join(' AND ')}`);
+      // Без категорії товари не потрібні — лише id з product_vehicle_makes
       branches.push(
-        `SELECT p.id
-           FROM tecdoc_compatibility tc2
-           JOIN products p ON p.brand = tc2.brand AND p.article = tc2.article
-           WHERE ${categoryPart}${tecdocParts.join(' AND ')}`
+        categoryPart
+          ? `SELECT p.id
+               FROM product_vehicle_makes pvm
+               JOIN products p ON p.id = pvm.product_id
+               WHERE ${categoryPart}${tecdocParts.join(' AND ')}`
+          : `SELECT pvm.product_id AS id FROM product_vehicle_makes pvm WHERE ${tecdocParts.join(' AND ')}`
       );
     };
 
-    // Раніше додавались дві гілки: "точна" (марка + модель + рік) і "запасна"
-    // (лише марка + рік) — але запасна ЗАВЖДИ ширша за точну (та сама умова
-    // без моделі), тож їх обʼєднання (OR/UNION) дорівнює саме запасній.
-    // Точна гілка нічого не додавала, тільки коштувала час — прибрана
-    addCarCompatBranches(false);
+    addCarCompatBranches();
   }
 
   return { clause: `p.id IN (\n      ${branches.join('\n      UNION\n      ')}\n    )`, params: values };

@@ -2352,6 +2352,23 @@ CREATE TABLE IF NOT EXISTS ukrainian_corpus_words (
 );
 
 
+-- "Марка авто -> товары" для поиска (lib/vehicleMakeIndex.ts, lib/productSearch.ts):
+-- заранее вычисленное соединение tecdoc_compatibility с products по brand+article
+-- (make хранится в UPPER). Обновляется после импорта прайса (товары этого
+-- поставщика), полностью — cron /api/cron/rebuild-vehicle-makes раз в неделю и
+-- `npm run vehicle-makes:rebuild`. Сразу после создания таблицы заполните её
+-- этой командой — пустая таблица означает, что поиск "деталь + марка" не
+-- найдёт совместимость из TecDoc
+CREATE TABLE IF NOT EXISTS product_vehicle_makes (
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  make TEXT NOT NULL,
+  year_from INTEGER,
+  year_to INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_pvm_make ON product_vehicle_makes (make) INCLUDE (product_id, year_from, year_to);
+CREATE INDEX IF NOT EXISTS idx_pvm_product ON product_vehicle_makes (product_id);
+
+
 -- ============================================================
 -- ГОТОВО
 -- ============================================================

@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/rebuild-corpus",
       "schedule": "30 4 * * 1"
+    },
+    {
+      "path": "/api/cron/rebuild-vehicle-makes",
+      "schedule": "45 4 * * 1"
     }
   ]
 }
