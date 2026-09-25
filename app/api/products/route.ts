@@ -170,10 +170,10 @@ async function estimateTotalCount(
   return { count: Math.max(estimate, COUNT_CAP + 1), approximate: true };
 }
 
-// Кэш ответов в памяти (на инстанс) для АНОНИМНЫХ запросов без поиска —
-// главная (featured), обзор каталога, фильтры "по авто" — на 5 минут.
-// Не кэшируем: поиск (у него побочный эффект — очередь поиска фото),
-// админа и покупателя с cookie персональной цены (цены разные)
+// Кэш ответов в памяти (на инстанс) для АНОНИМНЫХ запросов — главная
+// (featured), обзор каталога, фильтры "по авто" и ПЕРВАЯ страница поиска —
+// на 5 минут. Не кэшируем: следующие страницы поиска, админа и покупателя
+// с cookie персональной цены (цены разные)
 const CACHE_TTL_MS = 5 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 300;
 const responseCache = new Map<string, { expires: number; body: unknown }>();
@@ -202,8 +202,14 @@ export async function GET(request: NextRequest) {
     const isAdmin = await isAdminRequest(request);
 
     // Кэш: только анонимные запросы без поиска (см. responseCache выше)
+    // Пошук кешуємо лише ПЕРШУ сторінку (широкі запити на кшталт "колодки" —
+    // 6-10 тис. результатів, ~600 мс). Побічний ефект пошуку (черга пошуку
+    // фото для товарів без фото, нижче) при влученні в кеш не спрацьовує —
+    // він уже відпрацював при першому запиті
     const cacheable =
-      !isAdmin && !request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value && !searchParams.get('search');
+      !isAdmin &&
+      !request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value &&
+      (!searchParams.get('search') || page === 1);
     const cacheKey = cacheable ? request.nextUrl.search : null;
     if (cacheKey) {
       const hit = responseCache.get(cacheKey);

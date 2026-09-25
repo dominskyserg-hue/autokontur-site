@@ -180,9 +180,13 @@ function isUntranslatedRussianKey(lowerWord: string): boolean {
 }
 
 /** Кириличні слова тексту, які страховка v2 не визнає (ні значення словника, ні білий список). */
+// Одна ЗАГЛАВНА кирилична літера перед "-подібн..." — позначення форми
+// ("П-подібна", "Г-подібний"), а не слово; не блокує переклад
+const SHAPE_LETTER_RE = new RegExp(`(?<![${CYR}])[А-ЯІЇЄҐ](?=-подібн)`, 'g');
+
 export function findBlockingWords(text: string): string[] {
   const blocking: string[] = [];
-  for (const word of text.match(WORD_RE) ?? []) {
+  for (const word of text.replace(SHAPE_LETTER_RE, '').match(WORD_RE) ?? []) {
     const lower = word.toLowerCase();
     if (!PRODUCED_WORDS.has(lower) && !isWhitelistedWord(lower)) blocking.push(lower);
   }
