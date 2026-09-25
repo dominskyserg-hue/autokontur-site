@@ -84,19 +84,40 @@ function normalizeShouting(text: string): string {
 
 /**
  * Очищена назва товару для показу покупцю — БЕЗ зміни мови (переклад
- * російських слів — окремий, ще не застосований крок). null, якщо
- * після очищення нічого не лишилось (порожній рядок).
+ * російських слів — окремий, ще не застосований крок). null — ЛИШЕ
+ * якщо сире products.name саме по собі порожнє (нічого зберігати).
+ *
+ * Якщо ж сире ім'я НЕПОРОЖНЄ, але очистка (видалення "Акция"/пунктуації/
+ * скорочень) з'їдає його цілком або лишає менше 3 символів (реальний
+ * приклад із бойової бази: products.name === "-" — після видалення
+ * провідної пунктуації не лишається взагалі нічого) — функція НІКОЛИ
+ * не повертає порожній/однобуквений результат: замість цього
+ * повертається сире ім'я з видаленим ЛИШЕ службовим префіксом
+ * постачальника (крок 1, найбезпечніший — просто код секції прайсу,
+ * а не змістовна частина назви). Це гарантує, що виклик з непорожнім
+ * rawName ніколи не поверне null — а отже й H1/title товару (lib/
+ * productDetail.ts, buildSeoProductName) ніколи не лишиться порожнім.
  */
 export function buildCleanProductName(rawName: string | null | undefined): string | null {
   const trimmed = (rawName ?? '').trim();
   if (!trimmed) return null;
 
-  let result = trimmed.replace(PRICE_LIST_PREFIX_RE, '');
+  const afterPrefix = trimmed.replace(PRICE_LIST_PREFIX_RE, '').trim();
+
+  let result = afterPrefix;
   for (const [pattern, replacement] of ABBREVIATIONS) {
     result = result.replace(pattern, replacement);
   }
   result = result.replace(AKCIYA_RE, '').replace(LEADING_PUNCTUATION_RE, '');
   result = normalizeShouting(result).trim();
 
-  return result || null;
+  if (result.length >= 3) return result;
+
+  // Занадто агресивна очистка з'їла майже все — краще показати сире
+  // ім'я без префікса (afterPrefix), ніж порожній/однобуквений рядок.
+  // afterPrefix теж може лишитись коротким (напр. сире ім'я було просто
+  // "-") — це свідомо прийнятний компроміс: виклик у lib/productDetail.ts
+  // додатково підстраховується і в такому разі показує "Бренд Артикул"
+  // замість короткого сміттєвого тексту
+  return afterPrefix || null;
 }

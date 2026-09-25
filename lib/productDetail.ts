@@ -111,6 +111,14 @@ export function buildSeoProductName(product: {
   // ("К-Т"), "Акция" на початку, суцільний КАПС. Сам products.name у
   // базі не змінюється — це окрема функція, яка викликається саме тут
   const cleanName = buildCleanProductName(product.name);
+  // buildCleanProductName (з КРОКУ 1) гарантує лише "не порожньо" —
+  // для сирих імен на кшталт "-" чи "Зп" вона все одно поверне щось
+  // (сире ім'я без префікса), але це "щось" — сміттєвий текст без
+  // жодної інформації про деталь. Тому тут ДОДАТКОВО: якщо результат
+  // коротший за 3 символи, він взагалі не використовується як назва —
+  // замість нього H1/title збирається з Бренд+Артикул (це завжди є в
+  // базі і завжди осмислене), так само як і при cleanName === null
+  const usableCleanName = cleanName && cleanName.length >= 3 ? cleanName : null;
 
   // detectCategoryForProductH1 (а не detectCategoryForProductName) —
   // враховує вузькі категорії "по машині" (напр. "...Daewoo Lanos"),
@@ -118,7 +126,7 @@ export function buildSeoProductName(product: {
   // (lib/categories.ts, narrowCategoryMatchesVehicle) — інакше товар
   // з геть іншою маркою міг показати чужу модель авто в H1 (знайдений
   // баг: AJUSA 11059300 для CITROËN показував "...Daewoo Lanos")
-  const category = detectCategoryForProductH1(cleanName, product.carMake, product.carModel);
+  const category = detectCategoryForProductH1(usableCleanName, product.carMake, product.carModel);
   const categoryLabel = category ? category.itemName ?? category.name : null;
   // Вузькі категорії "по машині" вже містять марку авто в самій назві
   // ("...Suzuki SX4") — якщо бренд деталі (product.brand) ТОЙ САМИЙ, що
@@ -130,7 +138,7 @@ export function buildSeoProductName(product: {
     Boolean(category?.modelGroup) && Boolean(product.brand) && Boolean(categoryLabel) && brandMatchesWord(categoryLabel!, product.brand!);
   const base = category
     ? [categoryLabel, brandDuplicatesCategoryName ? null : product.brand, product.article].filter(Boolean).join(' ')
-    : cleanName || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
+    : usableCleanName || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
 
   // category.modelGroup заповнений ЛИШЕ у вузьких категорій "по
   // машині" (широкі його ніколи не задають) — якщо base вже прийшов
