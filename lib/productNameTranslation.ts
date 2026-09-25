@@ -164,7 +164,7 @@ export function findBlockingWords(text: string): string[] {
  * перекладу лишилось щось російське/невідоме (див. страховку v2) —
  * повертає назву КРОКУ 1 без змін.
  */
-export function translateProductNameDetailed(stage1Name: string): { text: string; droppedBySafety: boolean; attempted: string; blockingWords: string[] } {
+export function translateProductNameDetailed(stage1Name: string): { text: string; droppedBySafety: boolean; attempted: string; blockingWords: string[]; safe: boolean } {
   let text = stage1Name;
 
   text = text
@@ -201,9 +201,9 @@ export function translateProductNameDetailed(stage1Name: string): { text: string
   const changedByDictionary = text !== stage1Name;
   const blockingWords = findBlockingWords(text);
   if (RUSSIAN_LETTERS_RE.test(text) || blockingWords.length > 0) {
-    return { text: stage1Name, droppedBySafety: changedByDictionary, attempted: text, blockingWords };
+    return { text: stage1Name, droppedBySafety: changedByDictionary, attempted: text, blockingWords, safe: false };
   }
-  return { text, droppedBySafety: false, attempted: text, blockingWords };
+  return { text, droppedBySafety: false, attempted: text, blockingWords, safe: true };
 }
 
 export function translateProductName(stage1Name: string): string {
@@ -242,7 +242,20 @@ export function applyCuratedMakeNames(text: string): string {
  * курований регістр марок. null — якщо сире products.name порожнє.
  */
 export function buildDisplayProductName(rawName: string | null | undefined): string | null {
+  return buildDisplayProductNameDetailed(rawName)?.text ?? null;
+}
+
+/**
+ * Те саме, але з ознакою safe: true — назва пройшла страховку (у ній
+ * немає російських/невідомих слів), тобто її МОЖНА показувати як
+ * українську назву в H1. false — переклад відкинуто, text — КРОК 1
+ * (лише з куре регістром марок).
+ */
+export function buildDisplayProductNameDetailed(
+  rawName: string | null | undefined
+): { text: string; safe: boolean } | null {
   const stage1 = buildCleanProductName(rawName);
   if (!stage1) return null;
-  return applyCuratedMakeNames(translateProductName(stage1));
+  const detailed = translateProductNameDetailed(stage1);
+  return { text: applyCuratedMakeNames(detailed.text), safe: detailed.safe };
 }

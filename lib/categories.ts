@@ -2574,8 +2574,22 @@ export function getCategoryBySlug(slug: string): CategoryDef | undefined {
 // Перевіряються лише ШИРОКІ категорії (без parentCategorySlug) — так
 // крихта веде на "Гальмівні колодки", а не на вузьку сторінку під
 // конкретну модель авто
+// Назва, що ПОЧИНАЄТЬСЯ зі слова "пильовик/пильник/пыльник" (можливо
+// після службового префікса постачальника "A1/") — це захисний чохол, а
+// не деталь, яку він захищає: "Пыльник шаровой опоры" — НЕ "Кульова
+// опора", "Пильовик амортизатора" — НЕ "Амортизатор" і т.д. Такі товари
+// не потрапляють у жодну категорію за назвою (окремої категорії
+// пильовиків поки немає) — H1 тоді збирається з самої (перекладеної)
+// назви. SQL-версія цієї ж умови — у buildCategoryWhereClause нижче
+const BOOT_FIRST_RE = /^\s*(?:[A-ZА-ЯҐЄІЇ]?\d+\/)*\s*(?:пыльник|пильник|пильовик)/i;
+
+export function nameStartsWithBoot(name: string | null | undefined): boolean {
+  return Boolean(name) && BOOT_FIRST_RE.test(name as string);
+}
+
 export function detectCategoryForProductName(name: string | null | undefined): CategoryDef | undefined {
   if (!name) return undefined;
+  if (nameStartsWithBoot(name)) return undefined;
   const lower = name.toLowerCase();
   return CATEGORIES.find(
     (c) =>
@@ -2655,6 +2669,7 @@ export function detectCategoryForProductH1(
   carModel: string | null | undefined
 ): CategoryDef | undefined {
   if (!name) return undefined;
+  if (nameStartsWithBoot(name)) return undefined;
   const lower = name.toLowerCase();
   const matchesNameFilter = (c: CategoryDef) =>
     c.matchGroups.every((group) => group.some((word) => lower.includes(word.toLowerCase()))) &&
@@ -2826,6 +2841,12 @@ export function buildCategoryWhereClause(
   // (напр. постачальник "Тестовий постачальник") — не повинні
   // потрапляти в жоден список категорій/марок
   const conditions: string[] = ['p.is_active = true'];
+  // Пильовик/пыльник на початку назви — не деталь категорії (див.
+  // BOOT_FIRST_RE вище). POSIX-класи замість \s, щоб не мати справи з
+  // подвійним екрануванням бекслешів у SQL-літералі
+  conditions.push(
+    "p.name !~* '^[[:space:]]*([A-Za-zА-Яа-яІіЇїЄєҐґ]?[0-9]+/)*[[:space:]]*(пыльник|пильник|пильовик)'"
+  );
   conditions.push(...category.matchGroups.map((group, i) => {
     params.push(group.map((word) => `%${word}%`));
     return `p.name ILIKE ANY($${startParamIndex + i})`;
