@@ -58,6 +58,7 @@ import { resolveMakeDbValues } from '@/lib/carMakes';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { buildTextSearchClause } from '@/lib/productSearch';
+import { isAdminRequest } from '@/lib/adminSession';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -123,7 +124,11 @@ interface ProductResponse {
   engineVolume: string | null;
   metaDescription: string | null;
   imageUrl: string | null;
-  costPrice: number;
+  // Закупочная цена поставщика — ТОЛЬКО для адмінки (запрос с валидной
+  // cookie-сессией администратора, см. lib/adminSession.ts). Покупателю
+  // на витрине это поле не отдаётся вовсе — иначе по ответу API видна
+  // себестоимость и наценка магазина
+  costPrice?: number;
   retailPrice: number;
   // Скидка (%) от правила наценки поставщика — ЧИСТО для отображения
   // (retailPrice уже посчитана со скидкой), см. schema.sql:
@@ -317,7 +322,8 @@ export async function GET(request: NextRequest) {
     // components/CustomerDashboard.tsx) — рахуємо ПАРАЛЕЛЬНО з основним
     // запитом товарів (незалежні один від одного), щоб не додавати
     // зайву затримку. Застосовується нижче, при мапінгу рядків
-    const [customerPricingRule, result] = await Promise.all([
+    const [isAdmin, customerPricingRule, result] = await Promise.all([
+      isAdminRequest(request),
       getCustomerPricingRule(pool, request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value),
       pool.query(
       `
@@ -370,8 +376,9 @@ export async function GET(request: NextRequest) {
       imageUrl: row.image_url,
       // cost_price/retail_price — колонки NUMERIC, драйвер pg
       // возвращает такие значения строкой (чтобы не терять точность
-      // при преобразовании в float), поэтому явно переводим в число
-      costPrice: parseFloat(row.cost_price),
+      // при преобразовании в float), поэтому явно переводим в число.
+      // costPrice — только для админа (см. ProductResponse.costPrice)
+      ...(isAdmin ? { costPrice: parseFloat(row.cost_price) } : {}),
       retailPrice: computeCustomerPrice(parseFloat(row.cost_price), parseFloat(row.retail_price), customerPricingRule),
       discountPercent: parseFloat(row.discount_percent),
       stock: row.stock,
