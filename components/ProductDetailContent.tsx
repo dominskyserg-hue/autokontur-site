@@ -105,6 +105,7 @@ export default function ProductDetailContent({
   breadcrumbItems,
   seoOverride,
   pairPartPath,
+  supplierCatalogName,
 }: ProductPageData) {
   const displayName = buildSeoProductName(product);
   const galleryPhotos = buildGalleryPhotos(product, images, displayName);
@@ -121,6 +122,13 @@ export default function ProductDetailContent({
   const canonicalUrl = `${SITE_URL}${buildProductPath(product.id, product)}`;
 
   const faqItems = resolveFaqItems(seoOverride?.faq);
+
+  // Рядки блоку "Характеристики": ручні (seoOverride.specs) + "Назва в
+  // каталозі постачальника" (лише якщо відрізняється від підсумкової)
+  const specRows: Array<{ label: string; value: string }> = [
+    ...(seoOverride?.specs ?? []),
+    ...(supplierCatalogName ? [{ label: 'Назва в каталозі постачальника', value: supplierCatalogName }] : []),
+  ];
 
   return (
     <>
@@ -320,7 +328,7 @@ export default function ProductDetailContent({
       )}
 
       {/* ==================== ХАРАКТЕРИСТИКИ (ручний SEO-оверрайд) ==================== */}
-      {seoOverride?.specs && seoOverride.specs.length > 0 && (
+      {specRows.length > 0 && (
         <section className="mb-10">
           <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
             Характеристики
@@ -328,7 +336,7 @@ export default function ProductDetailContent({
           <div className="max-w-2xl overflow-hidden rounded-xl" style={{ border: `1px solid ${BORDER_SOFT}` }}>
             <table className="w-full text-sm" style={{ fontFamily: BODY_FONT }}>
               <tbody>
-                {seoOverride.specs.map((spec, index) => (
+                {specRows.map((spec, index) => (
                   <tr key={spec.label} style={index > 0 ? { borderTop: `1px solid ${BORDER_SOFT}` } : undefined}>
                     <td className="w-1/3 px-4 py-2.5 align-top" style={{ color: FAINT }}>
                       {spec.label}
@@ -345,7 +353,7 @@ export default function ProductDetailContent({
               pairPartPath знайдено в каталозі (lib/productDetail.ts,
               loadPairPartPath), показуємо посиланням, інакше просто
               текстом без посилання */}
-          {seoOverride.pairPart && (
+          {seoOverride?.pairPart && (
             <p className="mt-3 max-w-2xl text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
               {pairPartPath ? (
                 <Link href={pairPartPath} className="font-medium" style={{ color: ACCENT }}>

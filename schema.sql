@@ -2272,6 +2272,55 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS warehouse_ref TEXT;
 
 
 -- ============================================================
+-- products.name_search — ПЕРЕДВЫЧИСЛЕННОЕ поле для поиска по названию
+-- ============================================================
+-- lower(name) + все латинские "двойники" кириллических букв (i, a, o, e,
+-- c, p, x, y, k, m, t, h, b) заменены на кириллицу. Нужно, чтобы "Фiльтр"
+-- (латинская i из прайса поставщика) находился по запросу "фільтр" и
+-- наоборот (сам запрос сворачивается той же заменой — lib/latinLookalikes.ts,
+-- foldLookalikes). Раньше сравнение делалось прямо над p.name на каждый
+-- запрос (полное сканирование ~360 тыс. строк, 0.5-1.2 c); теперь по полю
+-- есть pg_trgm GIN-индекс (25-60 мс).
+--
+-- Поле заполняет ТРИГГЕР при каждом INSERT и при каждом UPDATE name —
+-- поэтому оно актуально после ЛЮБОГО импорта прайса (lib/priceListImport.ts
+-- и т.д.) без правок кода импорта. Для уже существующих строк —
+-- одноразовое заполнение ниже (NULL -> значение).
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
+ALTER TABLE products ADD COLUMN IF NOT EXISTS name_search TEXT;
+
+CREATE OR REPLACE FUNCTION products_set_name_search() RETURNS trigger AS $$
+BEGIN
+  NEW.name_search := translate(lower(coalesce(NEW.name, '')), 'iaoecpxykmthb', 'іаоесрхукмтнв');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_products_name_search ON products;
+CREATE TRIGGER trg_products_name_search
+  BEFORE INSERT OR UPDATE OF name ON products
+  FOR EACH ROW EXECUTE FUNCTION products_set_name_search();
+
+-- Одноразовое заполнение существующих товаров (на большой боевой базе
+-- выполнялось пачками по 20 000 строк — здесь одним запросом, безопасно
+-- запускать повторно: трогает только строки, где поле ещё NULL)
+UPDATE products
+SET name_search = translate(lower(coalesce(name, '')), 'iaoecpxykmthb', 'іаоесрхукмтнв')
+WHERE name_search IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_products_name_search_trgm
+  ON products USING gin (name_search gin_trgm_ops);
+
+-- Второй индекс — на ВЫРАЖЕНИИ "название без разделителей" (пробелы, дефисы,
+-- _ . / \): по нему ищется "склеенный" остаток запроса (lib/searchSynonyms.ts,
+-- buildSynonymWhereClause). Шаблон ОБЯЗАН совпадать с SEPARATORS_REGEX в
+-- lib/searchSynonyms.ts символ в символ — иначе индекс не подхватится
+CREATE INDEX IF NOT EXISTS idx_products_name_search_compact_trgm
+  ON products USING gin ((regexp_replace(name_search, '[\s\-_./\\]+', '', 'g')) gin_trgm_ops);
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не

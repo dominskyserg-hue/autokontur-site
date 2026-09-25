@@ -26,6 +26,7 @@
 // колодки" цілком, а не окремо "гальмівні" й окремо "колодки".
 // ============================================================
 
+import { foldLookalikes } from './latinLookalikes';
 import type { Pool } from 'pg';
 
 export interface SynonymGroup {
@@ -124,6 +125,18 @@ export function expandSearchQuery(rawQuery: string, dictionary: SynonymGroup[]):
 // → regex) на практиці ламає патерн, якщо вписати його літералом
 const SEPARATORS_REGEX = '[\\s\\-_./\\\\]+';
 
+// products.name_search — ПЕРЕДОБЧИСЛЕНИЙ стовпець: назва в нижньому
+// регістрі + ВСІ латинські двійники (i, a, o, e, c, p, x, y, k, m, t,
+// h, b) замінені на кирилицю. Заповнюється тригером БД при кожному
+// INSERT/UPDATE name (schema.sql, розділ "name_search"), тому працює для
+// будь-якого імпорту. Той самий foldLookalikes застосовується до
+// пошукового запиту, тому "Фiльтр" (латинська i) знаходиться за
+// "фільтр" і навпаки. На стовпці є pg_trgm GIN-індекс (ILIKE '%...%'
+// без повного сканування) та другий, на виразі
+// regexp_replace(name_search, <SEPARATORS_REGEX>, '', 'g') — для
+// пошуку по "злитому" залишку запиту нижче
+const FOLDED_NAME_SQL = 'p.name_search';
+
 export function buildSynonymWhereClause(
   expanded: ExpandedSearch,
   startParamIndex: number
@@ -133,15 +146,15 @@ export function buildSynonymWhereClause(
   let paramIndex = startParamIndex;
 
   for (const terms of expanded.synonymTermGroups) {
-    params.push(terms.map((t) => `%${t}%`));
-    conditions.push(`p.name ILIKE ANY($${paramIndex})`);
+    params.push(terms.map((t) => `%${foldLookalikes(t)}%`));
+    conditions.push(`${FOLDED_NAME_SQL} ILIKE ANY($${paramIndex})`);
     paramIndex++;
   }
 
   if (expanded.leftover) {
-    params.push(SEPARATORS_REGEX, `%${expanded.leftover}%`);
+    params.push(SEPARATORS_REGEX, `%${foldLookalikes(expanded.leftover)}%`);
     conditions.push(
-      `regexp_replace(LOWER(p.name), $${paramIndex}, '', 'g') ILIKE $${paramIndex + 1}`
+      `regexp_replace(${FOLDED_NAME_SQL}, $${paramIndex}, '', 'g') ILIKE $${paramIndex + 1}`
     );
     paramIndex += 2;
   }

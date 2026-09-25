@@ -27,6 +27,8 @@
 // функції, коли словник підтверджено
 // ============================================================
 
+import { fixLatinLookalikes } from '@/lib/latinLookalikes';
+
 // Префікс-код секції прайс-листа AVDOC — буква (необов'язково) +
 // цифри + слеш, можливо кілька повторів підряд (кілька альтернативних
 // SKU у одного товару, напр. масла з декількома номерами постачання —
@@ -82,6 +84,27 @@ function normalizeShouting(text: string): string {
   });
 }
 
+// Службовий текст постачальника, дописаний прямо в назву ("Термостат
+// ... ознакомьтесь с описанием!", "Сальник ... устаревший номер!") —
+// НЕ частина назви деталі, вирізається ЦІЛКОМ (не перекладається).
+// Разом із розділювачем перед фразою (" - ", ", ") і знаками оклику
+const SERVICE_TEXT_RES: ReadonlyArray<RegExp> = [
+  /\s*[-–—,;:]?\s*ознакомьтесь(?:\s+с)?\s+описани(?:ем|е)\s*!*/gi,
+  /\s*[-–—,;:]?\s*см\.?\s+описание\s*!*/gi,
+  /\s*[-–—,;:]?\s*см\.?\s+замену\s*!*/gi,
+  /\s*[-–—,;:]?\s*устаревший\s+номер\s*!*/gi,
+  /\s*[-–—,;:]?\s*old\s+number\s*!*/gi,
+];
+const TRAILING_PUNCTUATION_RE = /[\s,;:\-–—]+$/;
+
+function stripSupplierServiceText(text: string): string {
+  let result = text;
+  for (const re of SERVICE_TEXT_RES) result = result.replace(re, '');
+  // Кінцеву пунктуацію чистимо ЛИШЕ якщо щось вирізали — інакше "03-"
+  // ("з 2003 року") втратило б дефіс
+  return result === text ? text : result.replace(TRAILING_PUNCTUATION_RE, '');
+}
+
 /**
  * Очищена назва товару для показу покупцю — БЕЗ зміни мови (переклад
  * російських слів — окремий, ще не застосований крок). null — ЛИШЕ
@@ -99,10 +122,13 @@ function normalizeShouting(text: string): string {
  * productDetail.ts, buildSeoProductName) ніколи не лишиться порожнім.
  */
 export function buildCleanProductName(rawName: string | null | undefined): string | null {
-  const trimmed = (rawName ?? '').trim();
+  // Латинські двійники всередині кириличних слів ("Фiльтр") виправляємо
+  // ПЕРШИМ кроком — до всіх регулярок нижче, які розпізнають кирилицю
+  // (lib/latinLookalikes.ts)
+  const trimmed = fixLatinLookalikes((rawName ?? '').trim());
   if (!trimmed) return null;
 
-  const afterPrefix = trimmed.replace(PRICE_LIST_PREFIX_RE, '').trim();
+  const afterPrefix = stripSupplierServiceText(trimmed.replace(PRICE_LIST_PREFIX_RE, '')).trim();
 
   let result = afterPrefix;
   for (const [pattern, replacement] of ABBREVIATIONS) {

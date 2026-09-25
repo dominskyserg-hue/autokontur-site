@@ -21,6 +21,8 @@ import { getCarMakeByDbValue } from '@/lib/carMakes';
 import { detectCategoryForProductName, detectCategoryForProductH1 } from '@/lib/categories';
 import { cleanApplicability } from '@/lib/carModelTranslation';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
+import { buildDisplayProductName } from '@/lib/productNameTranslation';
+import { brandsAreSameFamily } from '@/lib/brandFamilies';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -97,6 +99,10 @@ export function buildSeoProductName(product: {
   article: string;
   carMake?: string | null;
   carModel?: string | null;
+  // Сире products.name ТОГО САМОГО артикула з іншого прайсу (той самий
+  // бренд або затверджена "родина" брендів, lib/brandFamilies.ts) —
+  // використовується ЛИШЕ коли власне ім'я товару порожнє/сміттєве
+  fallbackName?: string | null;
 }): string {
   // Ручний SEO-оверрайд (data/seo-overrides.ts) — якщо для артикула
   // заданий h1, він ПОВНІСТЮ перекриває автошаблон нижче: вигадати
@@ -105,12 +111,24 @@ export function buildSeoProductName(product: {
   const override = getSeoOverride(product.article);
   if (override?.h1) return override.h1;
 
+  // Власна назва непридатна (порожня, "-", "Зп"...) -> назва з іншого
+  // прайсу того ж артикула, якщо вона знайдена (loadProduct)
+  const ownNameUsable = (buildCleanProductName(product.name)?.length ?? 0) >= 3;
+  const sourceName = ownNameUsable ? product.name : product.fallbackName || product.name;
+
   // buildCleanProductName (lib/productNameCleanup.ts) — механічне
   // форматування сирого product.name ЛИШЕ для показу/визначення
   // категорії: службові префікси постачальника ("A1/"), скорочення
   // ("К-Т"), "Акция" на початку, суцільний КАПС. Сам products.name у
   // базі не змінюється — це окрема функція, яка викликається саме тут
-  const cleanName = buildCleanProductName(product.name);
+  const cleanName = buildCleanProductName(sourceName);
+  // КРОК 2 (lib/productNameTranslation.ts): та сама назва, переведена на
+  // українську за словником (зі страховкою) + курований регістр марок.
+  // Використовується ЛИШЕ як видима назва в H1/title, а категорія
+  // визначається з очищеної (КРОК 1) назви вище — вона розпізнає і
+  // російські, і українські слова
+  const displayName = buildDisplayProductName(sourceName);
+  const usableDisplayName = displayName && displayName.length >= 3 ? displayName : null;
   // buildCleanProductName (з КРОКУ 1) гарантує лише "не порожньо" —
   // для сирих імен на кшталт "-" чи "Зп" вона все одно поверне щось
   // (сире ім'я без префікса), але це "щось" — сміттєвий текст без
@@ -138,7 +156,7 @@ export function buildSeoProductName(product: {
     Boolean(category?.modelGroup) && Boolean(product.brand) && Boolean(categoryLabel) && brandMatchesWord(categoryLabel!, product.brand!);
   const base = category
     ? [categoryLabel, brandDuplicatesCategoryName ? null : product.brand, product.article].filter(Boolean).join(' ')
-    : usableCleanName || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
+    : usableDisplayName || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
 
   // category.modelGroup заповнений ЛИШЕ у вузьких категорій "по
   // машині" (широкі його ніколи не задають) — якщо base вже прийшов
@@ -199,6 +217,7 @@ export function buildSeoProductDescription(product: {
   article: string;
   carMake?: string | null;
   carModel?: string | null;
+  fallbackName?: string | null;
   metaDescription: string | null;
   metaDescriptionOverride: boolean;
   stock: number;
@@ -276,6 +295,7 @@ export function buildSeoMetaTitle(product: {
   article: string;
   carMake?: string | null;
   carModel?: string | null;
+  fallbackName?: string | null;
 }): string {
   const override = getSeoOverride(product.article);
   if (override?.title) return override.title;
@@ -343,6 +363,9 @@ export interface ProductDetail {
   // для доповнення meta description реальними даними з бази — САМІ
   // МОДЕЛІ ТУТ НІКОЛИ НЕ ВИГАДУЮТЬСЯ, лише те, що реально є в товару
   carModel: string | null;
+  // Назва цього ж артикула з іншого прайсу (див. loadFallbackName) —
+  // ЛИШЕ якщо власна назва порожня/сміттєва, інакше null
+  fallbackName: string | null;
   supplierName: string;
   deliveryTime: string | null;
   updatedAt: string;
@@ -387,6 +410,28 @@ export interface CrossRefItem {
 // відданому браузеру покупця
 type ProductDetailRaw = ProductDetail & { costPrice: number };
 
+// Найчастіша придатна назва (КРОК 1 >= 3 символів) того самого артикула
+// в інших активних товарах, де бренд — той самий або з затвердженої
+// "родини" (lib/brandFamilies.ts). Повертає СИРЕ products.name (його
+// далі проганяє buildSeoProductName через КРОК 1 і 2)
+async function loadFallbackName(id: string, article: string, brand: string | null): Promise<string | null> {
+  const result = await pool.query(
+    `SELECT name, brand FROM products WHERE article = $1 AND id <> $2 AND is_active = true AND name IS NOT NULL`,
+    [article, id]
+  );
+  const counts = new Map<string, { raw: string; n: number }>();
+  for (const row of result.rows) {
+    if (!brandsAreSameFamily(brand, row.brand)) continue;
+    const clean = buildCleanProductName(row.name);
+    if (!clean || clean.length < 3) continue;
+    const entry = counts.get(clean);
+    if (entry) entry.n += 1;
+    else counts.set(clean, { raw: row.name, n: 1 });
+  }
+  const best = [...counts.values()].sort((a, b) => b.n - a.n || b.raw.length - a.raw.length)[0];
+  return best ? best.raw : null;
+}
+
 export const loadProduct = cache(async function loadProduct(id: string): Promise<ProductDetailRaw | null> {
   const result = await pool.query(
     `
@@ -403,11 +448,20 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
   if (result.rows.length === 0) return null;
   const row = result.rows[0];
 
+  // Назва з іншого прайсу того ж артикула — ЛИШЕ для товарів без
+  // власної придатної назви (~0.7% каталогу), для решти зайвого запиту
+  // немає
+  let fallbackName: string | null = null;
+  if ((buildCleanProductName(row.name)?.length ?? 0) < 3) {
+    fallbackName = await loadFallbackName(row.id, row.article, row.brand);
+  }
+
   return {
     id: row.id,
     article: row.article,
     brand: row.brand,
     name: row.name,
+    fallbackName,
     costPrice: parseFloat(row.cost_price),
     retailPrice: parseFloat(row.retail_price),
     stock: row.stock,
@@ -721,6 +775,12 @@ export interface ProductPageData {
   // є в каталозі (loadPairPartPath) — null, якщо оверрайду/пари немає
   // або товару з таким артикулом у базі не знайшлось
   pairPartPath: string | null;
+  // Назва товару в каталозі постачальника — КРОК 1 (без префікса, КАПСУ і
+  // службового тексту), але ДО перекладу. Показується рядком у блоці
+  // "Характеристики" ЛИШЕ якщо відрізняється від підсумкової (перекладеної)
+  // назви — так російський оригінал лишається на сторінці для пошуку.
+  // У JSON-LD навмисно НЕ потрапляє
+  supplierCatalogName: string | null;
 }
 
 // Повний набір даних для рендеру товару — і на повній сторінці, і в
@@ -787,6 +847,7 @@ export async function loadProductPageData(
     article: product.article,
     brand: product.brand,
     name: product.name,
+    fallbackName: product.fallbackName,
     retailPrice: computeCustomerPrice(product.costPrice, product.retailPrice, customerPricingRule),
     stock: product.stock,
     imageUrl: product.imageUrl,
@@ -847,6 +908,13 @@ export async function loadProductPageData(
     },
   ];
 
+  const stage1Name = buildCleanProductName(product.name);
+  const translatedName = buildDisplayProductName(product.name);
+  const supplierCatalogName =
+    stage1Name && stage1Name.length >= 3 && stage1Name.toLowerCase() !== (translatedName ?? '').toLowerCase()
+      ? stage1Name
+      : null;
+
   return {
     product: personalizedProduct,
     images,
@@ -857,5 +925,6 @@ export async function loadProductPageData(
     breadcrumbItems,
     seoOverride,
     pairPartPath,
+    supplierCatalogName,
   };
 }
