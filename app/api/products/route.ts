@@ -146,6 +146,38 @@ interface ProductResponse {
   updatedAt: string;
 }
 
+// ------------------------------------------------------------
+// ПРИБЛИЗИТЕЛЬНОЕ общее количество для покупателей
+// ------------------------------------------------------------
+// Точно считаем до COUNT_CAP строк (быстро: читаем не больше 10 001
+// строки). Если подходящих больше — берём оценку планировщика Postgres
+// (EXPLAIN, поле "Plan Rows") — для "всего каталога" и простых фильтров
+// она близка к реальной. Витрина totalCount не показывает, он нужен
+// только админским экранам (там точный путь)
+const COUNT_CAP = 10000;
+
+async function estimateTotalCount(
+  db: Pool,
+  whereSql: string,
+  filterValues: unknown[]
+): Promise<{ count: number; approximate: boolean }> {
+  const base = `FROM products p JOIN suppliers s ON s.id = p.supplier_id ${whereSql}`;
+  const capped = await db.query(`SELECT count(*)::int AS c FROM (SELECT 1 ${base} LIMIT ${COUNT_CAP + 1}) t`, filterValues);
+  const exact = capped.rows[0].c as number;
+  if (exact <= COUNT_CAP) return { count: exact, approximate: false };
+  const plan = await db.query(`EXPLAIN (FORMAT JSON) SELECT 1 ${base}`, filterValues);
+  const estimate = Math.round(plan.rows[0]['QUERY PLAN'][0].Plan['Plan Rows']);
+  return { count: Math.max(estimate, COUNT_CAP + 1), approximate: true };
+}
+
+// Кэш ответов в памяти (на инстанс) для АНОНИМНЫХ запросов без поиска —
+// главная (featured), обзор каталога, фильтры "по авто" — на 5 минут.
+// Не кэшируем: поиск (у него побочный эффект — очередь поиска фото),
+// админа и покупателя с cookie персональной цены (цены разные)
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 300;
+const responseCache = new Map<string, { expires: number; body: unknown }>();
+
 export async function GET(request: NextRequest) {
   try {
     const searchParams = request.nextUrl.searchParams;
@@ -168,6 +200,19 @@ export async function GET(request: NextRequest) {
     // админские экраны — закупочная цена, поставщик, скрытые товары и
     // фильтр по поставщику доступны ТОЛЬКО с валидной админской сессией
     const isAdmin = await isAdminRequest(request);
+
+    // Кэш: только анонимные запросы без поиска (см. responseCache выше)
+    const cacheable =
+      !isAdmin && !request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value && !searchParams.get('search');
+    const cacheKey = cacheable ? request.nextUrl.search : null;
+    if (cacheKey) {
+      const hit = responseCache.get(cacheKey);
+      if (hit && hit.expires > Date.now()) return NextResponse.json(hit.body, { headers: { 'X-Cache': 'HIT' } });
+      if (responseCache.size >= CACHE_MAX_ENTRIES) {
+        const oldest = responseCache.keys().next().value;
+        if (oldest !== undefined) responseCache.delete(oldest);
+      }
+    }
 
     // ---- разбор фильтров ----
     const search = (searchParams.get('search') || '').trim();
@@ -296,6 +341,18 @@ export async function GET(request: NextRequest) {
       )`);
     }
 
+    // featured: "фото насамперед, в наявності, найсвіжіші". Раніше це був
+    // ORDER BY (image IS NOT NULL) DESC, (stock > 0) DESC, updated_at DESC —
+    // сортування всіх ~360 тис. рядків. Тепер умова WHERE (image_url IS NOT
+    // NULL AND stock > 0) + ORDER BY updated_at DESC — читається з
+    // часткового індексу idx_products_featured за кілька мс (schema.sql).
+    // Різниця лише в тому, що товари БЕЗ фото/наявності в блок не
+    // потрапляють зовсім (їх там і так не було на перших місцях)
+    if (featured) {
+      conditions.push('p.image_url IS NOT NULL');
+      conditions.push('p.stock > 0');
+    }
+
     const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // При пошуку (є текст search) пріоритет видачі: спершу те, що
@@ -310,7 +367,7 @@ export async function GET(request: NextRequest) {
     const orderBySql = search
       ? 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.retail_price DESC'
       : featured
-        ? 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.updated_at DESC'
+        ? 'ORDER BY p.updated_at DESC'
         : 'ORDER BY p.article ASC';
 
     // ---- сам запрос ----
@@ -319,6 +376,7 @@ export async function GET(request: NextRequest) {
     // после: Postgres сначала применяет WHERE, а потом добавляет
     // колонку total_count с одним и тем же числом к каждой строке
     // страницы. Дешевле, чем делать два похожих запроса подряд
+    const filterValues = values.slice();
     values.push(pageSize, offset);
     const limitPlaceholder = `$${values.length - 1}`;
     const offsetPlaceholder = `$${values.length}`;
@@ -328,7 +386,10 @@ export async function GET(request: NextRequest) {
     // components/CustomerDashboard.tsx) — рахуємо ПАРАЛЕЛЬНО з основним
     // запитом товарів (незалежні один від одного), щоб не додавати
     // зайву затримку. Застосовується нижче, при мапінгу рядків
-    const [customerPricingRule, result] = await Promise.all([
+    // Для покупателей общее количество — ПРИБЛИЗИТЕЛЬНОЕ (см. estimateTotalCount):
+    // точный COUNT(*) OVER() заставлял Postgres прочитать ВСЕ подходящие строки
+    // даже ради первой страницы. Админка (с сессией) получает точное, как раньше
+    const [customerPricingRule, result, approxCount] = await Promise.all([
       getCustomerPricingRule(pool, request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value),
       pool.query(
       `
@@ -351,8 +412,7 @@ export async function GET(request: NextRequest) {
         p.supplier_id,
         s.name AS supplier_name,
         s.delivery_time,
-        p.updated_at,
-        COUNT(*) OVER() AS total_count
+        p.updated_at${isAdmin ? ', COUNT(*) OVER() AS total_count' : ''}
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       ${whereSql}
@@ -361,11 +421,16 @@ export async function GET(request: NextRequest) {
       `,
         values
       ),
+      isAdmin ? Promise.resolve(null) : estimateTotalCount(pool, whereSql, filterValues),
     ]);
 
     // Если строк не нашлось (например, пустая база или поиск ничего
     // не дал), total_count из запроса взять неоткуда — тогда 0
-    const totalCount = result.rows.length > 0 ? parseInt(result.rows[0].total_count, 10) : 0;
+    const totalCount = approxCount
+      ? approxCount.count
+      : result.rows.length > 0
+        ? parseInt(result.rows[0].total_count, 10)
+        : 0;
     const totalPages = totalCount > 0 ? Math.ceil(totalCount / pageSize) : 0;
 
     const products: ProductResponse[] = result.rows.map((row) => ({
@@ -435,11 +500,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({
+    const body = {
       success: true,
       products,
-      pagination: { page, pageSize, totalCount, totalPages },
-    });
+      pagination: { page, pageSize, totalCount, totalPages, ...(approxCount?.approximate ? { totalCountApproximate: true } : {}) },
+    };
+    if (cacheKey) responseCache.set(cacheKey, { expires: Date.now() + CACHE_TTL_MS, body });
+    return NextResponse.json(body);
   } catch (error) {
     console.error('Ошибка при получении списка товаров:', error);
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка';

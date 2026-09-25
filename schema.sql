@@ -2337,6 +2337,13 @@ CREATE INDEX IF NOT EXISTS idx_products_car_make_upper ON products (UPPER(car_ma
 CREATE INDEX IF NOT EXISTS idx_tecdoc_compat_make_upper ON tecdoc_compatibility (UPPER(make));
 
 
+-- Блок "Популярні товари" на главной (GET /api/products?featured=true): товары с
+-- фото и в наличии, самые свежие по updated_at. Частичный индекс — выбор
+-- первых 8 строк без сортировки всей таблицы (было ~800 мс)
+CREATE INDEX IF NOT EXISTS idx_products_featured ON products (updated_at DESC)
+  WHERE is_active AND image_url IS NOT NULL AND stock > 0;
+
+
 -- ============================================================
 -- ГОТОВО
 -- ============================================================
