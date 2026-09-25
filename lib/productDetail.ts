@@ -21,7 +21,7 @@ import { getCarMakeByDbValue } from '@/lib/carMakes';
 import { detectCategoryForProductName, detectCategoryForProductH1 } from '@/lib/categories';
 import { cleanApplicability } from '@/lib/carModelTranslation';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
-import { buildDisplayProductName } from '@/lib/productNameTranslation';
+import { buildDisplayProductNameDetailed } from '@/lib/productNameTranslation';
 import { brandsAreSameFamily } from '@/lib/brandFamilies';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
@@ -93,6 +93,179 @@ function formatCarMakeDisplay(rawMake: string): string {
     .join(' ');
 }
 
+// ------------------------------------------------------------
+// H1 / TITLE ТОВАРУ: складається з ЧАСТИН, щоб title міг обрізати
+// ЛИШЕ назву, а бренд і артикул лишались завжди (див. buildSeoMetaTitle)
+// ------------------------------------------------------------
+// Правила H1 (власник затвердив):
+//   1. Переклад пройшов страховку -> H1 = переведена назва + бренд +
+//      артикул (+ "для Марка Модель"). Категорія — лише запасний
+//      варіант (переклад відкотився чи назви немає)
+//   2. Виняток: у широкій категорії з itemName, якщо переведена назва —
+//      це лише тип деталі (<= 3 слів, усі слова є у словнику категорії,
+//      без цифр і латиниці) — беремо itemName категорії ("Гальмівний
+//      диск", "Оливний фільтр"), бо переклад нічого не додає
+//   3. Назва довша за 70 символів обрізається по межі слова (а не
+//      відкочується до категорії), далі бренд + артикул
+//   4. "для ..." не додається, якщо car_model схожий на код (збігається
+//      з артикулом або "ILKR9G8"-подібний) чи марка вже є в H1
+interface SeoNameParts {
+  // Ручний override.h1 — повністю готовий рядок, частини не потрібні
+  fixedH1: string | null;
+  name: string;
+  brand: string | null;
+  article: string | null;
+  // true — H1 складається ЛИШЕ з name (запасний варіант "назва без
+  // бренду й артикула", коли категорії нема)
+  bare: boolean;
+  tail: string | null;
+}
+
+const H1_NAME_MAX_LENGTH = 70;
+
+function compactText(text: string): string {
+  return text.replace(/[^A-Za-z0-9А-Яа-яІіЇїЄєҐґ]/g, '').toUpperCase();
+}
+
+// Стемми (перші 4 літери) слів категорії — щоб зрозуміти, чи переведена
+// назва додає щось понад сам тип деталі
+function isOnlyPartType(name: string, category: { name: string; itemName?: string; matchGroups: string[][] }): boolean {
+  const tokens = name.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0 || tokens.length > 3) return false;
+  if (/[0-9A-Za-z]/.test(name)) return false;
+  const content = (name.toLowerCase().match(/[а-яіїєґё]+/g) ?? []).filter((word) => word.length >= 3);
+  if (content.length === 0) return false;
+  const vocabulary = new Set(
+    (`${category.name} ${category.itemName ?? ''} ${category.matchGroups.flat().join(' ')}`.toLowerCase().match(/[а-яіїєґё]{3,}/g) ?? []).map(
+      (word) => word.slice(0, 4)
+    )
+  );
+  return content.every((word) => vocabulary.has(word.slice(0, 4)));
+}
+
+// car_model, який насправді є кодом деталі, а не моделлю авто: збігається
+// з артикулом, або одне слово з >= 5 символів, з цифрами й >= 3 літерами
+// і без голосних ("GLS450"), або з >= 3 переходами літера<->цифра
+// ("ILKR9G8"). Такий текст у "для ..." давав би сміття
+function looksLikeCode(model: string, article: string): boolean {
+  const compactModel = compactText(model);
+  if (compactModel && compactModel === compactText(article)) return true;
+  const trimmed = model.trim();
+  if (/[\s\-/.,()]/.test(trimmed) || trimmed.length < 5) return false;
+  if (!/\d/.test(trimmed) || !/[A-Za-zА-Яа-яІіЇїЄєҐґ]/.test(trimmed)) return false;
+  const letters = trimmed.toLowerCase().replace(/[^a-zа-яіїєґё]/g, '');
+  if (!/[aeiouyаеєиіїоуюяы]/.test(letters) && letters.length >= 3) return true;
+  let transitions = 0;
+  for (let i = 1; i < trimmed.length; i++) {
+    if (/\d/.test(trimmed[i]) !== /\d/.test(trimmed[i - 1])) transitions++;
+  }
+  return transitions >= 3;
+}
+
+// Довгу назву (перелік авто через ";" чи ",") ріжемо по останньому
+// роздільнику в межах ліміту, щоб не обірвати посеред слова/марки
+// ("...Opel Astra H 04-14; ALFA" -> "...Opel Astra H 04-14"); якщо
+// роздільника нема (або він надто близько до початку) — по межі слова
+function truncateNameForH1(name: string): string {
+  const head = name.slice(0, H1_NAME_MAX_LENGTH + 1);
+  const separatorIndex = Math.max(head.lastIndexOf(';'), head.lastIndexOf(','));
+  const cut = separatorIndex >= 25 ? head.slice(0, separatorIndex) : truncateAtWordBoundary(name, H1_NAME_MAX_LENGTH);
+  return cut.replace(/[\s,;:\-–—(/]+$/, '');
+}
+
+function buildSeoNameParts(product: {
+  name: string | null;
+  brand: string | null;
+  article: string;
+  carMake?: string | null;
+  carModel?: string | null;
+  fallbackName?: string | null;
+}): SeoNameParts {
+  // Ручний SEO-оверрайд (data/seo-overrides.ts) — якщо для артикула
+  // заданий h1, він ПОВНІСТЮ перекриває автошаблон нижче
+  const override = getSeoOverride(product.article);
+  if (override?.h1) return { fixedH1: override.h1, name: '', brand: null, article: null, bare: false, tail: null };
+
+  // Власна назва непридатна (порожня, "-", "Зп"...) -> назва з іншого
+  // прайсу того ж артикула, якщо вона знайдена (loadProduct)
+  const ownNameUsable = (buildCleanProductName(product.name)?.length ?? 0) >= 3;
+  const sourceName = ownNameUsable ? product.name : product.fallbackName || product.name;
+
+  // КРОК 1 (очищена назва) — для визначення категорії: вона розпізнає і
+  // російські, і українські слова
+  const cleanName = buildCleanProductName(sourceName);
+  const usableCleanName = cleanName && cleanName.length >= 3 ? cleanName : null;
+  // КРОК 2 — переведена назва (зі страховкою) + курований регістр марок
+  const displayDetailed = buildDisplayProductNameDetailed(sourceName);
+  const displayName = displayDetailed?.text ?? null;
+  const usableDisplayName = displayName && displayName.length >= 3 ? displayName : null;
+  const translationPassed = Boolean(displayDetailed?.safe && usableDisplayName);
+
+  // Категорія: враховує вузькі "по машині" лише коли марка/модель товару
+  // реально збігаються (lib/categories.ts, detectCategoryForProductH1)
+  const category = detectCategoryForProductH1(usableCleanName, product.carMake, product.carModel);
+  const categoryLabel = category ? category.itemName ?? category.name : null;
+
+  let parts: Omit<SeoNameParts, 'tail'>;
+  let usedNarrowCategory = false;
+  if (translationPassed) {
+    let name = usableDisplayName!;
+    if (category && !category.modelGroup && category.itemName && isOnlyPartType(name, category)) {
+      name = category.itemName;
+    } else if (name.length > H1_NAME_MAX_LENGTH) {
+      name = truncateNameForH1(name);
+    }
+    parts = { fixedH1: null, name, brand: product.brand, article: product.article, bare: false };
+  } else if (category) {
+    usedNarrowCategory = Boolean(category.modelGroup);
+    parts = { fixedH1: null, name: categoryLabel!, brand: product.brand, article: product.article, bare: false };
+  } else if (usableDisplayName) {
+    parts = { fixedH1: null, name: usableDisplayName, brand: null, article: null, bare: true };
+  } else {
+    parts = { fixedH1: null, name: '', brand: product.brand, article: product.article, bare: false };
+  }
+
+  // "для Марка Модель": вузька категорія вже містить авто в назві;
+  // cleanApplicability = null — ненадійна застосовність (код "#..." чи
+  // нерозпізнане російське слово) — краще не показувати нічого
+  let tail: string | null = null;
+  if (product.carMake && !usedNarrowCategory) {
+    const cleanedModel = cleanApplicability(product.carModel);
+    if (cleanedModel !== null && !looksLikeCode(cleanedModel, product.article)) {
+      const rawMake = product.carMake.trim();
+      const makeDisplay = formatCarMakeDisplay(rawMake);
+      // Деякі постачальники записують carModel уже ІЗ повторенням марки
+      // ("MAZDA 323 (BJ)..." при carMake "MAZDA") — замінюємо сире
+      // написання на курировану назву, а не дублюємо марку
+      const modelAlreadyHasMake = cleanedModel.toUpperCase().startsWith(rawMake.toUpperCase());
+      const vehicle = modelAlreadyHasMake
+        ? [makeDisplay, cleanedModel.slice(rawMake.length).trim()].filter(Boolean).join(' ')
+        : [makeDisplay, cleanedModel].filter(Boolean).join(' ');
+      tail = `для ${vehicle}`;
+      // Марка вже є в самому H1 (в назві чи бренді) — "для Nissan Altima"
+      // після "...Nissan Altima 2.5 06-13" було б повтором
+      const withoutTail = assembleSeoName({ ...parts, tail: null });
+      if (brandMatchesWord(withoutTail, makeDisplay) || brandMatchesWord(withoutTail, rawMake)) tail = null;
+    }
+  }
+  return { ...parts, tail };
+}
+
+// Збирає рядок з частин. nameOverride — обрізана назва (для title);
+// бренд/артикул не дублюються, якщо вже є у (можливо обрізаній) назві
+function assembleSeoName(parts: SeoNameParts, nameOverride?: string, includeTail = true): string {
+  if (parts.fixedH1 !== null) return parts.fixedH1;
+  const name = nameOverride ?? parts.name;
+  const pieces: string[] = [];
+  if (name) pieces.push(name);
+  if (parts.brand && !(name && brandMatchesWord(name, parts.brand))) pieces.push(parts.brand);
+  if (parts.article && !(name && parts.article.length >= 4 && compactText(name).includes(compactText(parts.article)))) {
+    pieces.push(parts.article);
+  }
+  const base = pieces.join(' ') || parts.article || '';
+  return includeTail && parts.tail ? `${base} ${parts.tail}` : base;
+}
+
 export function buildSeoProductName(product: {
   name: string | null;
   brand: string | null;
@@ -104,89 +277,7 @@ export function buildSeoProductName(product: {
   // використовується ЛИШЕ коли власне ім'я товару порожнє/сміттєве
   fallbackName?: string | null;
 }): string {
-  // Ручний SEO-оверрайд (data/seo-overrides.ts) — якщо для артикула
-  // заданий h1, він ПОВНІСТЮ перекриває автошаблон нижче: вигадати
-  // такий точний людський текст ("Кронштейн радара сліпих зон
-  // Golf 7") автоматично неможливо, тому це свідомо ручний контент
-  const override = getSeoOverride(product.article);
-  if (override?.h1) return override.h1;
-
-  // Власна назва непридатна (порожня, "-", "Зп"...) -> назва з іншого
-  // прайсу того ж артикула, якщо вона знайдена (loadProduct)
-  const ownNameUsable = (buildCleanProductName(product.name)?.length ?? 0) >= 3;
-  const sourceName = ownNameUsable ? product.name : product.fallbackName || product.name;
-
-  // buildCleanProductName (lib/productNameCleanup.ts) — механічне
-  // форматування сирого product.name ЛИШЕ для показу/визначення
-  // категорії: службові префікси постачальника ("A1/"), скорочення
-  // ("К-Т"), "Акция" на початку, суцільний КАПС. Сам products.name у
-  // базі не змінюється — це окрема функція, яка викликається саме тут
-  const cleanName = buildCleanProductName(sourceName);
-  // КРОК 2 (lib/productNameTranslation.ts): та сама назва, переведена на
-  // українську за словником (зі страховкою) + курований регістр марок.
-  // Використовується ЛИШЕ як видима назва в H1/title, а категорія
-  // визначається з очищеної (КРОК 1) назви вище — вона розпізнає і
-  // російські, і українські слова
-  const displayName = buildDisplayProductName(sourceName);
-  const usableDisplayName = displayName && displayName.length >= 3 ? displayName : null;
-  // buildCleanProductName (з КРОКУ 1) гарантує лише "не порожньо" —
-  // для сирих імен на кшталт "-" чи "Зп" вона все одно поверне щось
-  // (сире ім'я без префікса), але це "щось" — сміттєвий текст без
-  // жодної інформації про деталь. Тому тут ДОДАТКОВО: якщо результат
-  // коротший за 3 символи, він взагалі не використовується як назва —
-  // замість нього H1/title збирається з Бренд+Артикул (це завжди є в
-  // базі і завжди осмислене), так само як і при cleanName === null
-  const usableCleanName = cleanName && cleanName.length >= 3 ? cleanName : null;
-
-  // detectCategoryForProductH1 (а не detectCategoryForProductName) —
-  // враховує вузькі категорії "по машині" (напр. "...Daewoo Lanos"),
-  // але ЛИШЕ якщо марка/модель ЦЬОГО товару реально їм відповідають
-  // (lib/categories.ts, narrowCategoryMatchesVehicle) — інакше товар
-  // з геть іншою маркою міг показати чужу модель авто в H1 (знайдений
-  // баг: AJUSA 11059300 для CITROËN показував "...Daewoo Lanos")
-  const category = detectCategoryForProductH1(usableCleanName, product.carMake, product.carModel);
-  const categoryLabel = category ? category.itemName ?? category.name : null;
-  // Вузькі категорії "по машині" вже містять марку авто в самій назві
-  // ("...Suzuki SX4") — якщо бренд деталі (product.brand) ТОЙ САМИЙ, що
-  // й ця марка (напр. деталь від офіційного виробника авто, продається
-  // під його ж брендом — "SUZUKI 2478479C10" для категорії "...Suzuki
-  // SX4"), додавати бренд ще раз не треба: вийшло б "...Suzuki SX4
-  // SUZUKI 2478479C10" — те саме слово двічі
-  const brandDuplicatesCategoryName =
-    Boolean(category?.modelGroup) && Boolean(product.brand) && Boolean(categoryLabel) && brandMatchesWord(categoryLabel!, product.brand!);
-  const base = category
-    ? [categoryLabel, brandDuplicatesCategoryName ? null : product.brand, product.article].filter(Boolean).join(' ')
-    : usableDisplayName || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
-
-  // category.modelGroup заповнений ЛИШЕ у вузьких категорій "по
-  // машині" (широкі його ніколи не задають) — якщо base вже прийшов
-  // саме з такої категорії (тобто detectCategoryForProductH1 знайшов
-  // реальний збіг марки/моделі товару), модель авто вже є в самій
-  // назві категорії ("Комплект прокладок двигуна Suzuki SX4") — і
-  // додавати ЩЕ РАЗ "для Suzuki SX4" нижче не потрібно, вийшло б
-  // подвоєння
-  if (!product.carMake || category?.modelGroup) return base;
-
-  // cleanApplicability (lib/carModelTranslation.ts) повертає null,
-  // якщо застосовність ненадійна (сирий код "#..." чи нерозпізнане
-  // російське слово) — тоді "для ..." взагалі не додається, краще
-  // взагалі не показати застосовність, ніж показати зламаний текст
-  const cleanedModel = cleanApplicability(product.carModel);
-  if (cleanedModel === null) return base;
-
-  const rawMake = product.carMake.trim();
-  const makeDisplay = formatCarMakeDisplay(rawMake);
-  // Деякі постачальники записують carModel уже ІЗ повторенням марки
-  // всередині ("MAZDA 323 (BJ)..." при carMake "MAZDA") — без цієї
-  // перевірки вийшло б подвоєння "для Mazda MAZDA 323...". Якщо
-  // модель уже починається з марки — просто замінюємо це сире
-  // написання на курировану назву замість того, щоб додавати марку
-  // ще раз
-  const modelAlreadyHasMake = cleanedModel.toUpperCase().startsWith(rawMake.toUpperCase());
-  const vehicle = modelAlreadyHasMake
-    ? [makeDisplay, cleanedModel.slice(rawMake.length).trim()].filter(Boolean).join(' ')
-    : [makeDisplay, cleanedModel].filter(Boolean).join(' ');
-  return `${base} для ${vehicle}`;
+  return assembleSeoName(buildSeoNameParts(product));
 }
 
 // Ціна для meta description/title — той самий формат округлення
@@ -300,21 +391,40 @@ export function buildSeoMetaTitle(product: {
   const override = getSeoOverride(product.article);
   if (override?.title) return override.title;
 
-  const displayName = buildSeoProductName(product);
+  const parts = buildSeoNameParts(product);
+  const suffixes = [META_TITLE_SUFFIX_FULL, META_TITLE_SUFFIX_MID, META_TITLE_SUFFIX_MIN];
 
-  const withFullSuffix = `${displayName}${META_TITLE_SUFFIX_FULL}`;
-  if (withFullSuffix.length <= META_TITLE_MAX_LENGTH) return withFullSuffix;
+  // Ручний override.h1 — готовий рядок без частин: старий спосіб (усі
+  // суфікси, далі обрізка всього рядка по межі слова)
+  if (parts.fixedH1 !== null) {
+    for (const suffix of suffixes) {
+      if ((parts.fixedH1 + suffix).length <= META_TITLE_MAX_LENGTH) return parts.fixedH1 + suffix;
+    }
+    return `${truncateAtWordBoundary(parts.fixedH1, META_TITLE_MAX_LENGTH - META_TITLE_SUFFIX_MIN.length)}${META_TITLE_SUFFIX_MIN}`;
+  }
 
-  const withMidSuffix = `${displayName}${META_TITLE_SUFFIX_MID}`;
-  if (withMidSuffix.length <= META_TITLE_MAX_LENGTH) return withMidSuffix;
+  // Бренд і артикул НІКОЛИ не обрізаються. Що скорочується (у порядку):
+  // суфікс (" | DominatorParts", ", ціна") -> "для Марка Модель" -> САМА
+  // назва (по одному слову з кінця, без висячих прийменників). Назва
+  // скорочується останньою — тому спершу перебираємо довжину назви
+  const words = parts.name.split(/\s+/).filter(Boolean);
+  for (let count = words.length; count >= 0; count--) {
+    let name = words.slice(0, count).join(' ').replace(/[\s,;:\-–—(/]+$/, '');
+    while (DANGLING_TRAILING_WORD_RE.test(name) && name.replace(DANGLING_TRAILING_WORD_RE, '').trim()) {
+      name = name.replace(DANGLING_TRAILING_WORD_RE, '');
+    }
+    for (const includeTail of [true, false]) {
+      if (includeTail && !parts.tail) continue;
+      const core = assembleSeoName(parts, name, includeTail);
+      for (const suffix of suffixes) {
+        if ((core + suffix).length <= META_TITLE_MAX_LENGTH) return core + suffix;
+      }
+    }
+  }
 
-  const withMinSuffix = `${displayName}${META_TITLE_SUFFIX_MIN}`;
-  if (withMinSuffix.length <= META_TITLE_MAX_LENGTH) return withMinSuffix;
-
-  // Навіть з найкоротшим суфіксом задовго — лише тепер ріжемо саму
-  // назву товару, зберігаючи " — купити" незмінним
-  const base = truncateAtWordBoundary(displayName, META_TITLE_MAX_LENGTH - META_TITLE_SUFFIX_MIN.length);
-  return `${base}${META_TITLE_SUFFIX_MIN}`;
+  // Навіть "бренд + артикул + ' — купити'" довші за ліміт — усе одно не
+  // обрізаємо їх
+  return assembleSeoName(parts, '', false) + META_TITLE_SUFFIX_MIN;
 }
 
 // Готові FAQ-питання/відповіді для показу на сторінці ТА для FAQPage
@@ -908,12 +1018,15 @@ export async function loadProductPageData(
     },
   ];
 
+  // Рядок показується, лише якщо назва КРОКУ 1 відрізняється від назви,
+  // що потрапила в H1: коли H1 зібрано з перекладеної назви — порівнюємо
+  // з нею; коли переклад відкотився і H1 = "Категорія Бренд Артикул" —
+  // у H1 назви взагалі нема, тож рядок показуємо
   const stage1Name = buildCleanProductName(product.name);
-  const translatedName = buildDisplayProductName(product.name);
+  const translatedDetailed = buildDisplayProductNameDetailed(product.name);
+  const nameInH1 = translatedDetailed?.safe ? translatedDetailed.text : '';
   const supplierCatalogName =
-    stage1Name && stage1Name.length >= 3 && stage1Name.toLowerCase() !== (translatedName ?? '').toLowerCase()
-      ? stage1Name
-      : null;
+    stage1Name && stage1Name.length >= 3 && stage1Name.toLowerCase() !== nameInH1.toLowerCase() ? stage1Name : null;
 
   return {
     product: personalizedProduct,
