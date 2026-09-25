@@ -647,6 +647,26 @@ export default function ProductsScreen() {
                   onChange={(e) => setEditRetailPrice(e.target.value)}
                   autoFocus
                 />
+                {/* Закупка — только для справки, не редактируется: её
+                    перезаписывает каждая загрузка прайса поставщика.
+                    Наценка считается от того, что сейчас введено в поле
+                    выше, — видно, как правка розницы меняет наценку */}
+                {typeof editingProduct.costPrice === 'number' && (() => {
+                  const cost = editingProduct.costPrice;
+                  const retail = parseFloat(editRetailPrice.replace(',', '.'));
+                  const markup =
+                    cost > 0 && Number.isFinite(retail) ? ((retail - cost) / cost) * 100 : null;
+                  return (
+                    <p className="text-[11px] mt-1 font-mono" style={{ color: 'var(--ink-faint)' }}>
+                      Цена поставщика: {formatMoney(cost)} ₴
+                      {markup !== null && (
+                        <span style={{ color: markup < 0 ? 'var(--bad)' : undefined }}>
+                          {' '}· наценка {markup.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%
+                        </span>
+                      )}
+                    </p>
+                  );
+                })()}
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
