@@ -10,11 +10,16 @@
 
 import { CATEGORIES } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
+import { hubPath } from '@/lib/modelHubs';
+import { loadVisibleHubs } from '@/lib/modelHubData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildUrlsetXml, xmlResponse, type SitemapUrlEntry } from '@/lib/sitemapXml';
 
 export const runtime = 'nodejs';
-export const revalidate = 86400;
+// Раніше сайтмап був статичним (збирався на білді) — тепер у ньому хаби
+// моделей, для яких потрібна база, а на білді Vercel бази немає. Тому
+// рендер на запит + кеш на CDN на добу (Cache-Control нижче)
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const today = new Date().toISOString().slice(0, 10);
@@ -62,6 +67,18 @@ export async function GET() {
     priority: 0.6,
   }));
 
-  const xml = buildUrlsetXml([...staticPages, ...categoryPages, ...makePages, ...makeToPages]);
-  return xmlResponse(xml);
+  // Хаби моделей — лише видимі (>= 30 товарів, lib/modelHubData.ts)
+  // База недоступна — сайтмап усе одно віддаємо, лише без хабів
+  const visibleHubs = await loadVisibleHubs().catch(() => []);
+  const hubPages: SitemapUrlEntry[] = visibleHubs.map((hub) => ({
+    loc: `${SITE_URL}${hubPath(hub)}`,
+    lastmod: today,
+    changefreq: 'daily',
+    priority: 0.7,
+  }));
+
+  const xml = buildUrlsetXml([...staticPages, ...categoryPages, ...makePages, ...makeToPages, ...hubPages]);
+  const response = xmlResponse(xml);
+  response.headers.set('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=3600');
+  return response;
 }

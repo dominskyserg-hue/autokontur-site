@@ -24,6 +24,8 @@ import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { buildDisplayProductNameDetailed } from '@/lib/productNameTranslation';
 import { brandsAreSameFamily } from '@/lib/brandFamilies';
 import { ensureUkrainianCorpusFresh } from '@/lib/ukrainianCorpus';
+import { findHubForTecdocModel, hubPath } from '@/lib/modelHubs';
+import { loadVisibleHubs } from '@/lib/modelHubData';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -778,6 +780,9 @@ export interface TecdocCompatibilityItem {
   // сторінці, а не подаватись як офіційний каталог виробника — див.
   // schema.sql, розділ 27
   sourceNote: string | null;
+  // Хаб моделі (/marky/{марка}/{модель}, lib/modelHubs.ts), якщо цей запис
+  // TecDoc входить у видимий хаб — бейдж веде туди, а не на сторінку марки
+  hubPath: string | null;
 }
 
 const TECDOC_CROSSES_LIMIT = 30;
@@ -864,8 +869,11 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
     [article]
   );
 
+  const visibleHubs = await loadVisibleHubs();
   const items: TecdocCompatibilityItem[] = result.rows.map((row) => {
     const carMake = getCarMakeByDbValue(row.make);
+    const hub = row.model ? findHubForTecdocModel(row.make, row.model) : undefined;
+    const hubVisible = Boolean(hub && visibleHubs.includes(hub));
     return {
       // Показуємо власну (гарно відформатовану) назву марки, якщо вона
       // є в курованому списку lib/carMakes.ts (напр. "MERCEDES-BENZ" з
@@ -878,6 +886,7 @@ const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
       yearTo: row.year_to,
       engine: row.engine || '',
       sourceNote: row.source_note || null,
+      hubPath: hub && hubVisible ? hubPath(hub) : null,
     };
   });
 

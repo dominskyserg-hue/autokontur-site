@@ -26,6 +26,8 @@ import { CATEGORIES, getCategoryBySlug, findNarrowPageForVehicle } from '@/lib/c
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
+import { findHubsForNarrowCategory, hubPath } from '@/lib/modelHubs';
+import { loadVisibleHubs } from '@/lib/modelHubData';
 import CategoryVehicleFilter from '@/components/CategoryVehicleFilter';
 import SiteHeader from '@/components/SiteHeader';
 import { getCarMakeBySlug } from '@/lib/carMakes';
@@ -322,6 +324,10 @@ export default async function CategoryPage({
   const category = getCategoryBySlug(slug);
   if (!category) notFound();
 
+  // Хаби моделі для вузької сторінки (за modelGroup), лише видимі (>= 30 товарів)
+  const visibleHubs = category.modelGroup ? await loadVisibleHubs() : [];
+  const modelHubs = findHubsForNarrowCategory(category).filter((hub) => visibleHubs.includes(hub));
+
   const make = marka ? getCarMakeBySlug(marka) : undefined;
 
   // ==================== ДЕДУПЛІКАЦІЯ: РЕДИРЕКТ НА ГОТОВУ ВУЗЬКУ СТОРІНКУ ====================
@@ -426,6 +432,17 @@ export default async function CategoryPage({
           <p className="max-w-2xl text-sm" style={{ color: TECH_MUTED }}>
             {category.intro}
           </p>
+          {/* Вузька сторінка "модель + деталь" -> хаб моделі з усіма
+              запчастинами цього покоління (lib/modelHubs.ts) */}
+          {modelHubs.length > 0 && (
+            <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+              {modelHubs.map((hub) => (
+                <Link key={hub.slug} href={hubPath(hub)} className="font-medium underline" style={{ color: TECH_ACCENT_BRIGHT }}>
+                  Всі запчастини для {getCarMakeBySlug(hub.makeSlug)?.name} {hub.label} →
+                </Link>
+              ))}
+            </p>
+          )}
           {make && (
             <p className="mt-2 text-xs" style={{ color: TECH_FAINT }}>
               Фільтр за маркою: <strong style={{ color: TECH_INK }}>{make.name}</strong> ·{' '}

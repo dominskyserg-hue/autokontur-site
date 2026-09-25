@@ -17,6 +17,8 @@ import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CAR_MAKES, getCarMakeBySlug, buildMakeWhereClause } from '@/lib/carMakes';
 import { getModelLandingsForMake } from '@/lib/categories';
+import { hubPath } from '@/lib/modelHubs';
+import { loadVisibleHubs } from '@/lib/modelHubData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import SiteHeader from '@/components/SiteHeader';
@@ -229,7 +231,17 @@ export default async function CarMakePage({
   // Моделі цієї марки, для яких уже є готові посадкові сторінки
   // (lib/categories.ts) — раніше з /marky/[make] на них не було
   // жодного посилання, Google міг знайти їх лише через sitemap
-  const modelLandings = getModelLandingsForMake(make.dbValues);
+  // Спершу хаби моделей (усі запчастини покоління, lib/modelHubs.ts) —
+  // лише видимі (>= 30 товарів); далі моделі, для яких хабу ще немає, —
+  // як раніше, на першу вузьку сторінку "модель + деталь"
+  const hubs = (await loadVisibleHubs()).filter((hub) => hub.makeSlug === slug);
+  const coveredGroups = new Set(hubs.flatMap((hub) => hub.modelGroups));
+  const modelLinks = [
+    ...hubs.map((hub) => ({ key: `hub-${hub.slug}`, href: hubPath(hub), label: `${make.name} ${hub.label}` })),
+    ...getModelLandingsForMake(make.dbValues)
+      .filter((landing) => !coveredGroups.has(landing.modelGroup))
+      .map((landing) => ({ key: landing.modelGroup, href: `/category/${landing.slug}`, label: landing.modelLabel })),
+  ];
 
   // Порядок ТОЧНО повторює видиму <nav> нижче — Google звіряє одне з
   // іншим
@@ -293,20 +305,20 @@ export default async function CarMakePage({
             раніше з цієї сторінки на них не було жодного посилання,
             і Google міг знайти їх лише через sitemap, а не через
             внутрішню навігацію сайту */}
-        {modelLandings.length > 0 && (
+        {modelLinks.length > 0 && (
           <section className="mb-8">
             <h2 className="mb-3 text-sm font-semibold" style={{ color: TECH_FAINT }}>
               Моделі {make.name}
             </h2>
             <div className="flex flex-wrap gap-2">
-              {modelLandings.map((model) => (
+              {modelLinks.map((model) => (
                 <Link
-                  key={model.modelGroup}
-                  href={`/category/${model.slug}`}
+                  key={model.key}
+                  href={model.href}
                   className="rounded-full px-3.5 py-2 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
                   style={{ border: `1px solid ${TECH_BORDER}`, color: TECH_ACCENT_BRIGHT, background: TECH_SURFACE_2 }}
                 >
-                  {model.modelLabel}
+                  {model.label}
                 </Link>
               ))}
             </div>

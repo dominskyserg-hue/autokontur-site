@@ -669,8 +669,10 @@ function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
   // готової сторінки під цю модель ще нема — лишається старий
   // фолбек на сторінку марки; якщо марка взагалі некурована — просто
   // текст без посилання
+  // Пріоритет: хаб моделі (усі запчастини цього покоління, lib/modelHubs.ts)
+  // -> вузька сторінка "модель + деталь" -> сторінка марки
   const narrowPage = item.model ? findAnyNarrowPageForVehicle(item.makeRaw, item.model) : undefined;
-  const href = narrowPage ? `/category/${narrowPage.slug}` : item.makeSlug ? `/marky/${item.makeSlug}` : null;
+  const href = item.hubPath ?? (narrowPage ? `/category/${narrowPage.slug}` : item.makeSlug ? `/marky/${item.makeSlug}` : null);
 
   return href ? (
     <Link

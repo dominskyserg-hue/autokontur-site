@@ -709,7 +709,10 @@ export const CATEGORIES: CategoryDef[] = [
     // підтягнув чужі товари (перевірено на практиці — саме так сталося
     // з попереднім варіантом сторінки повітряного фільтра нижче)
     matchGroups: [['колодк'], ['перед'], ['cl_, cm_']],
-    tecdocVehicle: { make: 'HONDA', models: ['ACCORD Mk VII (CG, CK)', 'ACCORD Mk VII Coupe (CG)', 'ACCORD Mk VII Kombi (CF)', 'ACCORD Mk VII Schrägheck (CH)', 'ACCORD VII Tourer (CM)'] },
+    // Accord VII у Європі/Україні = седан CL (у TecDoc — 'ACCORD EURO VIII (CL)') +
+    // універсал CM. Американський Mk VII (CG), а також CF/CH (європейське
+    // 6-те покоління) сюди НЕ входять
+    tecdocVehicle: { make: 'HONDA', models: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'] },
     hideFromIndex: true,
     modelGroup: 'honda-accord-7',
     modelLabel: 'Honda Accord VII',
@@ -728,7 +731,10 @@ export const CATEGORIES: CategoryDef[] = [
     // це в чернетці сюди підтягнувся чужий товар (SHAFER SX49041,
     // Accord VIII USA 08-15) — побачили на живій перевірці й прибрали
     matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['2.2i-ctdi 02.10-']],
-    tecdocVehicle: { make: 'HONDA', models: ['ACCORD Mk VII (CG, CK)', 'ACCORD Mk VII Coupe (CG)', 'ACCORD Mk VII Kombi (CF)', 'ACCORD Mk VII Schrägheck (CH)', 'ACCORD VII Tourer (CM)'] },
+    // Accord VII у Європі/Україні = седан CL (у TecDoc — 'ACCORD EURO VIII (CL)') +
+    // універсал CM. Американський Mk VII (CG), а також CF/CH (європейське
+    // 6-те покоління) сюди НЕ входять
+    tecdocVehicle: { make: 'HONDA', models: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'] },
     hideFromIndex: true,
     modelGroup: 'honda-accord-7',
     modelLabel: 'Honda Accord VII',
@@ -1151,13 +1157,8 @@ export const CATEGORIES: CategoryDef[] = [
     matchGroups: [['прокладк']],
     tecdocVehicle: {
       make: 'HONDA',
-      models: [
-        'ACCORD Mk VII (CG, CK)',
-        'ACCORD Mk VII Coupe (CG)',
-        'ACCORD Mk VII Kombi (CF)',
-        'ACCORD Mk VII Schrägheck (CH)',
-        'ACCORD VII Tourer (CM)',
-      ],
+      // Accord VII = CL + CM (див. accord-7-kolodky-peredni)
+      models: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'],
     },
     hideFromIndex: true,
     modelGroup: 'honda-accord-7',
