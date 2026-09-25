@@ -266,6 +266,21 @@ function assembleSeoName(parts: SeoNameParts, nameOverride?: string, includeTail
   return includeTail && parts.tail ? `${base} ${parts.tail}` : base;
 }
 
+// Назва-частина, що реально потрапила в H1 (після перекладу/обрізки/
+// заміни на itemName категорії) — для рядка "Назва в каталозі
+// постачальника": він показується, лише якщо відрізняється від неї
+export function getSeoNameInH1(product: {
+  name: string | null;
+  brand: string | null;
+  article: string;
+  carMake?: string | null;
+  carModel?: string | null;
+  fallbackName?: string | null;
+}): string {
+  const parts = buildSeoNameParts(product);
+  return parts.fixedH1 ?? parts.name;
+}
+
 export function buildSeoProductName(product: {
   name: string | null;
   brand: string | null;
@@ -1023,8 +1038,7 @@ export async function loadProductPageData(
   // з нею; коли переклад відкотився і H1 = "Категорія Бренд Артикул" —
   // у H1 назви взагалі нема, тож рядок показуємо
   const stage1Name = buildCleanProductName(product.name);
-  const translatedDetailed = buildDisplayProductNameDetailed(product.name);
-  const nameInH1 = translatedDetailed?.safe ? translatedDetailed.text : '';
+  const nameInH1 = getSeoNameInH1(personalizedProduct);
   const supplierCatalogName =
     stage1Name && stage1Name.length >= 3 && stage1Name.toLowerCase() !== nameInH1.toLowerCase() ? stage1Name : null;
 
