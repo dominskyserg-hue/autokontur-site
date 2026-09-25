@@ -2321,6 +2321,23 @@ CREATE INDEX IF NOT EXISTS idx_products_name_search_compact_trgm
 
 
 -- ============================================================
+-- Индексы для ОБЩЕГО поиска (lib/productSearch.ts, buildTextSearchClause)
+-- ============================================================
+-- Каждая ветка поиска (артикул, бренд, марка авто, модель авто,
+-- совместимость TecDoc) — отдельный подзапрос p.id IN (... UNION ...) со
+-- своим индексом. Без них запрос перечитывал все ~360 тыс. товаров
+-- (1.4-3 c), с ними — 2-230 мс на стороне БД. Индексы pg_trgm GIN
+-- ускоряют ILIKE '%...%'; расширение pg_trgm включено выше (name_search)
+CREATE INDEX IF NOT EXISTS idx_products_article_trgm ON products USING gin (article gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_products_brand_trgm ON products USING gin (brand gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_products_car_make_trgm ON products USING gin (car_make gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_products_car_model_trgm ON products USING gin (car_model gin_trgm_ops);
+-- UPPER(...) = ANY(...) в ветках "совместимость с авто"
+CREATE INDEX IF NOT EXISTS idx_products_car_make_upper ON products (UPPER(car_make));
+CREATE INDEX IF NOT EXISTS idx_tecdoc_compat_make_upper ON tecdoc_compatibility (UPPER(make));
+
+
+-- ============================================================
 -- ГОТОВО
 -- ============================================================
 -- global_exchange_rates ни на что не ссылается и на неё никто не

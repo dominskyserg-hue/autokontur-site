@@ -36,6 +36,16 @@ export function cleanArticle(rawValue: unknown): string {
 // викликач сам вставляє повернутий clause у свій SQL і додає params
 // до свого масиву значень (values.push(...params)), startParamIndex —
 // це $-номер, з якого продовжувати нумерацію
+//
+// ШВИДКІСТЬ: раніше всі гілки пошуку (артикул, бренд, марка, модель,
+// кросс-номери, TecDoc, назва, "деталь + авто") були зʼєднані через OR
+// в одній умові над products — а один OR із неіндексованою гілкою
+// змушує Postgres перечитати ВСІ ~360 тис. рядків (1.4-2.5 c). Тепер
+// кожна гілка — окремий підзапит "SELECT id ...", який сам використовує
+// свій індекс (pg_trgm GIN на article/brand/car_make/car_model/
+// name_search, btree на tecdoc_*), а підсумкова умова — це
+// p.id IN (гілка1 UNION гілка2 UNION ...). Результат ТОЙ САМИЙ (об'єднання
+// множин id) — змінилась лише форма запиту
 export async function buildTextSearchClause(
   pool: Pool,
   search: string,
@@ -49,28 +59,27 @@ export async function buildTextSearchClause(
   const textPlaceholder = `$${startParamIndex + values.length - 2}`;
   const exactArticlePlaceholder = `$${startParamIndex + values.length - 1}`;
 
-  const orParts = [
-    `p.article ILIKE ${articlePlaceholder}`,
-    `p.brand ILIKE ${textPlaceholder}`,
-    `p.car_make ILIKE ${textPlaceholder}`,
-    `p.car_model ILIKE ${textPlaceholder}`,
-    `EXISTS (
-      SELECT 1
-      FROM cross_reference_members mine
-      JOIN cross_reference_members other ON other.group_id = mine.group_id
-      WHERE mine.product_id = p.id AND other.part_number ILIKE ${articlePlaceholder}
-    )`,
-    `EXISTS (
-      SELECT 1 FROM tecdoc_crosses tc
-      WHERE tc.article_a = ${exactArticlePlaceholder} AND tc.article_b = p.article
-    )`,
+  // Кожен елемент — повний "SELECT <id> ..." (одна колонка id)
+  const branches: string[] = [
+    `SELECT p.id FROM products p WHERE p.article ILIKE ${articlePlaceholder}`,
+    `SELECT p.id FROM products p WHERE p.brand ILIKE ${textPlaceholder}`,
+    `SELECT p.id FROM products p WHERE p.car_make ILIKE ${textPlaceholder}`,
+    `SELECT p.id FROM products p WHERE p.car_model ILIKE ${textPlaceholder}`,
+    `SELECT mine.product_id AS id
+       FROM cross_reference_members mine
+       JOIN cross_reference_members other ON other.group_id = mine.group_id
+       WHERE mine.product_id IS NOT NULL AND other.part_number ILIKE ${articlePlaceholder}`,
+    `SELECT p.id
+       FROM tecdoc_crosses tc
+       JOIN products p ON p.article = tc.article_b
+       WHERE tc.article_a = ${exactArticlePlaceholder}`,
   ];
 
   const dictionary = await loadSynonymDictionary(pool);
   const expanded = expandSearchQuery(search, dictionary);
   const synonymClause = buildSynonymWhereClause(expanded, startParamIndex + values.length);
   if (synonymClause) {
-    orParts.push(`(${synonymClause.clause})`);
+    branches.push(`SELECT p.id FROM products p WHERE ${synonymClause.clause}`);
     values.push(...synonymClause.params);
   }
 
@@ -84,52 +93,48 @@ export async function buildTextSearchClause(
       categoryClauseSql = `(${categoryClause.clause})`;
     }
 
-    const buildCarCompatSql = (includeModel: boolean): string => {
-      values.push(carRef!.makeDbValues);
+    // "Сумісність з авто": (1) власні поля товару АБО (2) TecDoc. Це
+    // дві окремі гілки (кожна з власним індексом), а не OR в одній
+    const addCarCompatBranches = (includeModel: boolean): void => {
+      values.push(carRef.makeDbValues);
       const ownParts = [`UPPER(p.car_make) = ANY($${startParamIndex + values.length - 1}::text[])`];
-      values.push(carRef!.makeDbValues);
+      values.push(carRef.makeDbValues);
       const tecdocParts = [`UPPER(tc2.make) = ANY($${startParamIndex + values.length - 1}::text[])`];
 
-      if (includeModel && carRef!.modelHint) {
-        values.push(`%${carRef!.modelHint}%`);
+      if (includeModel && carRef.modelHint) {
+        values.push(`%${carRef.modelHint}%`);
         ownParts.push(`p.car_model ILIKE $${startParamIndex + values.length - 1}`);
-        values.push(`%${carRef!.modelHint}%`);
+        values.push(`%${carRef.modelHint}%`);
         tecdocParts.push(`tc2.model ILIKE $${startParamIndex + values.length - 1}`);
       }
 
-      if (carRef!.year) {
-        values.push(`%${carRef!.year}%`);
+      if (carRef.year) {
+        values.push(`%${carRef.year}%`);
         ownParts.push(`p.car_year ILIKE $${startParamIndex + values.length - 1}`);
-        values.push(carRef!.year);
+        values.push(carRef.year);
         tecdocParts.push(
           `$${startParamIndex + values.length - 1}::int BETWEEN COALESCE(tc2.year_from, 1900) AND COALESCE(tc2.year_to, 2100)`
         );
       }
 
-      return `(
-        (${ownParts.join(' AND ')})
-        OR EXISTS (
-          SELECT 1 FROM tecdoc_compatibility tc2
-          WHERE tc2.brand = p.brand AND tc2.article = p.article
-          AND ${tecdocParts.join(' AND ')}
-        )
-      )`;
+      const categoryPart = categoryClauseSql ? `${categoryClauseSql} AND ` : '';
+      branches.push(`SELECT p.id FROM products p WHERE ${categoryPart}${ownParts.join(' AND ')}`);
+      branches.push(
+        `SELECT p.id
+           FROM tecdoc_compatibility tc2
+           JOIN products p ON p.brand = tc2.brand AND p.article = tc2.article
+           WHERE ${categoryPart}${tecdocParts.join(' AND ')}`
+      );
     };
 
-    const preciseParts: string[] = [];
-    if (categoryClauseSql) preciseParts.push(categoryClauseSql);
-    preciseParts.push(buildCarCompatSql(true));
-    orParts.push(`(${preciseParts.join('\n        AND ')})`);
-
-    if (carRef.modelHint) {
-      const fallbackParts: string[] = [];
-      if (categoryClauseSql) fallbackParts.push(categoryClauseSql);
-      fallbackParts.push(buildCarCompatSql(false));
-      orParts.push(`(${fallbackParts.join('\n        AND ')})`);
-    }
+    // Раніше додавались дві гілки: "точна" (марка + модель + рік) і "запасна"
+    // (лише марка + рік) — але запасна ЗАВЖДИ ширша за точну (та сама умова
+    // без моделі), тож їх обʼєднання (OR/UNION) дорівнює саме запасній.
+    // Точна гілка нічого не додавала, тільки коштувала час — прибрана
+    addCarCompatBranches(false);
   }
 
-  return { clause: `(${orParts.join('\n      OR ')})`, params: values };
+  return { clause: `p.id IN (\n      ${branches.join('\n      UNION\n      ')}\n    )`, params: values };
 }
 
 export interface BotSearchResult {
