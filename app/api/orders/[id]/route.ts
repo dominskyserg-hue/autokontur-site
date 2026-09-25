@@ -425,8 +425,15 @@ async function shipOrder(orderId: string): Promise<NextResponse> {
 // шапку друкованих документів (lib/documents/partials.ts,
 // renderClientInfoGrid). Окремого екрану для них нема — той самий
 // PATCH, що вже оновлює статус і ТТН
+// customerName/customerSurname/customerPhone — контакты клиента можно
+// поправить прямо в карточке заказа (особенно для "Купить в 1 клик",
+// где покупатель вводит лишь одно поле имени). Именно эти поля потом
+// уходят получателем в ТТН (app/api/orders/[id]/create-ttn/route.ts)
 interface PatchOrderRequestBody {
   status?: string;
+  customerName?: string;
+  customerSurname?: string;
+  customerPhone?: string;
   ttnNumber?: string | null;
   vin?: string | null;
   carInfo?: string | null;
@@ -456,10 +463,13 @@ export async function PATCH(
     body.status === undefined &&
     body.ttnNumber === undefined &&
     body.vin === undefined &&
-    body.carInfo === undefined
+    body.carInfo === undefined &&
+    body.customerName === undefined &&
+    body.customerSurname === undefined &&
+    body.customerPhone === undefined
   ) {
     return NextResponse.json(
-      { error: 'Укажите статус, номер ТТН, VIN и/или автомобиль для обновления.' },
+      { error: 'Укажите статус, номер ТТН, VIN, автомобиль и/или контакты клиента для обновления.' },
       { status: 400 }
     );
   }
@@ -469,6 +479,25 @@ export async function PATCH(
       { error: `Укажите статус — один из: ${STATUS_VALUES.join(', ')}.` },
       { status: 400 }
     );
+  }
+
+  const nextCustomerName = body.customerName !== undefined ? String(body.customerName ?? '').trim() : undefined;
+  const nextCustomerSurname = body.customerSurname !== undefined ? String(body.customerSurname ?? '').trim() : undefined;
+  const nextCustomerPhone = body.customerPhone !== undefined ? String(body.customerPhone ?? '').trim() : undefined;
+
+  if (nextCustomerName !== undefined && !nextCustomerName) {
+    return NextResponse.json({ error: "Ім'я клієнта не може бути порожнім." }, { status: 400 });
+  }
+  if (nextCustomerSurname !== undefined && !nextCustomerSurname) {
+    return NextResponse.json({ error: 'Прізвище клієнта не може бути порожнім.' }, { status: 400 });
+  }
+  if (nextCustomerPhone !== undefined) {
+    // Та же проверка телефона, что и при оформлении заказа
+    // (app/api/orders/create/route.ts, isValidPhone)
+    const digitsOnly = nextCustomerPhone.replace(/\D/g, '');
+    if (digitsOnly.length < 9 || digitsOnly.length > 13) {
+      return NextResponse.json({ error: 'Введіть коректний номер телефону клієнта.' }, { status: 400 });
+    }
   }
 
   const nextStatus = body.status;
@@ -506,9 +535,12 @@ export async function PATCH(
           ttn_number = CASE WHEN $3 THEN $4 ELSE ttn_number END,
           vin = CASE WHEN $5 THEN $6 ELSE vin END,
           car_info = CASE WHEN $7 THEN $8 ELSE car_info END,
+          customer_name = COALESCE($9, customer_name),
+          customer_surname = COALESCE($10, customer_surname),
+          customer_phone = COALESCE($11, customer_phone),
           updated_at = now()
       WHERE id = $1
-      RETURNING id, customer_name, customer_phone, status, ttn_number, vin, car_info, created_at, updated_at
+      RETURNING id, customer_name, customer_surname, customer_phone, status, ttn_number, vin, car_info, created_at, updated_at
       `,
       [
         id,
@@ -519,6 +551,9 @@ export async function PATCH(
         nextVin ?? null,
         nextCarInfo !== undefined,
         nextCarInfo ?? null,
+        nextCustomerName ?? null,
+        nextCustomerSurname ?? null,
+        nextCustomerPhone ?? null,
       ]
     );
 
@@ -545,6 +580,7 @@ export async function PATCH(
       order: {
         id: row.id,
         customerName: row.customer_name,
+        customerSurname: row.customer_surname,
         customerPhone: row.customer_phone,
         status: row.status,
         ttnNumber: row.ttn_number,

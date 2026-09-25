@@ -4,8 +4,8 @@
 //
 // Шаги (все — реальные запросы к API Новой Пошти):
 //   1. Найти/создать получателя как Counterparty (PrivatePerson)
-//   2. Получить его ContactPerson (Нова Пошта создаёт его сама при
-//      сохранении получателя, но Ref нужно запросить отдельным вызовом)
+//   2. Взять его ContactPerson прямо из ответа Counterparty.save
+//      (а если его там нет — создать через ContactPerson.save)
 //   3. Создать сам документ (InternetDocument.save) — данные
 //      отправителя берутся уже готовыми из site_settings (настроены
 //      один раз в Налаштуваннях, см. lib/novaPoshta/sender.ts)
@@ -13,12 +13,17 @@
 
 import { callNovaPoshtaApi, toNovaPoshtaPhone } from './api';
 
-interface CounterpartySaveResult {
+interface ContactPersonRaw {
   Ref: string;
 }
 
-interface ContactPersonRaw {
+// Для PrivatePerson Нова Пошта повертає ОДИН спільний контрагент
+// "Приватна особа" на весь наш акаунт (його Ref однаковий для всіх
+// отримувачів), а конкретну людину — у вкладеному ContactPerson.data.
+// Саме цей вкладений контакт і треба брати для ТТН
+interface CounterpartySaveResult {
   Ref: string;
+  ContactPerson?: { success?: boolean; data?: ContactPersonRaw[] };
 }
 
 interface InternetDocumentSaveResult {
@@ -69,17 +74,30 @@ async function findOrCreateRecipientContact(recipient: RecipientInfo): Promise<{
     throw new Error('Нова Пошта не повернула отримувача після збереження.');
   }
 
-  const contactPersons = await callNovaPoshtaApi<ContactPersonRaw>('Counterparty', 'getCounterpartyContactPersons', {
-    Ref: savedCounterparty.Ref,
-    Page: '1',
-  });
+  // РАНІШЕ тут брався contactPersons[0] з getCounterpartyContactPersons —
+  // але це список УСІХ отримувачів спільного контрагента "Приватна
+  // особа", тому в кожну ТТН потрапляла одна й та сама перша людина зі
+  // списку (напр. "Антипова"), а не клієнт заказу. Тепер беремо
+  // контакт, який Нова Пошта повернула саме для цього збереження
+  let contactRecipientRef = savedCounterparty.ContactPerson?.data?.[0]?.Ref;
 
-  const contactRecipient = contactPersons[0];
-  if (!contactRecipient) {
+  // Запасний шлях, якщо вкладеного контакту у відповіді немає: явно
+  // створюємо контактну особу з даними клієнта в цьому контрагенті
+  if (!contactRecipientRef) {
+    const [savedContact] = await callNovaPoshtaApi<ContactPersonRaw>('ContactPerson', 'save', {
+      CounterpartyRef: savedCounterparty.Ref,
+      FirstName: recipient.firstName || 'Клієнт',
+      LastName: recipient.lastName || '—',
+      Phone: phone,
+    });
+    contactRecipientRef = savedContact?.Ref;
+  }
+
+  if (!contactRecipientRef) {
     throw new Error('Не вдалося отримати контактну особу отримувача.');
   }
 
-  return { recipientRef: savedCounterparty.Ref, contactRecipientRef: contactRecipient.Ref };
+  return { recipientRef: savedCounterparty.Ref, contactRecipientRef };
 }
 
 export async function createInternetDocument(

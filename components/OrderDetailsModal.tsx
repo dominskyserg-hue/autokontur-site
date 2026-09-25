@@ -109,7 +109,7 @@ interface AddItemProductOption {
   supplierName: string;
 }
 
-type SaveKey = 'status' | 'ttn' | 'vehicle';
+type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer';
 type SaveState = { state: 'idle' | 'saving' | 'saved' | 'error'; error?: string };
 const IDLE: SaveState = { state: 'idle' };
 
@@ -158,7 +158,13 @@ export default function OrderDetailsModal({
   const [ttnDraft, setTtnDraft] = useState('');
   const [vinDraft, setVinDraft] = useState('');
   const [carInfoDraft, setCarInfoDraft] = useState('');
-  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE });
+  // Контакти клієнта — редагуються прямо в картці (особливо потрібно
+  // для "Купити в 1 клік", де покупець вводить лише одне поле імені).
+  // Саме ці дані йдуть отримувачем у ТТН Нової Пошти
+  const [customerNameDraft, setCustomerNameDraft] = useState('');
+  const [customerSurnameDraft, setCustomerSurnameDraft] = useState('');
+  const [customerPhoneDraft, setCustomerPhoneDraft] = useState('');
+  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE });
 
   // ---- создание ТТН через API Новой Почты ----
   const [showCreateTtn, setShowCreateTtn] = useState(false);
@@ -276,6 +282,9 @@ export default function OrderDetailsModal({
           setTtnDraft(order.ttnNumber || '');
           setVinDraft(order.vin || '');
           setCarInfoDraft(order.carInfo || '');
+          setCustomerNameDraft(order.customerName || '');
+          setCustomerSurnameDraft(order.customerSurname || '');
+          setCustomerPhoneDraft(order.customerPhone || '');
         }
       })
       .catch((error) => {
@@ -384,6 +393,29 @@ export default function OrderDetailsModal({
     const nextVin = vinDraft.trim();
     if (nextCar === (orderDetails.carInfo || '') && nextVin === (orderDetails.vin || '')) return;
     savePatch('vehicle', { carInfo: nextCar || null, vin: nextVin || null });
+  };
+
+  // ---- контакты клиента — сохраняются вместе при потере фокуса любого поля ----
+  const handleCustomerBlur = () => {
+    if (!orderDetails) return;
+    const nextName = customerNameDraft.trim();
+    const nextSurname = customerSurnameDraft.trim();
+    const nextPhone = customerPhoneDraft.trim();
+    if (
+      nextName === (orderDetails.customerName || '') &&
+      nextSurname === (orderDetails.customerSurname || '') &&
+      nextPhone === (orderDetails.customerPhone || '')
+    ) {
+      return;
+    }
+    if (!nextName || !nextSurname || !nextPhone) {
+      setSaveState((prev) => ({
+        ...prev,
+        customer: { state: 'error', error: "Ім'я, прізвище і телефон не можуть бути порожніми" },
+      }));
+      return;
+    }
+    savePatch('customer', { customerName: nextName, customerSurname: nextSurname, customerPhone: nextPhone });
   };
 
   // ------------------------------------------------------------
@@ -811,12 +843,57 @@ export default function OrderDetailsModal({
               <div className="flex flex-col gap-4 min-w-0">
                 {/* ---- клиент и доставка ---- */}
                 <div className="p-4 rounded-md" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
-                  <h3 className="text-xs font-semibold mb-3" style={{ color: 'var(--ink-muted)' }}>
-                    КЛІЄНТ І ДОСТАВКА
-                  </h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-semibold" style={{ color: 'var(--ink-muted)' }}>
+                      КЛІЄНТ І ДОСТАВКА
+                    </h3>
+                    <SaveIndicator save={saveState.customer} />
+                  </div>
+
+                  {/* ---- контакти клієнта — редагуються, йдуть отримувачем у ТТН ---- */}
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label className="block text-[11px] mb-0.5" style={{ color: 'var(--ink-faint)' }}>
+                        Ім&apos;я
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-2.5 py-1.5 text-sm rounded-md"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                        value={customerNameDraft}
+                        onChange={(e) => setCustomerNameDraft(e.target.value)}
+                        onBlur={handleCustomerBlur}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] mb-0.5" style={{ color: 'var(--ink-faint)' }}>
+                        Прізвище
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-2.5 py-1.5 text-sm rounded-md"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                        value={customerSurnameDraft}
+                        onChange={(e) => setCustomerSurnameDraft(e.target.value)}
+                        onBlur={handleCustomerBlur}
+                      />
+                    </div>
+                  </div>
+                  <div className="mb-1">
+                    <label className="block text-[11px] mb-0.5" style={{ color: 'var(--ink-faint)' }}>
+                      Телефон
+                    </label>
+                    <input
+                      type="tel"
+                      className="w-full px-2.5 py-1.5 text-sm rounded-md font-mono"
+                      style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                      value={customerPhoneDraft}
+                      onChange={(e) => setCustomerPhoneDraft(e.target.value)}
+                      onBlur={handleCustomerBlur}
+                    />
+                  </div>
 
                   <div className="text-sm flex flex-col gap-1 mb-3">
-                    <div className="font-mono">{orderDetails.customerPhone}</div>
                     {orderDetails.comment && (
                       <div className="text-xs mt-1" style={{ color: 'var(--ink-muted)' }}>
                         {orderDetails.comment}
