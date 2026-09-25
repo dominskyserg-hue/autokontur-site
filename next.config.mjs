@@ -8,6 +8,12 @@ const nextConfig = {
   // явно говорит Next.js подключать эти пакеты как есть (require)
   // на сервере, а не бандлить — Vercel сам довключит их файлы через
   // трассировку (Output File Tracing) при деплое
+  // /sitemap-products-N.xml -> один динамічний роут app/sitemap-products/[chunk]
+  // (App Router не підтримує динамічний сегмент усередині імені "…-N.xml")
+  async rewrites() {
+    return [{ source: '/sitemap-products-:chunk(\\d+).xml', destination: '/sitemap-products/:chunk' }];
+  },
+
   serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
 
   // Самой трассировки (Output File Tracing) недостаточно: она находит

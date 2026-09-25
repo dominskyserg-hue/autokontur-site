@@ -1,5 +1,5 @@
 // ============================================================
-// Дані для товарних сайтмапів (app/sitemap-products-N.xml/route.ts) —
+// Дані для товарних сайтмапів (/sitemap-products-N.xml, app/sitemap-products/[chunk]/route.ts) —
 // пагінація каталогу фіксованими "вікнами" по CHUNK_SIZE товарів.
 //
 // ORDER BY p.id — не тому, що порядок сам по собі важливий, а тому,
@@ -32,19 +32,16 @@ globalThis.pgPool = pool;
 // сайтмапу), той самий розмір "вікна", що узгодили в плані
 export const SITEMAP_PRODUCTS_CHUNK_SIZE = 45_000;
 
-// Скільки файлів app/sitemap-products-N.xml РЕАЛЬНО існує як окремі
-// route-файли (кожен — своя папка, бо Next.js App Router маршрутизує
-// за файловою системою, а не за одним параметризованим шаблоном для
-// такого імені). Зараз товарів ~128 000 (потрібно 3 файли) — 6 дає
-// запас у 270 000 товарів. Якщо каталог виросте ще більше — потрібно
-// створити ще одну папку app/sitemap-products-7.xml (скопіювавши код
-// app/sitemap-products-6.xml/route.ts і поправивши CHUNK_NUMBER) і
-// збільшити це число
-export const SITEMAP_PRODUCTS_MAX_CHUNKS = 6;
-
 export async function getProductsSitemapTotalCount(): Promise<number> {
   const result = await pool.query('SELECT COUNT(*)::int AS total FROM products WHERE is_active = true');
   return result.rows[0]?.total ?? 0;
+}
+
+// Скільки файлів /sitemap-products-N.xml потрібно під поточний каталог —
+// без верхньої межі (раніше було жорстко 6 файлів = 270 000 товарів)
+export async function getProductsSitemapChunkCount(): Promise<number> {
+  const total = await getProductsSitemapTotalCount();
+  return Math.max(1, Math.ceil(total / SITEMAP_PRODUCTS_CHUNK_SIZE));
 }
 
 // chunkNumber — 1-based (перший файл /sitemap-products-1.xml)

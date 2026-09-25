@@ -18,7 +18,7 @@
 // ============================================================
 
 import { SITE_URL } from '@/lib/siteConfig';
-import { getProductsSitemapTotalCount, SITEMAP_PRODUCTS_CHUNK_SIZE, SITEMAP_PRODUCTS_MAX_CHUNKS } from '@/lib/sitemapProducts';
+import { getProductsSitemapChunkCount } from '@/lib/sitemapProducts';
 import { buildSitemapIndexXml, xmlResponse } from '@/lib/sitemapXml';
 
 export const runtime = 'nodejs';
@@ -27,13 +27,10 @@ export const revalidate = 86400;
 export async function GET() {
   const today = new Date().toISOString().slice(0, 10);
 
-  const totalProducts = await getProductsSitemapTotalCount();
-  const neededChunks = Math.max(1, Math.ceil(totalProducts / SITEMAP_PRODUCTS_CHUNK_SIZE));
-  // Не посилаємось на файл, якого фізично не існує (див. коментар
-  // біля SITEMAP_PRODUCTS_MAX_CHUNKS) — краще тимчасово недорахувати
-  // частину каталогу в сайтмапі, ніж дати Google 404 на посилання
-  // з власного індексу
-  const chunkCount = Math.min(neededChunks, SITEMAP_PRODUCTS_MAX_CHUNKS);
+  // Стільки файлів, скільки потрібно під ВЕСЬ каталог — файл
+  // /sitemap-products-N.xml обслуговує один динамічний роут
+  // (app/sitemap-products/[chunk]/route.ts), тож верхньої межі немає
+  const chunkCount = await getProductsSitemapChunkCount();
 
   const productSitemaps = Array.from({ length: chunkCount }, (_, i) => ({
     loc: `${SITE_URL}/sitemap-products-${i + 1}.xml`,
