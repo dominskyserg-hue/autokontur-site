@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "tecdoc:inspect": "tsx scripts/tecdoc/inspect-dump.ts",
-    "tecdoc:import": "tsx scripts/tecdoc/import-dump.ts"
+    "tecdoc:import": "tsx scripts/tecdoc/import-dump.ts",
+    "corpus:rebuild": "tsx scripts/rebuild-ukrainian-corpus.ts"
   },
   "dependencies": {
     "@sparticuz/chromium": "^153.0.0",

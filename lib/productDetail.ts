@@ -23,6 +23,7 @@ import { cleanApplicability } from '@/lib/carModelTranslation';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { buildDisplayProductNameDetailed } from '@/lib/productNameTranslation';
 import { brandsAreSameFamily } from '@/lib/brandFamilies';
+import { ensureUkrainianCorpusFresh } from '@/lib/ukrainianCorpus';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -564,6 +565,8 @@ async function loadFallbackName(id: string, article: string, brand: string | nul
 }
 
 export const loadProduct = cache(async function loadProduct(id: string): Promise<ProductDetailRaw | null> {
+  // Свіжий корпус українських слів для страховки H1 (раз на годину, з БД)
+  await ensureUkrainianCorpusFresh(pool);
   const result = await pool.query(
     `
     SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url,

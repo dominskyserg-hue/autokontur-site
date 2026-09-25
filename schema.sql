@@ -2344,6 +2344,14 @@ CREATE INDEX IF NOT EXISTS idx_products_featured ON products (updated_at DESC)
   WHERE is_active AND image_url IS NOT NULL AND stock > 0;
 
 
+-- Корпус украинских слов для страховки названий товаров (lib/ukrainianCorpus.ts,
+-- lib/corpusBuilder.ts). Пересобирается раз в неделю cron-ом
+-- /api/cron/rebuild-corpus (vercel.json) и командой `npm run corpus:rebuild`
+CREATE TABLE IF NOT EXISTS ukrainian_corpus_words (
+  word TEXT PRIMARY KEY
+);
+
+
 -- ============================================================
 -- ГОТОВО
 -- ============================================================

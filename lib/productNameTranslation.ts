@@ -110,6 +110,8 @@ function translateDoorAdjectives(chain: string, table: Readonly<Record<string, s
 
 // "лев." -> "лів." (крапка входить у слово, тому окремо від словника)
 const LEV_ABBREVIATION_RE = new RegExp(`(?<![${CYR}])лев\\.`, 'gi');
+// "груз." (вантажний) -> "вантаж." — так само окремо, бо з крапкою
+const GRUZ_ABBREVIATION_RE = new RegExp(`(?<![${CYR}])груз\\.`, 'gi');
 
 // Прикметники поряд із "масло" (ср. рід -> жін. рід "оливи")
 const OIL_NOUN_RE = new RegExp(`(?<![${CYR}])(масло|масла|маслом)(?![${CYR}])`, 'i');
@@ -129,6 +131,22 @@ const POLOSOVIDNY_WORDS: ReadonlySet<string> = new Set(['полосовидны�
 const POLI_V_MARKING_RE = /\d+\s*PK/i;
 
 const RUSSIAN_LETTERS_RE = /[ыэъё]/i;
+// Закінчення, яких НЕМАЄ в українській: -ое/-ая/-ее (укр. -е/-а), -ой
+// (укр. -ої/-ою), -ция/-ции/-цию (укр. -ція/-ції/-цію), -ния/-нии/-ние
+// (укр. -ння/-нні), -ский/-ские/-ских/-ского/-ской/-скую (укр. -ський/
+// -ські/-ських/-ського/-ської/-ську — з м'яким знаком)
+// Відомі РОСІЙСЬКІ слова без характерних літер/закінчень (найчастіші серед
+// назв, що проходять за правилом "є і/ї/є/ґ") — перекладу в словнику для
+// них поки нема, тож вони блокують назву. Кандидати в словник: отопителя ->
+// опалювача, винт -> гвинт, палец -> палець, сеточка -> сіточка,
+// дифференциала -> диференціала, ограничитель -> обмежувач
+const KNOWN_RUSSIAN_WORDS: ReadonlySet<string> = new Set([
+  'отопитель', 'отопителя', 'винт', 'винта', 'палец', 'пальца', 'сеточка', 'сеточки', 'возд',
+  // "груз" без крапки (з крапкою — окреме правило "груз." -> "вантаж.")
+  'груз',
+  'дифференциал', 'дифференциала', 'ограничитель', 'ограничителя', 'диаметр', 'диаметра', 'звездочка', 'звездочки',
+]);
+const RUSSIAN_ENDING_RE = /(ое|ая|ее|ой|ции|ция|цию|ния|нии|ние|ский|ские|ских|ского|ской|скую|ющий|ющая)$/i;
 
 // СТРАХОВКА v2: слова, які СЛОВНИК САМ ВИДАЄ як результат перекладу
 // (значення словника, фраз, оливних та дверних прикметників) — вони
@@ -143,11 +161,23 @@ const PRODUCED_WORDS: ReadonlySet<string> = (() => {
     ...Object.values(OIL_ADJECTIVES),
     ...Object.values(DOOR_ADJ_UA),
     ...Object.values(DOOR_ADJ_NOM_UA),
-    'дверей', 'двері', 'лів.', 'поліклиновий',
+    'дверей', 'двері', 'лів.', 'вантаж.', 'поліклиновий',
   ];
   for (const source of sources) for (const word of source.match(WORD_RE) ?? []) set.add(word.toLowerCase());
   return set;
 })();
+
+// Українські слова, які випадково закінчуються як російські ("плоский" —
+// однаково в обох мовах; "ОЕ" кирилицею — маркування "оригінальне
+// обладнання")
+const RUSSIAN_ENDING_EXCEPTIONS: ReadonlySet<string> = new Set(['плоский', 'плоского', 'ое']);
+
+// Ключ словника, що ЛИШИВСЯ в тексті після перекладу, — ознака російського
+// слова. Але частина ключів перекладається САМА В СЕБЕ ("система",
+// "вал", "болт", "фара" — однакові в обох мовах): такі не є ознакою
+function isUntranslatedRussianKey(lowerWord: string): boolean {
+  return Object.prototype.hasOwnProperty.call(RU_UA_DICTIONARY, lowerWord) && RU_UA_DICTIONARY[lowerWord] !== lowerWord;
+}
 
 /** Кириличні слова тексту, які страховка v2 не визнає (ні значення словника, ні білий список). */
 export function findBlockingWords(text: string): string[] {
@@ -185,6 +215,7 @@ export function translateProductNameDetailed(stage1Name: string): { text: string
     text = text.replace(re, (match) => preserveCase(match, replacement));
   }
   text = text.replace(LEV_ABBREVIATION_RE, (match) => preserveCase(match, 'лів.'));
+  text = text.replace(GRUZ_ABBREVIATION_RE, (match) => preserveCase(match, 'вантаж.'));
 
   const hasOilNoun = OIL_NOUN_RE.test(stage1Name);
   const hasPolyVMarking = POLI_V_MARKING_RE.test(stage1Name);
@@ -200,7 +231,26 @@ export function translateProductNameDetailed(stage1Name: string): { text: string
   // droppedBySafety — переклад щось змінив би, але страховка його відкинула
   const changedByDictionary = text !== stage1Name;
   const blockingWords = findBlockingWords(text);
-  if (RUSSIAN_LETTERS_RE.test(text) || blockingWords.length > 0) {
+
+  // Російські ознаки: ы/э/ъ/ё, закінчення, яких немає в українській
+  // (RUSSIAN_ENDING_RE), відомі російські слова (KNOWN_RUSSIAN_WORDS),
+  // неперекладені ключі російського словника, "полосовидный" без PK.
+  //
+  // ВІДХИЛЕНЕ правило (не вмикати без нової перевірки): "є літера і/ї/є/ґ
+  // і немає російських ознак -> назва проходить, навіть зі словами поза
+  // корпусом". На випадковій вибірці 100 таких назв 28 були змішаними
+  // ("Сетка паливного фільтра", "Гальмівна жидкость", "Подшипники опор
+  // підвіски") — поріг власника був <= 5 зі 100. Тому слово поза
+  // корпусом/білим списком, як і раніше, блокує переклад
+  const words = text.match(WORD_RE) ?? [];
+  const hasRussianSign =
+    RUSSIAN_LETTERS_RE.test(text) ||
+    words.some((word) => {
+      const lower = word.toLowerCase();
+      return (RUSSIAN_ENDING_RE.test(lower) && !RUSSIAN_ENDING_EXCEPTIONS.has(lower)) || KNOWN_RUSSIAN_WORDS.has(lower) || POLOSOVIDNY_WORDS.has(lower) || isUntranslatedRussianKey(lower);
+    });
+
+  if (hasRussianSign || blockingWords.length > 0) {
     return { text: stage1Name, droppedBySafety: changedByDictionary, attempted: text, blockingWords, safe: false };
   }
   return { text, droppedBySafety: false, attempted: text, blockingWords, safe: true };

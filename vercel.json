@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/import-supplier-urls",
       "schedule": "15 6 * * *"
+    },
+    {
+      "path": "/api/cron/rebuild-corpus",
+      "schedule": "30 4 * * 1"
     }
   ]
 }

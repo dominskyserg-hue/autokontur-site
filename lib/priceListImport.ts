@@ -18,6 +18,8 @@
 
 import * as XLSX from 'xlsx';
 import { Pool, PoolClient } from 'pg';
+import { after } from 'next/server';
+import { rebuildUkrainianCorpusSafely } from '@/lib/corpusBuilder';
 import { getCategoryBySlug, productMatchesCategory } from '@/lib/categories';
 
 // ------------------------------------------------------------
@@ -617,6 +619,16 @@ export async function importPriceListForSupplier(
 
   const uniqueProducts = deduplicateByArticle(allProducts);
   const { addedCount, updatedCount } = await saveProductsToDatabase(pool, supplierId, uniqueProducts);
+
+  // Нові назви з прайсу -> перебудувати корпус українських слів (страховка
+  // H1, lib/corpusBuilder.ts) — ПІСЛЯ відповіді, щоб не затримувати імпорт.
+  // after() працює лише всередині запиту Next.js; поза ним (напр. локальний
+  // скрипт) просто запускаємо у фоні
+  try {
+    after(() => rebuildUkrainianCorpusSafely(pool));
+  } catch {
+    void rebuildUkrainianCorpusSafely(pool);
+  }
 
   return { addedCount, updatedCount, productsFound: uniqueProducts.length };
 }
