@@ -231,16 +231,21 @@ function buildSeoNameParts(product: {
   let tail: string | null = null;
   if (product.carMake && !usedNarrowCategory) {
     const cleanedModel = cleanApplicability(product.carModel);
-    if (cleanedModel !== null && !looksLikeCode(cleanedModel, product.article)) {
+    // Лише ПЕРША модель (до ";" чи "," перед літерою — кома між цифрами
+    // "2,4" не роздільник), не довше ~40 символів разом із маркою
+    const firstModel =
+      cleanedModel === null ? null : cleanedModel.split(/;|,(?=\s*[A-Za-zА-Яа-яІіЇїЄєҐґ])/)[0].trim();
+    if (cleanedModel !== null && firstModel && !looksLikeCode(firstModel, product.article)) {
       const rawMake = product.carMake.trim();
       const makeDisplay = formatCarMakeDisplay(rawMake);
       // Деякі постачальники записують carModel уже ІЗ повторенням марки
       // ("MAZDA 323 (BJ)..." при carMake "MAZDA") — замінюємо сире
       // написання на курировану назву, а не дублюємо марку
-      const modelAlreadyHasMake = cleanedModel.toUpperCase().startsWith(rawMake.toUpperCase());
-      const vehicle = modelAlreadyHasMake
-        ? [makeDisplay, cleanedModel.slice(rawMake.length).trim()].filter(Boolean).join(' ')
-        : [makeDisplay, cleanedModel].filter(Boolean).join(' ');
+      const modelAlreadyHasMake = firstModel.toUpperCase().startsWith(rawMake.toUpperCase());
+      const vehicleFull = modelAlreadyHasMake
+        ? [makeDisplay, firstModel.slice(rawMake.length).trim()].filter(Boolean).join(' ')
+        : [makeDisplay, firstModel].filter(Boolean).join(' ');
+      const vehicle = truncateAtWordBoundary(vehicleFull, 40).replace(/[\s,;:\-–—(/`'~.]+$/, '');
       tail = `для ${vehicle}`;
       // Марка вже є в самому H1 (в назві чи бренді) — "для Nissan Altima"
       // після "...Nissan Altima 2.5 06-13" було б повтором
@@ -263,7 +268,8 @@ function assembleSeoName(parts: SeoNameParts, nameOverride?: string, includeTail
     pieces.push(parts.article);
   }
   const base = pieces.join(' ') || parts.article || '';
-  return includeTail && parts.tail ? `${base} ${parts.tail}` : base;
+  // Подвійні пробіли з прайсу постачальника ("0w-20  SP") — в один
+  return (includeTail && parts.tail ? `${base} ${parts.tail}` : base).replace(/\s+/g, ' ').trim();
 }
 
 // Назва-частина, що реально потрапила в H1 (після перекладу/обрізки/

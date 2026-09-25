@@ -46,8 +46,11 @@ export const SERVICE_WHITELIST: ReadonlyArray<string> = [
 
 export const WHITELIST: ReadonlySet<string> = new Set([...OWNER_WHITELIST, ...SERVICE_WHITELIST]);
 
+import { UKRAINIAN_CORPUS_WORDS } from '@/lib/ukrainianCorpusWords';
+
 const UKRAINIAN_LETTERS_RE = /[іїєґ]/i;
 
 export function isWhitelistedWord(lowerWord: string): boolean {
-  return WHITELIST.has(lowerWord) || UKRAINIAN_LETTERS_RE.test(lowerWord);
+  // 3-й спосіб: слово є в корпусі українських назв бази (ukrainianCorpusWords.ts)
+  return WHITELIST.has(lowerWord) || UKRAINIAN_LETTERS_RE.test(lowerWord) || UKRAINIAN_CORPUS_WORDS.has(lowerWord);
 }
