@@ -389,6 +389,9 @@ export async function GET(request: NextRequest) {
     // Для покупателей общее количество — ПРИБЛИЗИТЕЛЬНОЕ (см. estimateTotalCount):
     // точный COUNT(*) OVER() заставлял Postgres прочитать ВСЕ подходящие строки
     // даже ради первой страницы. Админка (с сессией) получает точное, как раньше
+    // Поиск тоже считает точно (окном): его результат и так целиком
+    // вычисляется ради сортировки, отдельный count лишь удваивал бы работу
+    const useApproxCount = !isAdmin && !search;
     const [customerPricingRule, result, approxCount] = await Promise.all([
       getCustomerPricingRule(pool, request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value),
       pool.query(
@@ -412,7 +415,7 @@ export async function GET(request: NextRequest) {
         p.supplier_id,
         s.name AS supplier_name,
         s.delivery_time,
-        p.updated_at${isAdmin ? ', COUNT(*) OVER() AS total_count' : ''}
+        p.updated_at${useApproxCount ? '' : ', COUNT(*) OVER() AS total_count'}
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       ${whereSql}
@@ -421,7 +424,7 @@ export async function GET(request: NextRequest) {
       `,
         values
       ),
-      isAdmin ? Promise.resolve(null) : estimateTotalCount(pool, whereSql, filterValues),
+      useApproxCount ? estimateTotalCount(pool, whereSql, filterValues) : Promise.resolve(null),
     ]);
 
     // Если строк не нашлось (например, пустая база или поиск ничего
