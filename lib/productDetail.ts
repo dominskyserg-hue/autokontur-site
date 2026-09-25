@@ -20,6 +20,7 @@ import { buildProductPath, buildProductSlug } from '@/lib/slug';
 import { getCarMakeByDbValue } from '@/lib/carMakes';
 import { detectCategoryForProductName, detectCategoryForProductH1 } from '@/lib/categories';
 import { cleanApplicability } from '@/lib/carModelTranslation';
+import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -104,13 +105,20 @@ export function buildSeoProductName(product: {
   const override = getSeoOverride(product.article);
   if (override?.h1) return override.h1;
 
+  // buildCleanProductName (lib/productNameCleanup.ts) — механічне
+  // форматування сирого product.name ЛИШЕ для показу/визначення
+  // категорії: службові префікси постачальника ("A1/"), скорочення
+  // ("К-Т"), "Акция" на початку, суцільний КАПС. Сам products.name у
+  // базі не змінюється — це окрема функція, яка викликається саме тут
+  const cleanName = buildCleanProductName(product.name);
+
   // detectCategoryForProductH1 (а не detectCategoryForProductName) —
   // враховує вузькі категорії "по машині" (напр. "...Daewoo Lanos"),
   // але ЛИШЕ якщо марка/модель ЦЬОГО товару реально їм відповідають
   // (lib/categories.ts, narrowCategoryMatchesVehicle) — інакше товар
   // з геть іншою маркою міг показати чужу модель авто в H1 (знайдений
   // баг: AJUSA 11059300 для CITROËN показував "...Daewoo Lanos")
-  const category = detectCategoryForProductH1(product.name, product.carMake, product.carModel);
+  const category = detectCategoryForProductH1(cleanName, product.carMake, product.carModel);
   const categoryLabel = category ? category.itemName ?? category.name : null;
   // Вузькі категорії "по машині" вже містять марку авто в самій назві
   // ("...Suzuki SX4") — якщо бренд деталі (product.brand) ТОЙ САМИЙ, що
@@ -122,7 +130,7 @@ export function buildSeoProductName(product: {
     Boolean(category?.modelGroup) && Boolean(product.brand) && Boolean(categoryLabel) && brandMatchesWord(categoryLabel!, product.brand!);
   const base = category
     ? [categoryLabel, brandDuplicatesCategoryName ? null : product.brand, product.article].filter(Boolean).join(' ')
-    : product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
+    : cleanName || [product.brand, product.article].filter(Boolean).join(' ') || product.article;
 
   // category.modelGroup заповнений ЛИШЕ у вузьких категорій "по
   // машині" (широкі його ніколи не задають) — якщо base вже прийшов
