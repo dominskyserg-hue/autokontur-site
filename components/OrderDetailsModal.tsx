@@ -109,7 +109,7 @@ interface AddItemProductOption {
   supplierName: string;
 }
 
-type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer';
+type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer' | 'delivery';
 type SaveState = { state: 'idle' | 'saving' | 'saved' | 'error'; error?: string };
 const IDLE: SaveState = { state: 'idle' };
 
@@ -164,7 +164,10 @@ export default function OrderDetailsModal({
   const [customerNameDraft, setCustomerNameDraft] = useState('');
   const [customerSurnameDraft, setCustomerSurnameDraft] = useState('');
   const [customerPhoneDraft, setCustomerPhoneDraft] = useState('');
-  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE });
+  // Зміна міста/відділення прямо в картці — пошук НП з Ref'ами, тож
+  // обране відділення одразу підхоплюється формою створення ТТН
+  const [editingDelivery, setEditingDelivery] = useState(false);
+  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE, delivery: IDLE });
 
   // ---- создание ТТН через API Новой Почты ----
   const [showCreateTtn, setShowCreateTtn] = useState(false);
@@ -416,6 +419,24 @@ export default function OrderDetailsModal({
       return;
     }
     savePatch('customer', { customerName: nextName, customerSurname: nextSurname, customerPhone: nextPhone });
+  };
+
+  // ---- місто/відділення — зберігаються одразу після вибору відділення ----
+  const handleDeliveryPick = async (value: {
+    cityRef: string;
+    cityName: string;
+    warehouseRef: string;
+    warehouseDescription: string;
+  }) => {
+    await savePatch('delivery', {
+      delivery: {
+        city: value.cityName,
+        novaPoshtaAddress: value.warehouseDescription,
+        cityRef: value.cityRef,
+        warehouseRef: value.warehouseRef,
+      },
+    });
+    setEditingDelivery(false);
   };
 
   // ------------------------------------------------------------
@@ -900,6 +921,38 @@ export default function OrderDetailsModal({
                       </div>
                     )}
                   </div>
+
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                      Доставка Новою Поштою
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <SaveIndicator save={saveState.delivery} />
+                      {!orderDetails.ttnRef && (
+                        <button
+                          type="button"
+                          onClick={() => setEditingDelivery((v) => !v)}
+                          className="text-[11px] underline"
+                          style={{ color: 'var(--accent)' }}
+                        >
+                          {editingDelivery ? 'Скасувати' : 'Змінити місто / відділення'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {editingDelivery && (
+                    <div className="mb-3">
+                      {/* Для "Купити в 1 клік" у city записано позначку
+                          "Уточнити при дзвінку" — підставляти її в пошук
+                          сенсу немає, тому стартуємо з порожнього поля */}
+                      <AdminNovaPoshtaPicker
+                        initialCityQuery={orderDetails.cityRef ? orderDetails.city : ''}
+                        initialWarehouseQuery={orderDetails.warehouseRef ? orderDetails.novaPoshtaAddress : ''}
+                        onPick={handleDeliveryPick}
+                      />
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-2 text-xs mb-3">
                     <div>

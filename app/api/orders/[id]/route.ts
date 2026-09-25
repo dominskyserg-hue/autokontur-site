@@ -434,6 +434,16 @@ interface PatchOrderRequestBody {
   customerName?: string;
   customerSurname?: string;
   customerPhone?: string;
+  // Місто і відділення Нової Пошти — адмін обирає їх у картці заказа
+  // через пошук НП (components/AdminNovaPoshtaPicker.tsx), тому разом
+  // із текстом приходять і Ref'и — саме по них потім створюється ТТН.
+  // Передаються всі чотири поля разом
+  delivery?: {
+    city: string;
+    novaPoshtaAddress: string;
+    cityRef: string;
+    warehouseRef: string;
+  };
   ttnNumber?: string | null;
   vin?: string | null;
   carInfo?: string | null;
@@ -466,7 +476,8 @@ export async function PATCH(
     body.carInfo === undefined &&
     body.customerName === undefined &&
     body.customerSurname === undefined &&
-    body.customerPhone === undefined
+    body.customerPhone === undefined &&
+    body.delivery === undefined
   ) {
     return NextResponse.json(
       { error: 'Укажите статус, номер ТТН, VIN, автомобиль и/или контакты клиента для обновления.' },
@@ -498,6 +509,19 @@ export async function PATCH(
     if (digitsOnly.length < 9 || digitsOnly.length > 13) {
       return NextResponse.json({ error: 'Введіть коректний номер телефону клієнта.' }, { status: 400 });
     }
+  }
+
+  let nextDelivery: { city: string; address: string; cityRef: string; warehouseRef: string } | undefined;
+  if (body.delivery !== undefined) {
+    const d = body.delivery;
+    const city = String(d?.city ?? '').trim();
+    const address = String(d?.novaPoshtaAddress ?? '').trim();
+    const cityRef = String(d?.cityRef ?? '').trim();
+    const warehouseRef = String(d?.warehouseRef ?? '').trim();
+    if (!city || !address || !cityRef || !warehouseRef) {
+      return NextResponse.json({ error: 'Оберіть місто та відділення Нової Пошти зі списку.' }, { status: 400 });
+    }
+    nextDelivery = { city, address, cityRef, warehouseRef };
   }
 
   const nextStatus = body.status;
@@ -538,9 +562,14 @@ export async function PATCH(
           customer_name = COALESCE($9, customer_name),
           customer_surname = COALESCE($10, customer_surname),
           customer_phone = COALESCE($11, customer_phone),
+          city = COALESCE($12, city),
+          nova_poshta_address = COALESCE($13, nova_poshta_address),
+          city_ref = COALESCE($14, city_ref),
+          warehouse_ref = COALESCE($15, warehouse_ref),
           updated_at = now()
       WHERE id = $1
-      RETURNING id, customer_name, customer_surname, customer_phone, status, ttn_number, vin, car_info, created_at, updated_at
+      RETURNING id, customer_name, customer_surname, customer_phone, status, ttn_number, vin, car_info,
+                city, nova_poshta_address, city_ref, warehouse_ref, created_at, updated_at
       `,
       [
         id,
@@ -554,6 +583,10 @@ export async function PATCH(
         nextCustomerName ?? null,
         nextCustomerSurname ?? null,
         nextCustomerPhone ?? null,
+        nextDelivery?.city ?? null,
+        nextDelivery?.address ?? null,
+        nextDelivery?.cityRef ?? null,
+        nextDelivery?.warehouseRef ?? null,
       ]
     );
 
@@ -586,6 +619,10 @@ export async function PATCH(
         ttnNumber: row.ttn_number,
         vin: row.vin,
         carInfo: row.car_info,
+        city: row.city,
+        novaPoshtaAddress: row.nova_poshta_address,
+        cityRef: row.city_ref,
+        warehouseRef: row.warehouse_ref,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },
