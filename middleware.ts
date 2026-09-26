@@ -44,6 +44,11 @@ const PUBLIC_API_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: 'GET', pattern: /^\/api\/products\/car-options$/ },
   { method: 'GET', pattern: /^\/api\/products\/cross-lookup$/ },
   { method: 'POST', pattern: /^\/api\/orders\/create$/ },
+  // Вход в кабинет по коду из Telegram (lib/customerAuth.ts). Остальные
+  // /api/customer/* ниже пропускаются middleware, но сами требуют сессию
+  // (requireCustomer) — без входа отвечают 401
+  { method: 'POST', pattern: /^\/api\/customer\/auth\/(request-code|verify-code|logout)$/ },
+  { method: 'GET', pattern: /^\/api\/customer\/auth\/me$/ },
   { method: 'GET', pattern: /^\/api\/customer\/orders$/ },
   { method: 'GET', pattern: /^\/api\/customer\/orders\/[^/]+$/ },
   { method: 'GET', pattern: /^\/api\/customer\/pricing-rule$/ },

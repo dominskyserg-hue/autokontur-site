@@ -34,6 +34,7 @@ import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { FormEvent } from 'react';
 import { trackBeginCheckout, trackPurchase } from '@/lib/analytics';
+import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
 
 const TECH_SURFACE_2 = '#1B2436';
 const TECH_BORDER = 'rgba(255,255,255,0.08)';
@@ -102,6 +103,9 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Скрытое поле-ловушка (components/HoneypotField.tsx) — читаем сразу,
+    // до первого await: после него event.currentTarget уже пустой
+    const honeypot = readHoneypot(event.currentTarget);
     setTouched(true);
     if (name.trim().length === 0 || !isValidPhone(phone)) return;
 
@@ -132,6 +136,7 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
           novaPoshtaAddress: PENDING_NOTE,
           comment: 'Замовлення оформлено через "Купити в 1 клік" — уточнити спосіб доставки та оплати під час дзвінка.',
           items: [{ id: product.id, count: 1 }],
+          website: honeypot,
         }),
       });
 
@@ -220,6 +225,7 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
               </div>
             ) : (
               <form onSubmit={handleSubmit} className="flex flex-col gap-3 px-5 py-5">
+                <HoneypotField />
                 <p className="text-xs leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
                   Залиште ім&apos;я і телефон — менеджер сам зателефонує, уточнить доставку і оплату для «{displayName}».
                 </p>

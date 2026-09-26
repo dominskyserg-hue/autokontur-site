@@ -6,18 +6,16 @@
 // товару — Server Component, тому робота з телефоном/API покупця
 // винесена в окремий маленький клієнтський компонент.
 //
-// Телефон береться з localStorage (PHONE_STORAGE_KEY — той самий
-// ключ, яким "вхід" у кабінет зберігає його, див.
-// components/CustomerDashboard.tsx) — якщо покупець ще не заходив у
-// кабінет, телефону немає і кнопка веде на /account замість виклику API.
+// Покупатель определяется по СЕССИИ кабинета (вход по коду из Telegram,
+// HttpOnly-cookie — JavaScript её не видит): GET /api/customer/favorites
+// отвечает 401, если не вошёл, — тогда кнопка ведёт на /account.
+// Телефон в запросах не передаётся: сервер берёт его из сессии.
 // ============================================================
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Heart } from 'lucide-react';
 import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
-
-const PHONE_STORAGE_KEY = 'autokontur-customer-phone';
 
 interface FavoriteButtonProps {
   productId: string;
@@ -31,29 +29,22 @@ export default function FavoriteButton({ productId }: FavoriteButtonProps) {
 }
 
 function FavoriteButtonInner({ productId }: FavoriteButtonProps) {
-  const [phone, setPhone] = useState<string | null>(null);
+  // loggedIn: null — ещё проверяем, false — не вошёл, true — вошёл
+  const [loggedIn, setLoggedIn] = useState<boolean | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [checking, setChecking] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    let savedPhone: string | null = null;
-    try {
-      savedPhone = window.localStorage.getItem(PHONE_STORAGE_KEY);
-    } catch {
-      // localStorage недоступний — просто лишаємось без телефону,
-      // кнопка поведе на /account
-    }
-    setPhone(savedPhone);
-
-    if (!savedPhone) {
-      setChecking(false);
-      return;
-    }
-
-    fetch(`/api/customer/favorites?${new URLSearchParams({ phone: savedPhone }).toString()}`)
-      .then((response) => response.json())
-      .then((data) => {
+    fetch('/api/customer/favorites')
+      .then(async (response) => {
+        // 401 — не вошёл в кабинет: кнопка поведёт на /account
+        if (response.status === 401) {
+          setLoggedIn(false);
+          return;
+        }
+        const data = await response.json();
+        setLoggedIn(true);
         if (data.success) {
           const favorites = data.favorites as Array<{ productId: string }>;
           setIsFavorite(favorites.some((item) => item.productId === productId));
@@ -67,21 +58,18 @@ function FavoriteButtonInner({ productId }: FavoriteButtonProps) {
   }, [productId]);
 
   const handleToggle = async () => {
-    if (!phone) return;
+    if (!loggedIn) return;
 
     setSaving(true);
     try {
       if (isFavorite) {
-        const response = await fetch(
-          `/api/customer/favorites/${productId}?${new URLSearchParams({ phone }).toString()}`,
-          { method: 'DELETE' }
-        );
+        const response = await fetch(`/api/customer/favorites/${productId}`, { method: 'DELETE' });
         if (response.ok) setIsFavorite(false);
       } else {
         const response = await fetch('/api/customer/favorites', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone, productId }),
+          body: JSON.stringify({ productId }),
         });
         if (response.ok) setIsFavorite(true);
       }
@@ -101,7 +89,7 @@ function FavoriteButtonInner({ productId }: FavoriteButtonProps) {
     );
   }
 
-  if (!phone) {
+  if (!loggedIn) {
     return (
       <Link
         href="/account"

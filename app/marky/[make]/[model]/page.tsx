@@ -15,7 +15,6 @@
 
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { getCarMakeBySlug } from '@/lib/carMakes';
@@ -23,7 +22,7 @@ import { getHub, getHubsForMake, hubPath, findNarrowCategoryForHub, MIN_HUB_PROD
 import { loadHubData, loadVisibleHubs } from '@/lib/modelHubData';
 import { buildSeoProductName } from '@/lib/productDetail';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
-import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import SiteHeaderServer from '@/components/SiteHeaderServer';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
@@ -139,10 +138,9 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
   if (!resolved) notFound();
   const { make, hub } = resolved;
 
-  const cookieStore = await cookies();
   const [data, customerPricingRule, visibleHubs] = await Promise.all([
     loadHubData(hub),
-    getCustomerPricingRule(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value),
+    getCustomerPricingRule(pool, await getCustomerSessionPhone()),
     loadVisibleHubs(),
   ]);
   if (data.total < MIN_HUB_PRODUCTS) notFound();

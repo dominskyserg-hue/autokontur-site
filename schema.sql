@@ -2429,3 +2429,74 @@ CREATE TABLE IF NOT EXISTS admin_login_attempts (
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_ip_time ON admin_login_attempts (ip, attempted_at);
+
+
+-- ============================================================
+-- ТАБЛИЦА customer_login_codes — одноразовые коды входа в кабинет
+-- ============================================================
+-- Код (6 цифр) приходит покупателю в Telegram-бот
+-- (app/api/customer/auth/request-code). Здесь — только
+-- sha256(код + SESSION_SECRET), сам код не хранится. Живёт 5 минут,
+-- после 5 неверных попыток сгорает, после входа — used_at.
+-- Старше суток удаляются ежедневным cron
+CREATE TABLE IF NOT EXISTS customer_login_codes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- Последние 9 цифр номера (тот же ключ, что в заказах и привязках Telegram)
+  phone TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  used_at TIMESTAMPTZ,
+  ip TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_login_codes_phone_created ON customer_login_codes (phone, created_at DESC);
+
+
+-- ============================================================
+-- ТАБЛИЦА customer_sessions — сессии Особистого кабінету
+-- ============================================================
+-- После верного кода: случайный токен в cookie customer_session,
+-- здесь — только его sha256. Срок 30 дней. "Вийти" удаляет строку.
+-- Все /api/customer/* берут телефон ТОЛЬКО отсюда (lib/customerAuth.ts)
+CREATE TABLE IF NOT EXISTS customer_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  phone TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL,
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  ip TEXT,
+  user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_customer_sessions_expires_at ON customer_sessions (expires_at);
+
+
+-- ============================================================
+-- ТАБЛИЦА rate_limits — счётчик запросов для защиты от спама
+-- ============================================================
+-- Одна строка = один пропущенный запрос по ключу вида "что:IP"
+-- (lib/rateLimit.ts). Лимиты: заказы и VIN-заявки — 5 за 10 минут,
+-- изменения в кабинете — 30 за 10 минут, коды входа — 10 за 15 минут.
+-- Старше суток удаляются ежедневным cron
+CREATE TABLE IF NOT EXISTS rate_limits (
+  id BIGSERIAL PRIMARY KEY,
+  key TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rate_limits_key_created ON rate_limits (key, created_at);
+
+
+-- ============================================================
+-- ТАБЛИЦА telegram_login_intents — "пришёл в бот ради входа на сайт"
+-- ============================================================
+-- Кнопка на странице входа ведёт в бот по ссылке ?start=login. Бот
+-- запоминает здесь chat_id, и когда покупатель поделится номером,
+-- ответит "Поверніться на сайт і натисніть «Надіслати код»"
+CREATE TABLE IF NOT EXISTS telegram_login_intents (
+  chat_id BIGINT PRIMARY KEY,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

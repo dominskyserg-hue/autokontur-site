@@ -71,6 +71,10 @@ import { Pool } from 'pg';
 import { sendTelegramMessage, sendTelegramMessageTo } from '@/lib/telegramNotify';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { computeCustomerPrice, type CustomerPricingRule } from '@/lib/customerPricing';
+import { randomUUID } from 'crypto';
+import { getClientIp } from '@/lib/adminAuth';
+import { getCustomerSessionPhoneFromRequest } from '@/lib/customerAuth';
+import { rateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rateLimit';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -147,6 +151,9 @@ interface OrderCreateItemInput {
 }
 
 interface OrderCreateRequestBody {
+  // Скрытое поле-ловушка (honeypot): человек его не видит и не
+  // заполняет, а бот, заполняющий все поля подряд, — заполнит
+  website?: string;
   customerName?: string;
   customerSurname?: string;
   customerPhone?: string;
@@ -190,6 +197,13 @@ interface ProductSnapshotRow {
 }
 
 export async function POST(request: NextRequest) {
+  // ---- защита от спама: не больше 5 запросов за 10 минут с одного IP ----
+  // Считаем ЛЮБОЙ запрос (и неудачный тоже) — иначе бот мог бы бесконечно
+  // перебирать варианты формы
+  if (!(await rateLimit(`orders-create:${await getClientIp()}`, 5, 10 * 60))) {
+    return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
+  }
+
   // ---- разбор и базовая проверка тела запроса ----
   let body: OrderCreateRequestBody;
   try {
@@ -200,6 +214,17 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  // Honeypot заполнен — это бот. Отвечаем как будто всё хорошо (чтобы
+  // бот не понял, что его поймали), но заказ НЕ создаём
+  if (typeof body.website === 'string' && body.website.trim() !== '') {
+    console.warn('orders/create: заполнено скрытое поле website — похоже на бота, заказ не создан');
+    return NextResponse.json({ success: true, orderId: randomUUID(), orderNumber: null });
+  }
+
+  // Телефон из сессии кабинета (вход по коду) — от него зависит,
+  // применять ли персональную цену (см. ниже, pricingRuleResult)
+  const sessionPhone = await getCustomerSessionPhoneFromRequest(request);
 
   const customerName = (body.customerName || '').trim();
   const customerSurname = (body.customerSurname || '').trim();
@@ -400,10 +425,19 @@ export async function POST(request: NextRequest) {
     // постачальника), а НЕ від retail_price — інакше для покупця з
     // персональним правилом накрутилась би ще й звичайна націнка
     // магазину поверх його власної (див. lib/customerPricing.ts)
-    const pricingRuleResult = await client.query<{ rule_type: 'discount' | 'markup'; percent: string }>(
-      'SELECT rule_type, percent FROM customer_pricing_rules WHERE phone = $1',
-      [normalizedPhone]
-    );
+    //
+    // ВАЖНО (безопасность): правило применяем ТОЛЬКО если покупатель вошёл
+    // в кабинет по коду и телефон в заказе совпадает с телефоном сессии.
+    // Раньше хватало ввести в форме чужой номер (например, оптовика) —
+    // и заказ считался по его цене. Без входа или с чужим номером —
+    // обычная розничная цена
+    const pricingRuleResult =
+      sessionPhone && sessionPhone === normalizedPhone
+        ? await client.query<{ rule_type: 'discount' | 'markup'; percent: string }>(
+            'SELECT rule_type, percent FROM customer_pricing_rules WHERE phone = $1',
+            [normalizedPhone]
+          )
+        : { rows: [] as Array<{ rule_type: 'discount' | 'markup'; percent: string }> };
     const pricingRuleRow = pricingRuleResult.rows[0];
     const pricingRule: CustomerPricingRule | null = pricingRuleRow
       ? { ruleType: pricingRuleRow.rule_type, percent: parseFloat(pricingRuleRow.percent) }

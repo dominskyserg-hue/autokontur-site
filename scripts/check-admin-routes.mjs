@@ -28,8 +28,8 @@ const BASE_URL = process.env.CHECK_BASE_URL || 'http://localhost:3059';
 const FORGED = process.argv.includes('--forged-cookie');
 
 // Публичные роуты витрины — тот же список, что PUBLIC_API_ROUTES в
-// middleware.ts (кроме /api/customer/*: кабинет выключен, они тоже
-// должны отвечать 403). Их скрипт не проверяет
+// middleware.ts, кроме /api/customer/*: без сессии покупателя они должны
+// отвечать 401 (при выключенном кабинете — 403). Их скрипт не проверяет
 const PUBLIC_ROUTES = [
   ['GET', /^\/api\/products$/],
   ['GET', /^\/api\/products\/images$/],
@@ -41,6 +41,9 @@ const PUBLIC_ROUTES = [
   ['GET', /^\/api\/site-settings$/],
   ['GET', /^\/api\/nova-poshta\/cities$/],
   ['GET', /^\/api\/nova-poshta\/warehouses$/],
+  // Вход в кабинет по коду — публичные (у них свои лимиты)
+  ['POST', /^\/api\/customer\/auth\/(request-code|verify-code|logout)$/],
+  ['GET', /^\/api\/customer\/auth\/me$/],
   ['POST', /^\/api\/admin\/login$/],
   ['POST', /^\/api\/admin\/logout$/],
   // Защищён собственным секретом Telegram, а не входом админа

@@ -19,12 +19,11 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { CATEGORIES, getCategoryBySlug, findNarrowPageForVehicle } from '@/lib/categories';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
-import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
 import { findHubsForNarrowCategory, hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
@@ -159,13 +158,12 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
 
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Персональна ціна покупця (customer_pricing_rules) — за cookie з
-  // телефоном "залогіненого" в Особистому кабінеті покупця (див.
-  // lib/customerPricing.ts). cookies() тут ЩЕ й гарантує, що Next.js
+  // Персональна ціна покупця (customer_pricing_rules) — за телефоном
+  // із СЕСІЇ Особистого кабінету (вхід по коду, lib/customerAuth.ts; див.
+  // lib/customerPricing.ts). cookies() (всередині getCustomerSessionPhone) тут ЩЕ й гарантує, що Next.js
   // не віддасть цю сторінку зі статичного кешу одному покупцю з ціною
   // іншого — використання cookies()/headers() саме собою вимикає
   // статичну генерацію для сторінки, що її викликає
-  const cookieStore = await cookies();
   const [productsResult, countResult, customerPricingRule] = await Promise.all([
     pool.query(
       `
@@ -179,7 +177,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
       [...params, PAGE_SIZE, offset]
     ),
     pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`, params),
-    getCustomerPricingRule(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value),
+    getCustomerPricingRule(pool, await getCustomerSessionPhone()),
   ]);
 
   const products: CategoryProduct[] = productsResult.rows.map((row) => ({

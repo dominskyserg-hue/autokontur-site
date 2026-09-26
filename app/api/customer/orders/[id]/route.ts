@@ -21,6 +21,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireCustomer } from '@/lib/customerAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -108,13 +109,18 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Телефон — ТОЛЬКО из сессии покупателя (вход по коду из Telegram);
+  // параметр phone из адреса или тела запроса игнорируется
+  const customerSession = await requireCustomer(request);
+  if (customerSession instanceof NextResponse) return customerSession;
+
   const { id } = await params;
 
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Некоректний ідентифікатор замовлення.' }, { status: 400 });
   }
 
-  const rawPhone = (request.nextUrl.searchParams.get('phone') || '').trim();
+  const rawPhone = customerSession.phone;
   if (!rawPhone || !isValidPhone(rawPhone)) {
     return NextResponse.json({ error: 'Вкажіть коректний номер телефону.' }, { status: 400 });
   }

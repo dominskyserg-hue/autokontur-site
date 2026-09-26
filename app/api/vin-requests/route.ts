@@ -20,7 +20,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { requireAdmin } from '@/lib/adminAuth';
+import { getClientIp, requireAdmin } from '@/lib/adminAuth';
+import { rateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rateLimit';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -79,17 +80,30 @@ interface VinRequestResponse {
 // POST — покупець залишає заявку з вітрини
 // ------------------------------------------------------------
 interface CreateVinRequestBody {
+  // Скрытое поле-ловушка (honeypot) — заполняют только боты
+  website?: string;
   vinCode?: string;
   phone?: string;
   description?: string;
 }
 
 export async function POST(request: NextRequest) {
+  // Защита от спама: не больше 5 заявок за 10 минут с одного IP
+  if (!(await rateLimit(`vin-requests:${await getClientIp()}`, 5, 10 * 60))) {
+    return NextResponse.json({ error: RATE_LIMIT_MESSAGE }, { status: 429 });
+  }
+
   let body: CreateVinRequestBody;
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: 'Некоректний формат запиту.' }, { status: 400 });
+  }
+
+  // Honeypot заполнен — бот: отвечаем "успешно", но заявку не сохраняем
+  if (typeof body.website === 'string' && body.website.trim() !== '') {
+    console.warn('vin-requests: заполнено скрытое поле website — похоже на бота, заявка не сохранена');
+    return NextResponse.json({ success: true });
   }
 
   const vinCode = (body.vinCode || '').trim().toUpperCase();

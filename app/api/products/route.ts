@@ -56,7 +56,7 @@ import { Pool } from 'pg';
 import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline';
 import { resolveMakeDbValues } from '@/lib/carMakes';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
-import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import { CUSTOMER_SESSION_COOKIE, getCustomerSessionPhoneFromRequest } from '@/lib/customerAuth';
 import { buildTextSearchClause } from '@/lib/productSearch';
 import { isAdminRequest } from '@/lib/adminSession';
 
@@ -208,7 +208,7 @@ export async function GET(request: NextRequest) {
     // він уже відпрацював при першому запиті
     const cacheable =
       !isAdmin &&
-      !request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value &&
+      !request.cookies.get(CUSTOMER_SESSION_COOKIE)?.value &&
       (!searchParams.get('search') || page === 1);
     const cacheKey = cacheable ? request.nextUrl.search : null;
     if (cacheKey) {
@@ -399,7 +399,7 @@ export async function GET(request: NextRequest) {
     // вычисляется ради сортировки, отдельный count лишь удваивал бы работу
     const useApproxCount = !isAdmin && !search;
     const [customerPricingRule, result, approxCount] = await Promise.all([
-      getCustomerPricingRule(pool, request.cookies.get(CUSTOMER_PHONE_COOKIE)?.value),
+      getCustomerPricingRule(pool, await getCustomerSessionPhoneFromRequest(request)),
       pool.query(
       `
       SELECT

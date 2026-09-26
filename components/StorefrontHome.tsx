@@ -61,6 +61,7 @@ import { getStoredAttribution } from '@/lib/attribution';
 import NovaPoshtaAddressFields from '@/components/NovaPoshtaAddressFields';
 import CategoryGridSection from '@/components/CategoryGridSection';
 import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
+import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -661,6 +662,9 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
 
   const handleSubmitVinRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Скрытое поле-ловушка (components/HoneypotField.tsx) — читаем сразу,
+    // до первого await: после него event.currentTarget уже пустой
+    const honeypot = readHoneypot(event.currentTarget);
 
     if (!vinCode.trim() || vinCode.trim().length < 5) {
       setVinError('Вкажіть VIN-код автомобіля');
@@ -685,6 +689,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
           vinCode: vinCode.trim(),
           phone: vinPhone.trim(),
           description: vinDescription.trim(),
+          website: honeypot,
         }),
       });
       const data = await response.json();
@@ -877,6 +882,9 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
   // ------------------------------------------------------------
   const handleSubmitOrder = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Скрытое поле-ловушка (components/HoneypotField.tsx) — читаем сразу,
+    // до первого await: после него event.currentTarget уже пустой
+    const honeypot = readHoneypot(event.currentTarget);
 
     // Помечаем все обязательные поля "тронутыми" — теперь ошибки
     // валидации (если они есть) покажутся под полями, даже если
@@ -954,6 +962,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
           utmContent: attribution.utmContent,
           gclid: attribution.gclid,
           referrer: attribution.referrer,
+          website: honeypot,
         }),
       });
 
@@ -1565,6 +1574,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                 </div>
               ) : (
                 <form onSubmit={handleSubmitVinRequest} className="flex flex-col gap-3 px-5 py-5">
+                  <HoneypotField />
                   <p className="text-xs leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
                     Не знайшли деталь за артикулом? Залиште VIN-код автомобіля й опишіть, що
                     шукаєте — наш менеджер підбере деталь вручну і зв&apos;яжеться з вами.
@@ -3298,6 +3308,7 @@ function CartDrawer({
           // overflow-y-auto ужаться и скролл не заработает) и прибитый
           // снизу футер з підсумком і кнопкою
           <form onSubmit={onSubmit} className="flex min-h-0 flex-1 flex-col">
+            <HoneypotField />
             <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4">
               {cart.map((item) => (
                 <CartRow

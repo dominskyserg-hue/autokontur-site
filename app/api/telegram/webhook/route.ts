@@ -173,6 +173,9 @@ const SHARE_PHONE_KEYBOARD: TelegramReplyKeyboard = {
   resize_keyboard: true,
 };
 
+// Ответ после "Поділитися номером", если покупатель пришёл со страницы входа
+const LOGIN_RETURN_TO_SITE_TEXT = 'Готово! Поверніться на сайт і натисніть "Надіслати код"';
+
 const SHARE_PHONE_PROMPT =
   'Щоб отримувати тут сповіщення про свої замовлення (склад замовлення, номер ТТН), натисніть кнопку «📱 Поділитися номером» нижче — номер має збігатися з тим, що ви вказували при оформленні замовлення.';
 
@@ -407,9 +410,18 @@ export async function POST(request: NextRequest) {
 
     try {
       await linkVerifiedPhone(contactChatId, phoneTail, message.from.username || null);
+
+      // Пришёл по кнопке со страницы входа (?start=login, не старше 30
+      // минут) — говорим вернуться на сайт за кодом
+      const intent = await pool.query(
+        "DELETE FROM telegram_login_intents WHERE chat_id = $1 AND created_at > now() - interval '30 minutes' RETURNING chat_id",
+        [contactChatId]
+      );
       await sendTelegramMessageTo(
         contactChatId,
-        'Готово! Тепер сюди приходитимуть сповіщення про ваші замовлення на DominatorParts — склад замовлення одразу після оформлення та номер ТТН Нової Пошти, коли ми відправимо посилку. А кнопками нижче можна одразу перевірити наявність деталі чи свої замовлення.',
+        intent.rows.length > 0
+          ? LOGIN_RETURN_TO_SITE_TEXT
+          : 'Готово! Тепер сюди приходитимуть сповіщення про ваші замовлення на DominatorParts — склад замовлення одразу після оформлення та номер ТТН Нової Пошти, коли ми відправимо посилку. А кнопками нижче можна одразу перевірити наявність деталі чи свої замовлення.',
         undefined,
         MAIN_MENU_KEYBOARD
       );
@@ -624,6 +636,38 @@ export async function POST(request: NextRequest) {
     }
 
     if (autoReplyText) await sendTelegramMessageTo(chatId, autoReplyText, undefined, MAIN_MENU_KEYBOARD);
+    return NextResponse.json({ ok: true });
+  }
+
+  // "/start login" — пришёл со страницы входа в кабинет (кнопка "Відкрити
+  // Telegram-бот"). Запоминаем это (telegram_login_intents), чтобы после
+  // "Поділитися номером" сказать вернуться на сайт за кодом. Если номер
+  // уже привязан — сразу отправляем назад на сайт
+  if (/^\/start(?:@\w+)?\s+login$/.test(text)) {
+    try {
+      await pool.query(
+        'INSERT INTO telegram_login_intents (chat_id) VALUES ($1) ON CONFLICT (chat_id) DO UPDATE SET created_at = now()',
+        [chatId]
+      );
+      const linked = await pool.query('SELECT 1 FROM customer_telegram_links WHERE telegram_chat_id = $1 LIMIT 1', [chatId]);
+      if (linked.rows.length > 0) {
+        await sendTelegramMessageTo(
+          chatId,
+          `Ваш номер уже підключено. Поверніться на сайт і натисніть «Надіслати код».\n\nЯкщо входите з іншим номером — натисніть «${BTN_SHARE_PHONE}».`,
+          undefined,
+          SHARE_PHONE_KEYBOARD
+        );
+        return NextResponse.json({ ok: true });
+      }
+    } catch (error) {
+      console.error('Ошибка при обработке /start login:', error);
+    }
+    await sendTelegramMessageTo(
+      chatId,
+      `Щоб увійти в особистий кабінет, натисніть кнопку «${BTN_SHARE_PHONE}» нижче — номер має збігатися з тим, що ви ввели на сайті.`,
+      undefined,
+      SHARE_PHONE_KEYBOARD
+    );
     return NextResponse.json({ ok: true });
   }
 

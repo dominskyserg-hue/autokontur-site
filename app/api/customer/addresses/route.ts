@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { normalizePhone } from '@/lib/phoneNormalize';
+import { requireCustomer } from '@/lib/customerAuth';
 
 export const runtime = 'nodejs';
 
@@ -53,7 +54,12 @@ interface CustomerAddress {
 // GET /api/customer/addresses?phone=...
 // ------------------------------------------------------------
 export async function GET(request: NextRequest) {
-  const rawPhone = (request.nextUrl.searchParams.get('phone') || '').trim();
+  // Телефон — ТОЛЬКО из сессии покупателя (вход по коду из Telegram);
+  // параметр phone из адреса или тела запроса игнорируется
+  const customerSession = await requireCustomer(request);
+  if (customerSession instanceof NextResponse) return customerSession;
+
+  const rawPhone = customerSession.phone;
 
   if (!rawPhone || !isValidPhone(rawPhone)) {
     return NextResponse.json({ error: 'Вкажіть коректний номер телефону.' }, { status: 400 });
@@ -103,6 +109,11 @@ interface CreateAddressBody {
 }
 
 export async function POST(request: NextRequest) {
+  // Телефон — ТОЛЬКО из сессии покупателя (вход по коду из Telegram);
+  // параметр phone из адреса или тела запроса игнорируется
+  const customerSession = await requireCustomer(request);
+  if (customerSession instanceof NextResponse) return customerSession;
+
   let body: CreateAddressBody;
   try {
     body = await request.json();
@@ -110,7 +121,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Тіло запиту має бути коректним JSON.' }, { status: 400 });
   }
 
-  const phone = (body.phone || '').trim();
+  const phone = customerSession.phone;
   const recipientName = (body.recipientName || '').trim();
   const recipientPhone = (body.recipientPhone || '').trim() || null;
   const city = (body.city || '').trim();

@@ -16,14 +16,13 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CategoryDef, getToCategories } from '@/lib/categories';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
-import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import SiteHeaderServer from '@/components/SiteHeaderServer';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
@@ -96,8 +95,7 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
   // Персональна ціна покупця — рахуємо ОДИН раз на всю сторінку (той
   // самий покупець для всіх секцій), а не по колу на кожну категорію.
   // Див. коментар біля того ж коду в app/category/[slug]/page.tsx
-  const cookieStore = await cookies();
-  const customerPricingRule = await getCustomerPricingRule(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value);
+  const customerPricingRule = await getCustomerPricingRule(pool, await getCustomerSessionPhone());
 
   return Promise.all(
     categories.map(async (category): Promise<ToSection> => {

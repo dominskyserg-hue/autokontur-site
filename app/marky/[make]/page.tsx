@@ -12,7 +12,6 @@
 import { cache } from 'react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CAR_MAKES, getCarMakeBySlug, buildMakeWhereClause } from '@/lib/carMakes';
@@ -20,7 +19,7 @@ import { getModelLandingsForMake } from '@/lib/categories';
 import { hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
-import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import SiteHeaderServer from '@/components/SiteHeaderServer';
 import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
@@ -110,7 +109,6 @@ const loadMakeProducts = cache(async function loadMakeProducts(
 
   // Персональна ціна покупця — див. коментар біля того ж коду в
   // app/category/[slug]/page.tsx
-  const cookieStore = await cookies();
   const [productsResult, countResult, customerPricingRule] = await Promise.all([
     pool.query(
       `
@@ -124,7 +122,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
       [param, PAGE_SIZE, offset]
     ),
     pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`, [param]),
-    getCustomerPricingRule(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value),
+    getCustomerPricingRule(pool, await getCustomerSessionPhone()),
   ]);
 
   const products: MakeProduct[] = productsResult.rows.map((row) => ({

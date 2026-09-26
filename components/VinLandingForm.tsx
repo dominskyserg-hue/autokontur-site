@@ -17,6 +17,7 @@ import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Check } from 'lucide-react';
 import { decodeVin } from '@/lib/vinDecode';
+import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
 import {
   TECH_SURFACE_2,
   TECH_BORDER_2,
@@ -49,6 +50,9 @@ export default function VinLandingForm() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Скрытое поле-ловушка (components/HoneypotField.tsx) — читаем сразу,
+    // до первого await: после него event.currentTarget уже пустой
+    const honeypot = readHoneypot(event.currentTarget);
     setError(null);
 
     if (!vinCode.trim() || vinCode.trim().length < 5) {
@@ -69,7 +73,7 @@ export default function VinLandingForm() {
       const response = await fetch('/api/vin-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vinCode: vinCode.trim(), phone: phone.trim(), description: description.trim() }),
+        body: JSON.stringify({ vinCode: vinCode.trim(), phone: phone.trim(), description: description.trim(), website: honeypot }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -111,6 +115,7 @@ export default function VinLandingForm() {
       className="flex flex-col gap-3 rounded-2xl p-5 sm:p-6"
       style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER_2}` }}
     >
+      <HoneypotField />
       <div>
         <label className="mb-1.5 block text-xs font-medium" style={{ fontFamily: TECH_BODY_FONT, color: TECH_MUTED }}>
           VIN-код автомобіля

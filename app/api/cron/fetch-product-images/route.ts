@@ -21,6 +21,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline';
 import { cleanupAdminAuthTables } from '@/lib/adminAuth';
+import { cleanupCustomerAuthTables } from '@/lib/customerAuth';
+import { cleanupRateLimits } from '@/lib/rateLimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -71,12 +73,18 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  // Попутная ежедневная чистка служебных таблиц входа в админку:
-  // истёкшие сессии и попытки входа старше суток. Отдельный try —
-  // сбой чистки не должен мешать основной работе (поиску фото)
+  // Попутная ежедневная чистка служебных таблиц: входы в админку
+  // (истёкшие сессии, попытки старше суток), кабинет покупателя (коды
+  // старше суток, истёкшие сессии) и счётчики rate limit. Отдельный
+  // try — сбой чистки не должен мешать основной работе (поиску фото)
   try {
-    const cleaned = await cleanupAdminAuthTables();
-    console.log(`Чистка admin_sessions/admin_login_attempts: удалено сессий ${cleaned.sessions}, попыток ${cleaned.attempts}`);
+    const admin = await cleanupAdminAuthTables();
+    const customer = await cleanupCustomerAuthTables();
+    const limits = await cleanupRateLimits();
+    console.log(
+      `Чистка: admin_sessions ${admin.sessions}, admin_login_attempts ${admin.attempts}, ` +
+        `customer_login_codes ${customer.codes}, customer_sessions ${customer.sessions}, rate_limits ${limits}`
+    );
   } catch (error) {
     console.error('Ошибка при чистке таблиц входа в админку:', error);
   }

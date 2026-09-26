@@ -16,20 +16,15 @@
 // для знижки — знижка рахувалась би від уже накрученої ціни, а не від
 // реальної собівартості, як домовлено з власником магазину.
 //
-// Покупець на цьому сайті не має пароля/сесії — єдина ідентифікація
-// це номер телефону (див. components/CustomerDashboard.tsx, "вхід" у
-// Особистий кабінет). Щоб той самий номер міг впливати на ціни, які
-// рендерить СЕРВЕР (сторінки категорій/марок, API пошуку), одного
-// localStorage замало (сервер його не бачить) — тому ПОРЯД із
-// localStorage логін додатково пише саме той самий телефон у cookie
-// CUSTOMER_PHONE_COOKIE, яку сервер читає при кожному запиті
+// Телефон для персональной цены — ТОЛЬКО из сессии покупателя (вход
+// по одноразовому коду из Telegram, lib/customerAuth.ts:
+// getCustomerSessionPhone). Раньше он брался из cookie customer_phone,
+// которую любой мог выставить себе с чужим номером — её больше нет
 // ============================================================
 
 import type { Pool } from 'pg';
 import { normalizePhone } from './phoneNormalize';
 import { isCustomerCabinetEnabled } from './customerCabinet';
-
-export { CUSTOMER_PHONE_COOKIE } from './customerPhoneCookie';
 
 export type CustomerRuleType = 'discount' | 'markup';
 

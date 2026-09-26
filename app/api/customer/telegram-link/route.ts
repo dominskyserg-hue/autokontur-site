@@ -13,6 +13,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { normalizePhone } from '@/lib/phoneNormalize';
+import { requireCustomer } from '@/lib/customerAuth';
 
 export const runtime = 'nodejs';
 
@@ -37,7 +38,12 @@ function isValidPhone(rawPhone: string): boolean {
 }
 
 export async function GET(request: NextRequest) {
-  const rawPhone = (request.nextUrl.searchParams.get('phone') || '').trim();
+  // Телефон — ТОЛЬКО из сессии покупателя (вход по коду из Telegram);
+  // параметр phone из адреса или тела запроса игнорируется
+  const customerSession = await requireCustomer(request);
+  if (customerSession instanceof NextResponse) return customerSession;
+
+  const rawPhone = customerSession.phone;
 
   if (!rawPhone || !isValidPhone(rawPhone)) {
     return NextResponse.json({ error: 'Вкажіть коректний номер телефону.' }, { status: 400 });

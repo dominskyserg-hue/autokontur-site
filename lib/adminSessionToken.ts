@@ -40,7 +40,7 @@ let devFallbackSecret: string | null = null;
 //   - production — null: вход отвечает 500 "SESSION_SECRET не
 //     налаштовано", любая cookie недействительна, в логах — ошибка;
 //   - development — временный случайный ключ с предупреждением
-function getSigningSecret(): string | null {
+export function getSigningSecret(): string | null {
   const secret = process.env.SESSION_SECRET;
   if (secret && secret.length >= SESSION_SECRET_MIN_LENGTH) return secret;
 

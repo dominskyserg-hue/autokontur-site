@@ -11,19 +11,17 @@
 // GET /api/customer/orders одночасно і "перевіряє вхід" — якщо
 // замовлення з таким телефоном знайшлись, значить телефон "вірний" і
 // показуємо кабінет; якщо ні — лишаємось на екрані входу з помилкою.
-// У СПРАВЖНІЙ системі тут була б SMS-верифікація (код підтвердження) —
-// в цьому проєкті це свідоме спрощення (детальний коментар про це і
-// про те, що РЕАЛЬНО захищено — в app/api/customer/orders/route.ts).
-// Та ж модель "телефон замінює пароль" діє і для гаража/обраного/адрес
-// (app/api/customer/vehicles/route.ts та інші) — усюди належність
-// перевіряється порівнянням останніх 9 цифр номера.
-//
-// Телефон, яким увійшли, зберігається в localStorage браузера (той
-// самий прийом, що і для кошика, див. CART_STORAGE_KEY в
-// components/StorefrontHome.tsx) — так покупець не вводить його
-// заново при кожному відкритті сторінки. Той самий телефон паралельно
-// пишеться і в cookie (lib/customerPhoneCookie.ts) — вона потрібна
-// серверним сторінкам (категорії, марки авто) для персональної ціни.
+// ВХОД ПО ОДНОРАЗОВОМУ КОДУ (аудит безопасности): раньше "входом" был
+// просто ввод номера — любой мог открыть чужой кабинет. Теперь:
+//   1. номер → POST /api/customer/auth/request-code — код приходит в
+//      Telegram-бот (номер там подтверждён кнопкой "Поділитися номером");
+//      если бот ещё не знает номер — показываем, как его подключить;
+//   2. код → POST /api/customer/auth/verify-code — сервер ставит
+//      HttpOnly-cookie customer_session (JavaScript её не видит);
+//   3. при открытии страницы GET /api/customer/auth/me — вошёл ли уже.
+// Все запросы кабинета сервер выполняет по телефону ИЗ СЕССИИ; параметр
+// phone, который этот компонент ещё передаёт в адресах, сервер
+// игнорирует (оставлен, чтобы не переписывать все вызовы).
 //
 // Стиль — темний Tech Premium (lib/techTheme.ts), той самий, що і на
 // Головній та картці товару. Framer Motion — для перемикання вкладок
@@ -39,7 +37,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users } from 'lucide-react';
-import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { getCarMakeByName } from '@/lib/carMakes';
 import GarageCard, { type GarageVehicle } from '@/components/GarageCard';
 import {
@@ -178,13 +175,8 @@ function telegramConnectUrl(phone: string): string {
   return `https://t.me/${TELEGRAM_BOT_USERNAME}?start=link`;
 }
 
-function setCustomerPhoneCookie(phone: string) {
-  document.cookie = `${CUSTOMER_PHONE_COOKIE}=${encodeURIComponent(phone)}; path=/; max-age=31536000`;
-}
-
-function clearCustomerPhoneCookie() {
-  document.cookie = `${CUSTOMER_PHONE_COOKIE}=; path=/; max-age=0`;
-}
+// Через сколько секунд можно запросить код ещё раз
+const RESEND_DELAY_SECONDS = 60;
 
 const STATUS_META: Record<OrderStatus, { label: string; bg: string; fg: string }> = {
   new: { label: 'Новий', bg: 'rgba(255,255,255,0.06)', fg: TECH_MUTED },
@@ -320,12 +312,18 @@ const TABS: { key: TabKey; label: string; icon: typeof Car }[] = [
 export default function CustomerDashboard() {
   const router = useRouter();
 
-  // ---- вхід ----
+  // ---- вхід по коду з Telegram ----
+  // loginStep: 'phone' — ввод номера; 'need_telegram' — бот ещё не знает
+  // номер; 'code' — код отправлен, ждём ввод
   const [phoneInput, setPhoneInput] = useState('+380');
   const [loggedInPhone, setLoggedInPhone] = useState<string | null>(null);
   const [loggingIn, setLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [restoringSession, setRestoringSession] = useState(true);
+  const [loginStep, setLoginStep] = useState<'phone' | 'need_telegram' | 'code'>('phone');
+  const [botUrl, setBotUrl] = useState<string | null>(null);
+  const [codeInput, setCodeInput] = useState('');
+  const [resendIn, setResendIn] = useState(0);
 
   // ---- активна вкладка ----
   const [activeTab, setActiveTab] = useState<TabKey>('garage');
@@ -375,20 +373,32 @@ export default function CustomerDashboard() {
   const [telegramUsername, setTelegramUsername] = useState<string | null>(null);
   const [telegramGroupUrl, setTelegramGroupUrl] = useState<string | null>(null);
 
-  // Відновлення "сесії" зі localStorage при відкритті сторінки
+  // При открытии страницы: есть ли уже сессия (HttpOnly-cookie сервер
+  // проверяет сам). Заодно стираем телефон старого "входа" из localStorage
   useEffect(() => {
     try {
-      const savedPhone = window.localStorage.getItem(PHONE_STORAGE_KEY);
-      if (savedPhone) {
-        setCustomerPhoneCookie(savedPhone);
-        setLoggedInPhone(savedPhone);
-      }
+      window.localStorage.removeItem(PHONE_STORAGE_KEY);
     } catch {
-      // localStorage недоступний — лишаємось на екрані входу
-    } finally {
-      setRestoringSession(false);
+      // localStorage недоступний — не страшно
     }
+    fetch('/api/customer/auth/me')
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = await response.json();
+        if (data.success && data.phone) setLoggedInPhone(formatPhoneMask(data.phone as string));
+      })
+      .catch(() => {
+        // Сеть недоступна — показываем экран входа
+      })
+      .finally(() => setRestoringSession(false));
   }, []);
+
+  // Обратный отсчёт до "Надіслати ще раз"
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = window.setTimeout(() => setResendIn((value) => value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendIn]);
 
   const fetchOrders = useCallback(async (phone: string) => {
     setLoadingOrders(true);
@@ -509,27 +519,31 @@ export default function CustomerDashboard() {
     }
   }, [activeTab, loggedInPhone, loadedTabs, fetchVehicles, fetchFavorites, fetchAddresses, fetchTelegramStatus]);
 
-  // ВХІД
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  // ВХІД, крок 1: запросити код (і повторна відправка — та сама функція)
+  const requestCode = async () => {
     if (!isCompletePhone(phoneInput)) {
       setLoginError('Введіть повний номер телефону');
       return;
     }
-
     setLoggingIn(true);
     setLoginError(null);
     try {
-      const response = await fetch(`/api/customer/orders?${new URLSearchParams({ phone: phoneInput }).toString()}`);
+      const response = await fetch('/api/customer/auth/request-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput }),
+      });
       const data = await response.json();
-      if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Замовлень з таким номером не знайдено');
-      }
+      if (!response.ok) throw new Error(data.error || 'Не вдалося надіслати код');
 
-      window.localStorage.setItem(PHONE_STORAGE_KEY, phoneInput);
-      setCustomerPhoneCookie(phoneInput);
-      setOrders(data.orders as OrderListItem[]);
-      setLoggedInPhone(phoneInput);
+      if (data.status === 'need_telegram') {
+        setBotUrl(data.botUrl as string);
+        setLoginStep('need_telegram');
+      } else {
+        setCodeInput('');
+        setLoginStep('code');
+        setResendIn(RESEND_DELAY_SECONDS);
+      }
     } catch (error) {
       setLoginError(error instanceof Error ? error.message : 'Помилка мережі під час входу');
     } finally {
@@ -537,10 +551,48 @@ export default function CustomerDashboard() {
     }
   };
 
-  const handleLogout = () => {
-    window.localStorage.removeItem(PHONE_STORAGE_KEY);
-    clearCustomerPhoneCookie();
+  const handleRequestCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    await requestCode();
+  };
+
+  // ВХІД, крок 2: перевірити код — сервер ставить cookie сесії
+  const handleVerifyCode = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (codeInput.length !== 6) {
+      setLoginError('Введіть 6 цифр коду з Telegram');
+      return;
+    }
+    setLoggingIn(true);
+    setLoginError(null);
+    try {
+      const response = await fetch('/api/customer/auth/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phoneInput, code: codeInput }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.success) throw new Error(data.error || 'Невірний код');
+      setLoggedInPhone(formatPhoneMask(data.phone as string));
+      setLoginStep('phone');
+      setCodeInput('');
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Помилка мережі під час входу');
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    // Сессию удаляет сервер (и из базы, и cookie)
+    try {
+      await fetch('/api/customer/auth/logout', { method: 'POST' });
+    } catch {
+      // Сеть недоступна — всё равно показываем экран входа
+    }
     setLoggedInPhone(null);
+    setLoginStep('phone');
+    setCodeInput('');
     setOrders([]);
     setExpandedOrderId(null);
     setOrderDetails({});
@@ -791,47 +843,122 @@ export default function CustomerDashboard() {
           <h1 className="mb-1.5 text-xl font-semibold" style={{ fontFamily: TECH_DISPLAY_FONT, color: '#fff' }}>
             Особистий кабінет
           </h1>
-          <p className="mb-6 text-sm leading-relaxed" style={{ color: TECH_MUTED }}>
-            Введіть номер телефону, який вказували при оформленні замовлення — покажемо гараж, історію
-            покупок і обране.
-          </p>
-
-          <form onSubmit={handleLogin} className="flex flex-col gap-3">
-            <div>
-              <input
-                type="tel"
-                value={phoneInput}
-                onChange={(e) => setPhoneInput(formatPhoneMask(e.target.value))}
-                placeholder="+380 XX XXX XX XX"
-                className="w-full rounded-xl px-4 py-3 text-base tracking-wide outline-none transition-colors focus:border-[rgba(59,130,246,0.5)]"
-                style={{
-                  fontFamily: TECH_MONO_FONT,
-                  background: 'rgba(255,255,255,0.04)',
-                  border: `1px solid ${loginError ? 'rgba(239,68,68,0.55)' : TECH_BORDER_2}`,
-                  color: TECH_INK,
-                }}
-                autoFocus
-              />
-              {loginError && (
-                <p className="mt-1.5 text-xs" style={{ color: '#FCA5A5' }}>
-                  {loginError}
-                </p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              disabled={loggingIn || !isCompletePhone(phoneInput)}
-              className="w-full rounded-xl py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50 disabled:shadow-none"
+          {/* ---- Крок 1: номер телефону ---- */}
+          {loginStep === 'phone' && (
+            <>
+              <p className="mb-6 text-sm leading-relaxed" style={{ color: TECH_MUTED }}>
+                Введіть номер телефону, який вказували при оформленні замовлення. Код для входу прийде в наш
+                Telegram-бот.
+              </p>
+              <form onSubmit={handleRequestCode} className="flex flex-col gap-3">
+                <input
+                  type="tel"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(formatPhoneMask(e.target.value))}
+                  placeholder="+380 XX XXX XX XX"
+                  className="w-full rounded-xl px-4 py-3 text-base tracking-wide outline-none transition-colors focus:border-[rgba(59,130,246,0.5)]"
+                  style={{
+                    fontFamily: TECH_MONO_FONT,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${loginError ? 'rgba(239,68,68,0.55)' : TECH_BORDER_2}`,
+                    color: TECH_INK,
+                  }}
+                  autoFocus
+                />
+                <button
+                  type="submit"
+                  disabled={loggingIn || !isCompletePhone(phoneInput)}
+                  className="w-full rounded-xl py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50 disabled:shadow-none"
               style={{ fontFamily: TECH_BODY_FONT, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
-            >
-              {loggingIn ? 'Перевіряємо...' : 'Увійти'}
-            </button>
-          </form>
+                >
+                  {loggingIn ? 'Надсилаємо...' : 'Отримати код'}
+                </button>
+              </form>
+            </>
+          )}
 
-          <p className="mt-5 text-xs" style={{ color: TECH_FAINT }}>
-            Підтвердження кодом із СМС тут не потрібне — це спрощена демо-версія входу.
-          </p>
+          {/* ---- Бот ще не знає цей номер ---- */}
+          {loginStep === 'need_telegram' && (
+            <div className="flex flex-col gap-3">
+              <p className="text-sm leading-relaxed" style={{ color: TECH_MUTED }}>
+                Щоб отримувати коди, відкрийте наш Telegram-бот і натисніть «Поділитися номером».
+              </p>
+              {botUrl && (
+                <a
+                  href={botUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
+                  style={{ fontFamily: TECH_BODY_FONT, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
+                >
+                  <Send className="h-4 w-4" />
+                  Відкрити Telegram-бот
+                </a>
+              )}
+              <button type="button" onClick={requestCode} disabled={loggingIn} className="w-full rounded-xl py-2.5 text-sm font-medium transition-colors hover:bg-white/5 disabled:opacity-50"
+              style={{ fontFamily: TECH_BODY_FONT, border: `1px solid ${TECH_BORDER_2}`, color: TECH_MUTED }}>
+                {loggingIn ? 'Надсилаємо...' : 'Я поділився, надіслати код'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setLoginStep('phone'); setLoginError(null); }}
+                className="text-xs"
+                style={{ color: TECH_FAINT }}
+              >
+                ← Змінити номер
+              </button>
+            </div>
+          )}
+
+          {/* ---- Крок 2: код з Telegram ---- */}
+          {loginStep === 'code' && (
+            <>
+              <p className="mb-6 text-sm leading-relaxed" style={{ color: TECH_MUTED }}>
+                Ми надіслали 6-значний код у Telegram на номер {phoneInput}. Він діє 5 хвилин.
+              </p>
+              <form onSubmit={handleVerifyCode} className="flex flex-col gap-3">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  value={codeInput}
+                  onChange={(e) => setCodeInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  className="w-full rounded-xl px-4 py-3 text-center text-xl tracking-[0.4em] outline-none transition-colors focus:border-[rgba(59,130,246,0.5)]"
+                  style={{
+                    fontFamily: TECH_MONO_FONT,
+                    background: 'rgba(255,255,255,0.04)',
+                    border: `1px solid ${loginError ? 'rgba(239,68,68,0.55)' : TECH_BORDER_2}`,
+                    color: TECH_INK,
+                  }}
+                  autoFocus
+                />
+                <button type="submit" disabled={loggingIn || codeInput.length !== 6} className="w-full rounded-xl py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50 disabled:shadow-none"
+              style={{ fontFamily: TECH_BODY_FONT, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}>
+                  {loggingIn ? 'Перевіряємо...' : 'Увійти'}
+                </button>
+                <button type="button" onClick={requestCode} disabled={loggingIn || resendIn > 0} className="w-full rounded-xl py-2.5 text-sm font-medium transition-colors hover:bg-white/5 disabled:opacity-50"
+              style={{ fontFamily: TECH_BODY_FONT, border: `1px solid ${TECH_BORDER_2}`, color: TECH_MUTED }}>
+                  {resendIn > 0 ? `Надіслати ще раз (через ${resendIn} с)` : 'Надіслати ще раз'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setLoginStep('phone'); setLoginError(null); setCodeInput(''); }}
+                  className="text-xs"
+                  style={{ color: TECH_FAINT }}
+                >
+                  ← Змінити номер
+                </button>
+              </form>
+            </>
+          )}
+
+          {loginError && (
+            <p className="mt-3 text-xs" style={{ color: '#FCA5A5' }}>
+              {loginError}
+            </p>
+          )}
         </div>
       </div>
     );

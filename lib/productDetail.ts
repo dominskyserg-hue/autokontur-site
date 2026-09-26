@@ -13,7 +13,6 @@
 // ============================================================
 
 import { cache } from 'react';
-import { cookies } from 'next/headers';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { buildProductPath, buildProductSlug } from '@/lib/slug';
@@ -29,7 +28,7 @@ import { loadVisibleHubs } from '@/lib/modelHubData';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
-import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
+import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import { getSeoOverride, type SeoOverride, type SeoOverrideFaqItem } from '@/data/seo-overrides';
 
 declare global {
@@ -986,7 +985,7 @@ export async function loadProductPageData(
   // (а не всередині loadProduct/loadOtherOffers/... вище), щоб самі ці
   // cache()-функції й надалі повертали справжню базову ціну — вона
   // потрібна незміненою в інших місцях (напр. generateMetadata окремо
-  // викликає loadProduct без будь-якої персоналізації). cookies() тут
+  // викликає loadProduct без будь-якої персоналізації). cookies() (всередині getCustomerSessionPhone) тут
   // також гарантує, що Next.js не роздасть цю сторінку зі статичного
   // кешу одному покупцю з ціною іншого.
   //
@@ -998,8 +997,7 @@ export async function loadProductPageData(
   // йдуть у JSX, costPrice свідомо НЕ включається (перелік полів
   // явний, без spread), щоб оптова собівартість не потрапила в HTML,
   // відданий браузеру покупця
-  const cookieStore = await cookies();
-  const customerPricingRule = await getCustomerPricingRule(pool, cookieStore.get(CUSTOMER_PHONE_COOKIE)?.value);
+  const customerPricingRule = await getCustomerPricingRule(pool, await getCustomerSessionPhone());
 
   const personalizedProduct: ProductDetail = {
     id: product.id,

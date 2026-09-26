@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { normalizePhone } from '@/lib/phoneNormalize';
+import { requireCustomer } from '@/lib/customerAuth';
 
 export const runtime = 'nodejs';
 
@@ -57,6 +58,11 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Телефон — ТОЛЬКО из сессии покупателя (вход по коду из Telegram);
+  // параметр phone из адреса или тела запроса игнорируется
+  const customerSession = await requireCustomer(request);
+  if (customerSession instanceof NextResponse) return customerSession;
+
   const { id } = await params;
 
   if (!isValidUuid(id)) {
@@ -70,7 +76,7 @@ export async function PATCH(
     return NextResponse.json({ error: 'Тіло запиту має бути коректним JSON.' }, { status: 400 });
   }
 
-  const phone = (body.phone || '').trim();
+  const phone = customerSession.phone;
   if (!phone || !isValidPhone(phone)) {
     return NextResponse.json({ error: 'Вкажіть коректний номер телефону.' }, { status: 400 });
   }
@@ -137,13 +143,18 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // Телефон — ТОЛЬКО из сессии покупателя (вход по коду из Telegram);
+  // параметр phone из адреса или тела запроса игнорируется
+  const customerSession = await requireCustomer(request);
+  if (customerSession instanceof NextResponse) return customerSession;
+
   const { id } = await params;
 
   if (!isValidUuid(id)) {
     return NextResponse.json({ error: 'Некоректний ідентифікатор авто.' }, { status: 400 });
   }
 
-  const rawPhone = (request.nextUrl.searchParams.get('phone') || '').trim();
+  const rawPhone = customerSession.phone;
   if (!rawPhone || !isValidPhone(rawPhone)) {
     return NextResponse.json({ error: 'Вкажіть коректний номер телефону.' }, { status: 400 });
   }

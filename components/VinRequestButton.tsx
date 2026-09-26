@@ -24,6 +24,7 @@ import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircleQuestion, X, Check } from 'lucide-react';
 import { decodeVin } from '@/lib/vinDecode';
+import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
 import {
   TECH_SURFACE_2,
   TECH_BORDER,
@@ -102,6 +103,9 @@ export default function VinRequestButton() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Скрытое поле-ловушка (components/HoneypotField.tsx) — читаем сразу,
+    // до первого await: после него event.currentTarget уже пустой
+    const honeypot = readHoneypot(event.currentTarget);
     setError(null);
 
     if (!vinCode.trim() || vinCode.trim().length < 5) {
@@ -122,7 +126,7 @@ export default function VinRequestButton() {
       const response = await fetch('/api/vin-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ vinCode: vinCode.trim(), phone: phone.trim(), description: description.trim() }),
+        body: JSON.stringify({ vinCode: vinCode.trim(), phone: phone.trim(), description: description.trim(), website: honeypot }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -253,6 +257,7 @@ export default function VinRequestButton() {
                 </div>
               ) : (
                 <form onSubmit={handleSubmit} className="flex flex-col gap-3 px-5 py-5">
+                  <HoneypotField />
                   <p className="text-xs leading-relaxed" style={{ fontFamily: TECH_BODY_FONT, color: TECH_MUTED }}>
                     Опишіть, яку деталь шукаєте, і лишіть VIN-код та телефон — наш менеджер підбере деталь
                     вручну і зв&apos;яжеться з вами.
