@@ -20,6 +20,7 @@ import { getCarMakeByDbValue } from '@/lib/carMakes';
 import { detectCategoryForProductName, detectCategoryForProductH1, getCategoryBySlug } from '@/lib/categories';
 import { cleanApplicability } from '@/lib/carModelTranslation';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
+import { loadBreadcrumbCategories } from '@/lib/productCategoryLookup';
 import { buildDisplayProductNameDetailed } from '@/lib/productNameTranslation';
 import { brandsAreSameFamily } from '@/lib/brandFamilies';
 import { ensureUkrainianCorpusFresh } from '@/lib/ukrainianCorpus';
@@ -1045,14 +1046,16 @@ export async function loadProductPageData(
     stock: item.stock,
   }));
 
-  // Категорія деталі ("Гальмівні колодки") — тим самим способом
-  // (matchGroups), яким побудований сам каталог, але по ОЧИЩЕНІЙ назві
-  // (КРОК 1: без службового префікса "A3/", без КАПСУ) і, якщо своєї назви
-  // немає, — по назві з іншого прайсу того ж артикула. Крихти (рішення
-  // власника): Головна › Категорія › Бренд Артикул — без марки авто
-  const category = detectCategoryForProductName(
-    buildCleanProductName(product.name) ?? buildCleanProductName(product.fallbackName)
-  );
+  // Категорія деталі ("Гальмівні колодки") — з таблиці product_categories,
+  // тобто та сама, на сторінці якої товар реально лежить
+  // (lib/productCategoryLookup.ts). Запасний варіант, якщо в таблиці
+  // нічого немає (латинські літери всередині слова "Свiчка", назва лише з
+  // іншого прайсу, товар щойно з'явився і ще не перерахований), — як
+  // раніше, за словами в ОЧИЩЕНІЙ назві. Крихти (рішення власника):
+  // Головна › Категорія › Бренд Артикул — без марки авто
+  const category =
+    (await loadBreadcrumbCategories(pool, [product.id])).get(product.id) ??
+    detectCategoryForProductName(buildCleanProductName(product.name) ?? buildCleanProductName(product.fallbackName));
   const breadcrumbItems: BreadcrumbItem[] = [
     { name: 'Головна', url: SITE_URL },
     ...(category ? [{ name: category.name, url: `${SITE_URL}/category/${category.slug}` }] : []),

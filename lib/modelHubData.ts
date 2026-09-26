@@ -11,6 +11,7 @@
 import { cache } from 'react';
 import { Pool } from 'pg';
 import { detectCategoryForProductName, getCategoryBySlug, type CategoryDef } from '@/lib/categories';
+import { loadBreadcrumbCategories } from '@/lib/productCategoryLookup';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { MODEL_HUBS, MIN_HUB_PRODUCTS, PRIORITY_CATEGORY_SLUGS, type ModelHubDef } from '@/lib/modelHubs';
 import { comparePopular, getRecentlySoldProductIds } from '@/lib/popularitySort';
@@ -105,13 +106,15 @@ export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): P
   }
   const products = [...bestByPart.values()];
 
-  // Категорії — тим самим способом, що й хлібні крихти товару
-  // (detectCategoryForProductName по очищеній назві). Товари без
-  // розпізнаної категорії в блок не потрапляють, але в total рахуються
+  // Категорії — тим самим способом, що й хлібні крихти товару: з таблиці
+  // product_categories (lib/productCategoryLookup.ts), запасний варіант —
+  // за словами в очищеній назві. Товари без категорії в блок не
+  // потрапляють, але в total рахуються
+  const fromTable = await loadBreadcrumbCategories(pool, products.map((product) => product.id));
   const counts = new Map<string, number>();
   const categoryOf = new Map<string, string>();
   for (const product of products) {
-    const category = detectCategoryForProductName(buildCleanProductName(product.name));
+    const category = fromTable.get(product.id) ?? detectCategoryForProductName(buildCleanProductName(product.name));
     if (category) {
       counts.set(category.slug, (counts.get(category.slug) ?? 0) + 1);
       categoryOf.set(product.id, category.slug);
