@@ -26,6 +26,7 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
 import Breadcrumbs from '@/components/Breadcrumbs';
+import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -87,15 +88,12 @@ interface MakeProduct {
 // Той самий вибір сортування, що й на app/category/[slug]/page.tsx
 export type MakeSort = 'popular' | 'price_asc' | 'price_desc';
 
-function makeOrderByClause(sort: MakeSort): string {
+// 'popular' — та сама сортування "За популярністю", що й на категоріях
+// (lib/popularitySort.ts)
+function makeOrderByClause(sort: MakeSort, soldProductIds: string[]): string {
   if (sort === 'price_asc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price ASC';
   if (sort === 'price_desc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC';
-  // Той самий тайбрейк, що й у app/category/[slug]/page.tsx — ціна за
-  // зростанням: p.name ASC піднімав нагору товари з назвою на "(", а
-  // p.stock DESC виявився ще гіршим (одного з постачальників значення
-  // stock величезне саме у найдорожчих товарів, і "популярне" ставало
-  // "найдорожче" — див. детальний коментар у app/category/[slug]/page.tsx)
-  return 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.retail_price ASC';
+  return buildPopularOrderBy(soldProductIds);
 }
 
 const loadMakeProducts = cache(async function loadMakeProducts(
@@ -108,6 +106,8 @@ const loadMakeProducts = cache(async function loadMakeProducts(
 
   const { clause, param } = buildMakeWhereClause(make, 1);
   const offset = (page - 1) * PAGE_SIZE;
+  // Товари, продані за 180 днів — для сортування "За популярністю" (кеш 10 хв)
+  const soldProductIds = sort === 'popular' ? await getRecentlySoldProductIds(pool) : [];
 
   // Персональна ціна покупця — див. коментар біля того ж коду в
   // app/category/[slug]/page.tsx
@@ -118,7 +118,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${clause}
-      ${makeOrderByClause(sort)}
+      ${makeOrderByClause(sort, soldProductIds)}
       LIMIT $2 OFFSET $3
       `,
       [param, PAGE_SIZE, offset]

@@ -13,6 +13,7 @@ import { Pool } from 'pg';
 import { detectCategoryForProductName, getCategoryBySlug, type CategoryDef } from '@/lib/categories';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { MODEL_HUBS, MIN_HUB_PRODUCTS, PRIORITY_CATEGORY_SLUGS, type ModelHubDef } from '@/lib/modelHubs';
+import { comparePopular, getRecentlySoldProductIds } from '@/lib/popularitySort';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -73,7 +74,11 @@ function gridRank(product: HubProduct): number {
 }
 
 export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): Promise<HubData> {
-  const result = await pool.query(HUB_PRODUCTS_SQL, [hub.tecdocMake, hub.tecdocModels]);
+  const [result, soldList] = await Promise.all([
+    pool.query(HUB_PRODUCTS_SQL, [hub.tecdocMake, hub.tecdocModels]),
+    getRecentlySoldProductIds(pool),
+  ]);
+  const soldIds = new Set(soldList);
   const offers: HubProduct[] = result.rows.map((row) => ({
     id: row.id,
     article: row.article,
@@ -124,15 +129,16 @@ export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): P
 
   // Сітка — у тому ж порядку категорій, що й блок категорій (спершу
   // пріоритетні: гальма, фільтри, підвіска...), товари без категорії — в
-  // кінці; усередині категорії: в наявності з фото -> в наявності без фото
-  // -> під замовлення, далі дешевші
+  // кінці; усередині категорії — сортування "За популярністю", однакове
+  // для всього сайту (lib/popularitySort.ts): наявність → продаж за 180
+  // днів → фото → група бренду → ціна за зростанням
   const categoryOrder = new Map(categories.map((item, index) => [item.category.slug, index]));
   const categoryRank = (product: HubProduct): number => {
     const slug = categoryOf.get(product.id);
     return slug !== undefined ? categoryOrder.get(slug) ?? categories.length : categories.length;
   };
   const grid = [...products]
-    .sort((a, b) => categoryRank(a) - categoryRank(b) || gridRank(a) - gridRank(b) || a.retailPrice - b.retailPrice)
+    .sort((a, b) => categoryRank(a) - categoryRank(b) || comparePopular(a, b, soldIds))
     .slice(0, HUB_GRID_SIZE);
 
   return { total: products.length, categories, products: grid };

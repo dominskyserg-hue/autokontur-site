@@ -37,6 +37,7 @@ import Breadcrumbs from '@/components/Breadcrumbs';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
+import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -106,20 +107,16 @@ interface CategoryProduct {
 // ціною для покупця, якому це важливіше за все інше
 export type CategorySort = 'popular' | 'price_asc' | 'price_desc';
 
-function categoryOrderByClause(sort: CategorySort): string {
+// 'popular' — єдина для всього сайту сортування "За популярністю"
+// (lib/popularitySort.ts): наявність → продаж за 180 днів → фото →
+// група бренду (lib/brandPriority.ts) → ціна за зростанням.
+// Історія: колись тайбрейком був p.name, потім p.stock (у одного
+// постачальника завищені залишки саме у дорогих товарів) — обидва
+// варіанти давали дивний порядок, тому тепер бренд і ціна
+function categoryOrderByClause(sort: CategorySort, soldProductIds: string[]): string {
   if (sort === 'price_asc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price ASC';
   if (sort === 'price_desc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC';
-  // 'popular' — товари з фото і в наявності насамперед. Тайбрейк
-  // СПЕРШУ був p.name ASC (проблема з "(180X31)..." — див. коментар
-  // вище в історії), потім p.stock DESC — але виявилось, що це теж
-  // погана ідея: значення products.stock прийшли з прайсів різних
-  // постачальників, і в одного з них ("T1HO") воно чомусь величезне
-  // саме у дорогих товарів (300+ одиниць BMW-деталі за 15 000+ грн) —
-  // це підняло найдорожчі товари категорії на перші місця, що
-  // виглядає як "популярність = найдорожче", а не навпаки. Ціна за
-  // зростанням — найбезпечніший тайбрейк: не залежить від сумнівних
-  // даних постачальника і показує спершу типові, доступні товари
-  return 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.retail_price ASC';
+  return buildPopularOrderBy(soldProductIds);
 }
 
 const loadCategoryProducts = cache(async function loadCategoryProducts(
@@ -159,6 +156,8 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
   const params = vehicleResult ? [...categoryParams, ...vehicleResult.params] : categoryParams;
 
   const offset = (page - 1) * PAGE_SIZE;
+  // Товари, продані за 180 днів — для сортування "За популярністю" (кеш 10 хв)
+  const soldProductIds = sort === 'popular' ? await getRecentlySoldProductIds(pool) : [];
 
   // Персональна ціна покупця (customer_pricing_rules) — за телефоном
   // із СЕСІЇ Особистого кабінету (вхід по коду, lib/customerAuth.ts; див.
@@ -173,7 +172,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
       FROM products p
       JOIN suppliers s ON s.id = p.supplier_id
       WHERE ${clause}
-      ${categoryOrderByClause(sort)}
+      ${categoryOrderByClause(sort, soldProductIds)}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
       `,
       [...params, PAGE_SIZE, offset]

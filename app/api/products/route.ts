@@ -58,6 +58,7 @@ import { resolveMakeDbValues } from '@/lib/carMakes';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_SESSION_COOKIE, getCustomerSessionPhoneFromRequest } from '@/lib/customerAuth';
 import { buildTextSearchClause } from '@/lib/productSearch';
+import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import { isAdminRequest } from '@/lib/adminSession';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
@@ -370,8 +371,11 @@ export async function GET(request: NextRequest) {
     // наявності, найсвіжіші за оновленням (щойно завантажений/оновлений
     // прайс) — той самий принцип "фото насамперед", що і в пошуку/
     // категоріях/сторінках марок вище
+    // Пошук — та сама сортування "За популярністю", що й на категоріях,
+    // марках і хабах (lib/popularitySort.ts): наявність → продаж за 180
+    // днів → фото → група бренду (lib/brandPriority.ts) → ціна за зростанням
     const orderBySql = search
-      ? 'ORDER BY (p.image_url IS NOT NULL) DESC, (p.stock > 0) DESC, p.retail_price DESC'
+      ? buildPopularOrderBy(await getRecentlySoldProductIds(pool))
       : featured
         ? 'ORDER BY p.updated_at DESC'
         : 'ORDER BY p.article ASC';
