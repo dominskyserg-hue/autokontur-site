@@ -21,6 +21,8 @@
 // використати як стартові правила автоматичного розпізнавання.
 // ============================================================
 
+import { foldLookalikes } from '@/lib/latinLookalikes';
+
 export interface CategoryDef {
   slug: string;
   name: string;
@@ -2593,7 +2595,9 @@ export const CATEGORIES: CategoryDef[] = [
     matchGroups: [['зчеплення', 'сцепление', 'маховик', 'коробк']],
     // "Зчеплення компресора кондиціонера" — муфта компресора, а не зчеплення
     // авто: вона в "Опалення і клімат" (виправлення, ~580 товарів)
-    excludeWords: ['компресор', 'компрессор', 'кондиц', 'кондиціон'],
+    // "без коробки" — уточнение в названии другой детали ("Фільтр повітряний
+    // ... (без коробки)"), а не деталь коробки передач
+    excludeWords: ['компресор', 'компрессор', 'кондиц', 'кондиціон', 'без коробк'],
   },
   {
     slug: 'kuzov-detali',
@@ -2921,18 +2925,23 @@ export function buildCategoryRuleClause(
   // Пильовик/пыльник на початку назви — не деталь категорії (див.
   // BOOT_FIRST_RE вище). POSIX-класи замість \s, щоб не мати справи з
   // подвійним екрануванням бекслешів у SQL-літералі
+  //
+  // Сравнение — по p.name_search: назва в нижньому регістрі, латинські
+  // двійники замінені кирилицею ("Свiчка" з латинською i -> "свічка").
+  // Слова правил проходять ту саму заміну (foldLookalikes), тож латинські
+  // слова правил ("pajero ii") збігаються з так само заміненою назвою
   conditions.push(
-    "p.name !~* '^[[:space:]]*([A-Za-zА-Яа-яІіЇїЄєҐґ]?[0-9]+/)*[[:space:]]*(пыльник|пильник|пильовик)'"
+    "p.name_search !~* '^[[:space:]]*([A-Za-zА-Яа-яІіЇїЄєҐґ]?[0-9]+/)*[[:space:]]*(пыльник|пильник|пильовик)'"
   );
   conditions.push(...category.matchGroups.map((group, i) => {
-    params.push(group.map((word) => `%${word}%`));
-    return `p.name ILIKE ANY($${startParamIndex + i})`;
+    params.push(group.map((word) => `%${foldLookalikes(word)}%`));
+    return `p.name_search ILIKE ANY($${startParamIndex + i})`;
   }));
 
   if (category.excludeWords && category.excludeWords.length > 0) {
     const excludeParamIdx = startParamIndex + params.length;
-    params.push(category.excludeWords.map((word) => `%${word}%`));
-    conditions.push(`NOT (p.name ILIKE ANY($${excludeParamIdx}))`);
+    params.push(category.excludeWords.map((word) => `%${foldLookalikes(word)}%`));
+    conditions.push(`NOT (p.name_search ILIKE ANY($${excludeParamIdx}))`);
   }
 
   if (category.tecdocVehicle) {
