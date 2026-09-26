@@ -32,9 +32,11 @@ import SiteHeaderServer from '@/components/SiteHeaderServer';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { buildVehicleWhereClause, hasVehicleFilter, type VehicleFilterParams } from '@/lib/vehicleFilter';
-import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
+import { buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
+import CardBuyButton from '@/components/CardBuyButton';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -373,22 +375,22 @@ export default async function CategoryPage({
   };
 
   // ==================== SCHEMA.ORG (JSON-LD) ====================
-  // Порядок хлібних крихт ТОЧНО повторює видиму <nav> нижче — Google
-  // звіряє одне з іншим
+  // Хлібні крихти: Головна › Каталог › [Категорія-батько, якщо це
+  // підкатегорія] › Категорія › [Марка, якщо вибрана]. Той самий масив
+  // малює і видимі крихти, і JSON-LD (components/Breadcrumbs.tsx) —
+  // тому вони завжди збігаються. Останній пункт — поточна сторінка
+  // (з тими самими параметрами, що й canonical)
+  const parentCategory = category.parentCategorySlug ? getCategoryBySlug(category.parentCategorySlug) : undefined;
   const breadcrumbItems = [
     { name: 'Головна', url: SITE_URL },
-    { name: 'Категорії', url: `${SITE_URL}/category` },
+    { name: 'Каталог', url: `${SITE_URL}/category` },
+    ...(parentCategory ? [{ name: parentCategory.name, url: `${SITE_URL}/category/${parentCategory.slug}` }] : []),
     { name: category.name, url: `${SITE_URL}/category/${slug}` },
-    ...(make ? [{ name: make.name, url: `${SITE_URL}/marky/${make.slug}` }] : []),
+    ...(make ? [{ name: make.name, url: `${SITE_URL}/category/${slug}?marka=${make.slug}` }] : []),
   ];
 
   return (
     <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildBreadcrumbJsonLd(breadcrumbItems)) }}
-      />
       {products.length > 0 && (
         <script
           type="application/ld+json"
@@ -398,26 +400,8 @@ export default async function CategoryPage({
       )}
       <SiteHeaderServer />
       <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
-        {/* ==================== ХЛІБНІ КРИХТИ ==================== */}
-        <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
-          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-            Головна
-          </Link>{' '}
-          /{' '}
-          <Link href="/category" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-            Категорії
-          </Link>{' '}
-          / <span>{category.name}</span>
-          {make && (
-            <>
-              {' '}
-              /{' '}
-              <Link href={`/marky/${make.slug}`} className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-                {make.name}
-              </Link>
-            </>
-          )}
-        </nav>
+        {/* ==================== ХЛІБНІ КРИХТИ (+ JSON-LD) ==================== */}
+        <Breadcrumbs items={breadcrumbItems} />
 
         {/* ==================== ЗАГОЛОВОК ==================== */}
         <header className="mb-6">
@@ -564,6 +548,11 @@ export default async function CategoryPage({
                     <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
                       {product.name || category.name}
                     </div>
+                    {product.stock > 0 && (
+                      <div className="mb-1.5">
+                        <StockBadge stock={product.stock} />
+                      </div>
+                    )}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-baseline gap-1.5 min-w-0">
                         <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
@@ -583,7 +572,19 @@ export default async function CategoryPage({
                           </>
                         )}
                       </div>
-                      <StockBadge stock={product.stock} />
+                      {/* Кнопка "Купити" (components/CardBuyButton.tsx): добавляет в корзину,
+                          не уводя со страницы; без наличия — серый "Під замовлення" */}
+                      <CardBuyButton
+                        product={{
+                          id: product.id,
+                          article: product.article,
+                          brand: product.brand,
+                          name: product.name || category.name,
+                          retailPrice: product.retailPrice,
+                          stock: product.stock,
+                        }}
+                        listName={make ? `${category.name} — ${make.name}` : category.name}
+                      />
                     </div>
                     {product.stock <= 0 && product.deliveryTime && (
                       <div className="mt-1.5 text-xs" style={{ color: TECH_FAINT }}>

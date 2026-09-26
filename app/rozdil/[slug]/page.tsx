@@ -15,6 +15,8 @@ import { notFound } from 'next/navigation';
 import { getDepartmentBySlug } from '@/lib/departments';
 import { getCategoryBySlug } from '@/lib/categories';
 import { TECH_BG, TECH_SURFACE_2, TECH_BORDER, TECH_ACCENT_BRIGHT, TECH_INK, TECH_MUTED, TECH_FAINT, TECH_DISPLAY_FONT, TECH_BODY_FONT } from '@/lib/techTheme';
+import Breadcrumbs from '@/components/Breadcrumbs';
+import { SITE_URL } from '@/lib/siteConfig';
 
 type PageParams = { slug: string };
 
@@ -44,12 +46,13 @@ export default async function DepartmentPage({ params }: { params: Promise<PageP
   return (
     <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
       <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
-        <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
-          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-            Головна
-          </Link>{' '}
-          / <span>{department.name}</span>
-        </nav>
+        {/* Хлібні крихти + JSON-LD BreadcrumbList з одного масиву (components/Breadcrumbs.tsx) */}
+        <Breadcrumbs
+          items={[
+            { name: 'Головна', url: SITE_URL },
+            { name: department.name, url: `${SITE_URL}/rozdil/${slug}` },
+          ]}
+        />
 
         <h1
           className="mb-3 text-3xl md:text-4xl"

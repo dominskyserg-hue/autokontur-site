@@ -24,9 +24,11 @@ import { buildCategoryAndMakeWhereClause } from '@/lib/productFilters';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import SiteHeaderServer from '@/components/SiteHeaderServer';
-import { buildBreadcrumbJsonLd, buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
+import { buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
+import CardBuyButton from '@/components/CardBuyButton';
+import Breadcrumbs from '@/components/Breadcrumbs';
 import {
   TECH_BG,
   TECH_SURFACE_2,
@@ -201,11 +203,6 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
 
   return (
     <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildBreadcrumbJsonLd(breadcrumbItems)) }}
-      />
       {uniqueProducts.length > 0 && (
         <script
           type="application/ld+json"
@@ -215,20 +212,8 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
       )}
       <SiteHeaderServer />
       <div className="mx-auto max-w-6xl px-5 py-8 md:px-8">
-        <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
-          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-            Головна
-          </Link>{' '}
-          /{' '}
-          <Link href="/marky" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-            Марки авто
-          </Link>{' '}
-          /{' '}
-          <Link href={`/marky/${slug}`} className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-            {make.name}
-          </Link>{' '}
-          / <span>ТО</span>
-        </nav>
+        {/* Хлібні крихти + JSON-LD BreadcrumbList з одного масиву (components/Breadcrumbs.tsx) */}
+        <Breadcrumbs items={breadcrumbItems} />
 
         <header className="mb-8">
           <h1
@@ -286,11 +271,29 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
                       <div className="mb-2 line-clamp-2 text-sm" style={{ color: TECH_INK }}>
                         {product.name || category.name}
                       </div>
-                      <div className="flex items-center justify-between">
+                      {product.stock > 0 && (
+                        <div className="mb-1.5">
+                          <StockBadge stock={product.stock} />
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between gap-2">
                         <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 16, color: '#fff' }}>
                           {formatMoney(product.retailPrice)} грн
                         </span>
-                        <StockBadge stock={product.stock} />
+                        {/* Кнопка "Купити" (components/CardBuyButton.tsx): добавляет в корзину,
+                            не уводя со страницы; без наличия — серый "Під замовлення" */}
+                        <CardBuyButton
+                          product={{
+                            id: product.id,
+                            article: product.article,
+                            brand: product.brand,
+                            name: product.name || category.name,
+                            retailPrice: product.retailPrice,
+                            stock: product.stock,
+                          }}
+                          listName={`ТО ${make.name}: ${category.name}`}
+                          compact
+                        />
                       </div>
                       {product.stock <= 0 && product.deliveryTime && (
                         <div className="mt-1 text-[11px]" style={{ color: TECH_FAINT }}>

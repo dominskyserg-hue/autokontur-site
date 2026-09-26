@@ -12,6 +12,8 @@
 
 import Link from 'next/link';
 import { loadSitePage, SitePageSlug } from '@/lib/sitePages';
+import Breadcrumbs from '@/components/Breadcrumbs';
+import { SITE_URL } from '@/lib/siteConfig';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -44,12 +46,16 @@ export default async function InfoPage({
   return (
     <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
       <div className="mx-auto max-w-3xl px-5 py-14 md:px-8">
-        <nav className="mb-6 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
-          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-            Головна
-          </Link>{' '}
-          / <span>{title}</span>
-        </nav>
+        {/* Головна › {Назва сторінки}: видимі крихти + JSON-LD з одного
+            масиву (components/Breadcrumbs.tsx). slug збігається з адресою
+            сторінки (/delivery, /contacts, /returns...) */}
+        <Breadcrumbs
+          className="mb-6"
+          items={[
+            { name: 'Головна', url: SITE_URL },
+            { name: title, url: `${SITE_URL}/${slug}` },
+          ]}
+        />
 
         <h1
           className="mb-8 text-4xl md:text-5xl"

@@ -13,6 +13,8 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import VinLandingForm from '@/components/VinLandingForm';
 import { TECH_BG, TECH_SURFACE_2, TECH_BORDER, TECH_INK, TECH_MUTED, TECH_FAINT, TECH_ACCENT_BRIGHT, TECH_DISPLAY_FONT, TECH_BODY_FONT } from '@/lib/techTheme';
+import Breadcrumbs from '@/components/Breadcrumbs';
+import { SITE_URL } from '@/lib/siteConfig';
 
 export const metadata: Metadata = {
   title: 'Підбір запчастин за VIN-кодом — DominatorParts',
@@ -39,12 +41,13 @@ export default function VinPickupPage() {
   return (
     <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
       <div className="mx-auto max-w-5xl px-5 py-8 md:px-8">
-        <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ color: TECH_FAINT }}>
-          <Link href="/" className="transition-colors hover:text-[#60A5FA]" style={{ color: TECH_MUTED }}>
-            Головна
-          </Link>{' '}
-          / <span>Підбір за VIN</span>
-        </nav>
+        {/* Хлібні крихти + JSON-LD BreadcrumbList з одного масиву (components/Breadcrumbs.tsx) */}
+        <Breadcrumbs
+          items={[
+            { name: 'Головна', url: SITE_URL },
+            { name: 'Підбір за VIN', url: `${SITE_URL}/pidbir-za-vin` },
+          ]}
+        />
 
         <h1
           className="mb-4 text-3xl md:text-4xl"

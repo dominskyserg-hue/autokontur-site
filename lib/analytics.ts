@@ -111,7 +111,10 @@ export function trackViewItem(item: AnalyticsItem): void {
 // 2. ДОБАВЛЕНИЕ В КОРЗИНУ — вызывается в момент клика на кнопку
 //    "Додати в кошик" (add_to_cart в GA4, AddToCart в Meta Pixel)
 // ------------------------------------------------------------
-export function trackAddToCart(item: AnalyticsItem): void {
+// listName — откуда добавили (название категории/страницы списка):
+// уходит в GA4 как item_list_name, чтобы видеть, какие списки продают.
+// Со страницы товара не передаётся
+export function trackAddToCart(item: AnalyticsItem, listName?: string): void {
   if (typeof window === 'undefined') return;
 
   const quantity = item.quantity ?? 1;
@@ -121,6 +124,7 @@ export function trackAddToCart(item: AnalyticsItem): void {
     window.gtag('event', 'add_to_cart', {
       currency: CURRENCY,
       value,
+      ...(listName ? { item_list_name: listName } : {}),
       items: [
         {
           item_id: item.id,
@@ -128,6 +132,7 @@ export function trackAddToCart(item: AnalyticsItem): void {
           item_brand: item.brand || undefined,
           price: item.price,
           quantity,
+          ...(listName ? { item_list_name: listName } : {}),
         },
       ],
     });

@@ -56,12 +56,13 @@ import { FAQ_ITEMS } from '@/lib/faq';
 import { TESTIMONIALS, TESTIMONIALS_SOURCE_URL, TESTIMONIALS_RATING, TESTIMONIALS_COUNT_PER_YEAR, type Testimonial } from '@/lib/testimonials';
 import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
-import { trackAddToCart, trackBeginCheckout, trackPurchase } from '@/lib/analytics';
+import { trackBeginCheckout, trackPurchase } from '@/lib/analytics';
 import { getStoredAttribution } from '@/lib/attribution';
 import NovaPoshtaAddressFields from '@/components/NovaPoshtaAddressFields';
 import CategoryGridSection from '@/components/CategoryGridSection';
 import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
 import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
+import CardBuyButton from '@/components/CardBuyButton';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -712,15 +713,6 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
   // до того как реальные данные оттуда успели подгрузиться
   const [cartLoaded, setCartLoaded] = useState(false);
 
-  // id товара, который только что добавили в корзину кнопкой на
-  // карточке (список/каталог) — используется, чтобы на пару секунд
-  // показать на кнопке галочку вместо иконки корзины, а не сразу
-  // распахивать панель корзины (раньше addToCart() всегда делал
-  // setCartOpen(true), из-за чего корзина открывалась при каждом клике
-  // "Купити" на карточке — пользователь просил вместо этого просто
-  // анимацию добавления на самой кнопке)
-  const [justAddedId, setJustAddedId] = useState<string | null>(null);
-
   // ---- форма оформления заказа (внутри панели корзины) ----
   // Имя, фамилия, телефон, город и адрес відділення Нової Пошти —
   // обов'язкові (потрібні для доставки), коментар — необов'язковий
@@ -800,15 +792,8 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
   const cartTotal = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
 
   const addToCart = (product: Product) => {
-    // Аналитика (Google Analytics 4 + Meta Pixel) — событие
-    // "добавление в корзину", см. lib/analytics.ts
-    trackAddToCart({
-      id: product.id,
-      name: product.name || product.article,
-      brand: product.brand,
-      price: product.retailPrice,
-    });
-
+    // Аналитику add_to_cart отправляет сама кнопка (components/CardBuyButton.tsx)
+    // вместе с item_list_name — здесь только изменение корзины
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
@@ -830,14 +815,6 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
         },
       ];
     });
-
-    // Вместо распахивания панели корзины — короткая анимация на самой
-    // кнопке (галочка вместо иконки корзины ~1.2с), см. justAddedId
-    // выше
-    setJustAddedId(product.id);
-    window.setTimeout(() => {
-      setJustAddedId((current) => (current === product.id ? null : current));
-    }, 1200);
   };
 
   const removeFromCart = (id: string) => {
@@ -2444,21 +2421,14 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                               )}
                             </div>
 
-                            <button
-                              type="button"
-                              disabled={product.stock <= 0}
-                              onClick={() => addToCart(product)}
-                              aria-label="Додати в кошик"
-                              title="Додати в кошик"
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-all hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
-                              style={
-                                product.stock > 0
-                                  ? { background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', transform: justAddedId === product.id ? 'scale(1.12)' : 'scale(1)' }
-                                  : { background: TECH_SURFACE_2, color: TECH_FAINT }
-                              }
-                            >
-                              {justAddedId === product.id ? <CheckIcon /> : <CartIcon />}
-                            </button>
+                            <CardBuyButton
+                              product={product}
+                              listName="Результати пошуку"
+                              compact
+                              inCart={cart.some((item) => item.id === product.id)}
+                              onAdd={() => addToCart(product)}
+                              onOpenCart={() => setCartOpen(true)}
+                            />
                           </div>
                         ))}
                       </div>
@@ -2560,29 +2530,14 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                             </p>
                           )}
 
-                          <button
-                            type="button"
-                            disabled={product.stock <= 0}
-                            onClick={() => addToCart(product)}
-                            className="flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
-                            style={
-                              product.stock > 0
-                                ? { fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }
-                                : { fontFamily: SANS_TECH, background: TECH_SURFACE, color: TECH_FAINT }
-                            }
-                          >
-                            {justAddedId === product.id ? (
-                              <>
-                                <CheckIcon />
-                                Додано
-                              </>
-                            ) : (
-                              <>
-                                <CartIcon />
-                                До кошика
-                              </>
-                            )}
-                          </button>
+                          <CardBuyButton
+                            product={product}
+                            listName="Результати пошуку"
+                            className="w-full"
+                            inCart={cart.some((item) => item.id === product.id)}
+                            onAdd={() => addToCart(product)}
+                            onOpenCart={() => setCartOpen(true)}
+                          />
                         </div>
                       ))}
                     </div>
@@ -2805,21 +2760,14 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                           ГРН
                         </span>
                       </span>
-                      <button
-                        type="button"
-                        disabled={product.stock <= 0}
-                        onClick={() => addToCart(product)}
-                        aria-label="Додати в кошик"
-                        title="Додати в кошик"
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all hover:shadow-glow-lg disabled:opacity-30 disabled:shadow-none"
-                        style={
-                          product.stock > 0
-                            ? { background: `linear-gradient(135deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', transform: justAddedId === product.id ? 'scale(1.12)' : 'scale(1)' }
-                            : { background: TECH_SURFACE, color: TECH_FAINT }
-                        }
-                      >
-                        {justAddedId === product.id ? <CheckIcon /> : <CartIcon />}
-                      </button>
+                      <CardBuyButton
+                        product={product}
+                        listName="Популярні товари"
+                        compact
+                        inCart={cart.some((item) => item.id === product.id)}
+                        onAdd={() => addToCart(product)}
+                        onOpenCart={() => setCartOpen(true)}
+                      />
                     </div>
                   </div>
                 ))}

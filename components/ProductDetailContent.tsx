@@ -19,7 +19,7 @@ import Link from 'next/link';
 import { Send, Truck, Banknote, RotateCcw, ScanSearch } from 'lucide-react';
 import { TELEGRAM_BOT_USERNAME } from '@/lib/telegramNotify';
 import { buildProductPath } from '@/lib/slug';
-import { buildBreadcrumbJsonLd, buildFaqJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
+import { buildFaqJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { findAnyNarrowPageForVehicle } from '@/lib/categories';
 import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
@@ -29,6 +29,7 @@ import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
 import ProductGallery, { type GalleryPhoto } from '@/components/ProductGallery';
 import { getCategoryIcon } from '@/lib/categoryIcons';
+import Breadcrumbs from '@/components/Breadcrumbs';
 
 export const BG = '#0B0F17';
 export const PANEL_SOFT = '#1B2436';
@@ -166,11 +167,6 @@ export default function ProductDetailContent({
       <script
         type="application/ld+json"
         // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: jsonLdScript(buildBreadcrumbJsonLd(breadcrumbItems)) }}
-      />
-      <script
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{
           __html: jsonLdScript(
             buildSingleProductJsonLd({
@@ -194,26 +190,8 @@ export default function ProductDetailContent({
         />
       )}
 
-      <nav className="mb-5 text-xs" aria-label="Хлібні крихти" style={{ fontFamily: BODY_FONT, color: FAINT }}>
-        {breadcrumbItems.map((item, index) => (
-          <span key={item.url}>
-            {index > 0 && ' / '}
-            {index < breadcrumbItems.length - 1 ? (
-              // item.url.replace(SITE_URL, '') дає '/category/...' чи
-              // '/marky/...' для решти крихт, але для самої першої
-              // ("Головна", url === SITE_URL) даватиме ПОРОЖНІЙ рядок —
-              // <Link href=""> веде нікуди (лишається на тій самій
-              // сторінці) замість переходу на Головну, тому порожній
-              // результат окремо підміняємо на '/'
-              <Link href={item.url.replace(SITE_URL, '') || '/'} className="transition-colors hover:text-[#60A5FA]" style={{ color: MUTED }}>
-                {item.name}
-              </Link>
-            ) : (
-              <span style={{ color: MUTED }}>{item.name}</span>
-            )}
-          </span>
-        ))}
-      </nav>
+      {/* Хлібні крихти + JSON-LD BreadcrumbList з одного масиву (components/Breadcrumbs.tsx) */}
+      <Breadcrumbs items={breadcrumbItems} />
 
       <div className="mb-10 grid grid-cols-1 gap-6 md:grid-cols-[300px_1fr] md:gap-8">
         {/* ==================== ФОТО ==================== */}
