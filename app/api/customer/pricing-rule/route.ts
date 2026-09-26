@@ -6,14 +6,19 @@
 // кабінету (components/CustomerDashboard.tsx) — чи призначена цьому
 // покупцю персональна знижка/наценка (адмінка:
 // app/api/admin/customer-pricing-rules/route.ts), і на скільки
-// відсотків. НІЯКИХ цін чи cost_price тут немає — лише сам факт
-// правила й відсоток, це не чутливі дані і показ їх самому покупцю,
-// якого вони стосуються, нічого не розкриває стороннім
+// відсотків.
+//
+// ИЗМЕНЕНО по аудиту безопасности: тип правила и процент ЧУВСТВИТЕЛЬНЫ —
+// персональная цена = закупочная ± %, и по проценту вычисляется
+// закупочная цена любого товара. Теперь роут отдаёт данные ТОЛЬКО
+// админу (isAdminRequest), остальным — 403; бейдж в кабинете просто не
+// показывается (fetchPricingRule в CustomerDashboard это переживает)
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { getCustomerPricingRule } from '@/lib/customerPricing';
+import { isAdminRequest } from '@/lib/adminSession';
 
 export const runtime = 'nodejs';
 
@@ -38,6 +43,14 @@ function isValidPhone(rawPhone: string): boolean {
 }
 
 export async function GET(request: NextRequest) {
+  // Тип правила (скидка/наценка) и процент — только для админа: цена
+  // покупателя с правилом = закупка ± %, поэтому по проценту и цене
+  // вычисляется закупочная цена любого товара. Наценку клиенту вообще
+  // не показываем. Покупателю этот роут ничего не отдаёт
+  if (!(await isAdminRequest(request))) {
+    return NextResponse.json({ error: 'Недостатньо прав.' }, { status: 403 });
+  }
+
   const rawPhone = (request.nextUrl.searchParams.get('phone') || '').trim();
 
   if (!rawPhone || !isValidPhone(rawPhone)) {
@@ -49,7 +62,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, rule });
   } catch (error) {
     console.error('Ошибка при получении персонального правила цены:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
-    return NextResponse.json({ error: 'Не вдалося отримати дані: ' + message }, { status: 500 });
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
+    return NextResponse.json({ error: 'Сталася помилка, спробуйте пізніше' }, { status: 500 });
   }
 }

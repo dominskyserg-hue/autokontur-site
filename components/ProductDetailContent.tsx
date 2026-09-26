@@ -441,17 +441,19 @@ export default function ProductDetailContent({
       {otherOffers.length > 0 && (
         <section className="mb-10">
           <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
-            Ця ж деталь в інших постачальників
+            Інші пропозиції на цю деталь
           </h2>
           <div className="flex flex-col gap-2">
-            {otherOffers.map((offer) => (
+            {/* Название поставщика покупателю НЕ показываем (аудит
+                безопасности) — только номер предложения, наличие и цену */}
+            {otherOffers.map((offer, index) => (
               <Link
                 key={offer.id}
                 href={buildProductPath(offer.id, product)}
                 className="flex items-center justify-between rounded-xl p-3.5 text-sm transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                 style={{ fontFamily: BODY_FONT, background: SURFACE_GLASS, border: `1px solid ${BORDER_SOFT}`, color: PAPER }}
               >
-                <span>{offer.supplierName}</span>
+                <span>Пропозиція {index + 2}</span>
                 <span className="flex items-center gap-3">
                   <StockBadge stock={offer.stock} />
                   <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>{formatMoney(offer.retailPrice)} грн</span>

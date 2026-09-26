@@ -172,9 +172,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, orders });
   } catch (error) {
     console.error('Ошибка при получении заказов клиента:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
     return NextResponse.json(
-      { error: 'Не вдалося отримати замовлення: ' + message },
+      { error: 'Сталася помилка, спробуйте пізніше' },
       { status: 500 }
     );
   }

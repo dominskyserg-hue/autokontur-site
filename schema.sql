@@ -2386,3 +2386,46 @@ CREATE INDEX IF NOT EXISTS idx_pvm_product ON product_vehicle_makes (product_id)
 --
 -- Скрипт полностью идемпотентен (можно запускать повторно сколько
 -- угодно раз).
+
+
+-- ============================================================
+-- ТАБЛИЦА admin_sessions — сессии входа в админ-панель
+-- ============================================================
+-- Раньше cookie админа была просто sha256(пароля): одинаковая для всех
+-- входов, вечная до смены пароля, "Вийти" её не отзывал. Теперь каждый
+-- вход — отдельная строка здесь. В cookie браузера лежит случайный
+-- токен (подписанный SESSION_SECRET, см. lib/adminSessionToken.ts),
+-- а здесь — ТОЛЬКО его sha256: даже с доступом к базе токен из неё не
+-- получить. "Вийти" удаляет строку — и cookie перестаёт работать.
+-- Проверка — requireAdmin() в lib/adminAuth.ts
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- sha256(токена) в hex; UNIQUE — заодно индекс для поиска при каждом запросе
+  token_hash TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Срок жизни — 7 дней от входа; истёкшие удаляются при следующем входе
+  expires_at TIMESTAMPTZ NOT NULL,
+  -- Когда сессией последний раз пользовались (обновляется не чаще раза в 5 минут)
+  last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Откуда входили — чтобы при подозрении посмотреть "кто и где"
+  ip TEXT,
+  user_agent TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_expires_at ON admin_sessions (expires_at);
+
+
+-- ============================================================
+-- ТАБЛИЦА admin_login_attempts — неудачные попытки входа в админку
+-- ============================================================
+-- Защита от подбора пароля: не больше 5 неудачных попыток за 15 минут
+-- с одного IP (app/api/admin/login/route.ts), дальше — ответ 429.
+-- Удачный вход удаляет записи своего IP; записи старше суток
+-- удаляются попутно при следующей неудачной попытке
+CREATE TABLE IF NOT EXISTS admin_login_attempts (
+  id BIGSERIAL PRIMARY KEY,
+  ip TEXT NOT NULL,
+  attempted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_login_attempts_ip_time ON admin_login_attempts (ip, attempted_at);

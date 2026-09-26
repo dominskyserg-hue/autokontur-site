@@ -16,6 +16,42 @@ const nextConfig = {
 
   serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
 
+  // Не сообщаем в каждом ответе "X-Powered-By: Next.js" — лишняя
+  // подсказка атакующему, на чём сделан сайт
+  poweredByHeader: false,
+
+  // Заголовки безопасности для ВСЕХ адресов сайта (аудит безопасности):
+  //   X-Frame-Options: DENY — сайт (и админку) нельзя встроить в чужой
+  //     iframe, защита от "кликджекинга" (невидимая кнопка поверх чужой страницы);
+  //   X-Content-Type-Options: nosniff — браузер не "угадывает" тип файла
+  //     (загруженная картинка не выполнится как скрипт);
+  //   Referrer-Policy — на чужие сайты уходит только домен, без полного адреса;
+  //   Permissions-Policy — камера, микрофон и геолокация сайту не нужны, запрещены;
+  //   Strict-Transport-Security — только HTTPS на 2 года, включая поддомены.
+  // Content-Security-Policy пока НЕ добавлен — отдельной задачей
+  // (нужно аккуратно разрешить GA4, Google Ads, Meta Pixel)
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+        ],
+      },
+    ];
+  },
+
+  // Выключатель кабинета покупателя (lib/customerCabinet.ts): та же
+  // серверная переменная CUSTOMER_CABINET_ENABLED, проброшенная в
+  // браузерный код, чтобы скрыть ссылки "Кабінет" на витрине
+  env: {
+    NEXT_PUBLIC_CUSTOMER_CABINET_ENABLED: process.env.CUSTOMER_CABINET_ENABLED === 'true' ? 'true' : 'false',
+  },
+
   // Самой трассировки (Output File Tracing) недостаточно: она находит
   // файлы через require()/import в коде, а @sparticuz/chromium
   // открывает свою папку bin/ (сжатые .br-архивы самого Chromium)

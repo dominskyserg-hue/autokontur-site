@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { getCategoryBySlug } from '@/lib/categories';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -121,6 +122,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; ruleId: string }> }
 ) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id: supplierId, ruleId } = await params;
 
   if (!isValidUuid(supplierId) || !isValidUuid(ruleId)) {
@@ -196,6 +201,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; ruleId: string }> }
 ) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id: supplierId, ruleId } = await params;
 
   if (!isValidUuid(supplierId) || !isValidUuid(ruleId)) {

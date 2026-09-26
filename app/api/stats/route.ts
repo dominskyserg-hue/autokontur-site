@@ -15,6 +15,7 @@
 
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -38,6 +39,10 @@ const pool =
 globalThis.pgPool = pool;
 
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     // Один запрос сразу считает всё нужное через подзапросы —
     // так дешевле, чем делать 4 отдельных обращения к базе

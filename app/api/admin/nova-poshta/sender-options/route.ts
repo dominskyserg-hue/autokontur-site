@@ -12,10 +12,15 @@
 import { NextResponse } from 'next/server';
 import { loadSenderOptions } from '@/lib/novaPoshta/sender';
 import { NovaPoshtaApiError } from '@/lib/novaPoshta/api';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     const options = await loadSenderOptions();
     return NextResponse.json({ success: true, ...options });

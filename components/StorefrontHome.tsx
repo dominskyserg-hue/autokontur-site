@@ -56,11 +56,11 @@ import { FAQ_ITEMS } from '@/lib/faq';
 import { TESTIMONIALS, TESTIMONIALS_SOURCE_URL, TESTIMONIALS_RATING, TESTIMONIALS_COUNT_PER_YEAR, type Testimonial } from '@/lib/testimonials';
 import { decodeVin } from '@/lib/vinDecode';
 import { buildProductPath } from '@/lib/slug';
-import { normalizePhone } from '@/lib/phoneNormalize';
 import { trackAddToCart, trackBeginCheckout, trackPurchase } from '@/lib/analytics';
 import { getStoredAttribution } from '@/lib/attribution';
 import NovaPoshtaAddressFields from '@/components/NovaPoshtaAddressFields';
 import CategoryGridSection from '@/components/CategoryGridSection';
+import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -1365,14 +1365,17 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
               </Link>
 
               {/* ---- Особистий кабінет ---- */}
-              <Link
-                href="/account"
-                className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
-                style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
-              >
-                <UserIcon />
-                <span className="hidden sm:inline">Кабінет</span>
-              </Link>
+              {/* Скрыт, пока кабинет выключен (lib/customerCabinet.ts) */}
+              {isCustomerCabinetEnabled() && (
+                <Link
+                  href="/account"
+                  className="flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
+                  style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
+                >
+                  <UserIcon />
+                  <span className="hidden sm:inline">Кабінет</span>
+                </Link>
+              )}
 
               {/* ---- Корзина ---- */}
               {/* Кнопка только відкриває панель (не toggle) — закрывается
@@ -3705,7 +3708,9 @@ function OrderSuccessScreen({
 
       {customerPhone && (
         <a
-          href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=${normalizePhone(customerPhone)}`}
+          // Без номера в ссылке: номер бот возьмёт только из кнопки
+          // "📱 Поділитися номером" (подтверждён Telegram), см. webhook
+          href={`https://t.me/${TELEGRAM_BOT_USERNAME}?start=link`}
           target="_blank"
           rel="noopener noreferrer"
           className="mb-3 inline-flex items-center gap-1.5 rounded-xl px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-white/5"

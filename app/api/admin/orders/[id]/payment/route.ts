@@ -25,6 +25,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -51,6 +52,10 @@ interface PaymentRequestBody {
 }
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id: orderId } = await context.params;
   if (!UUID_PATTERN.test(orderId)) {
     return NextResponse.json({ error: 'Некорректный id заказа.' }, { status: 400 });

@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -41,6 +42,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; imageId: string }> }
 ) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id, imageId } = await params;
 
   if (!isValidUuid(id) || !isValidUuid(imageId)) {
@@ -89,6 +94,10 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string; imageId: string }> }
 ) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id, imageId } = await params;
 
   if (!isValidUuid(id) || !isValidUuid(imageId)) {

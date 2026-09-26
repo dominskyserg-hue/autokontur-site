@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -55,6 +56,10 @@ function rowToSettings(row: Record<string, unknown> | undefined) {
 }
 
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     const result = await pool.query(
       `SELECT np_sender_ref, np_contact_sender_ref, np_contact_sender_label, np_senders_phone,
@@ -70,6 +75,10 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: PatchBody;
   try {
     body = await request.json();

@@ -21,19 +21,15 @@
 //
 // Middleware выполняется в Edge Runtime, а не в Node.js — поэтому
 // здесь НЕЛЬЗЯ использовать библиотеку pg или обычный модуль
-// node:crypto (как в остальных API-роутах проекта). Вместо этого для
-// хеширования пароля используется Web Crypto API (crypto.subtle) —
-// он одинаково доступен и в Edge Runtime (здесь), и в обычном
-// Node.js-роуте app/api/admin/login/route.ts, который выдаёт cookie
+// node:crypto (как в остальных API-роутах проекта). Поэтому здесь
+// проверяется только ПОДПИСЬ cookie сессии (Web Crypto, см.
+// lib/adminSessionToken.ts), а наличие сессии в базе — requireAdmin()
+// в каждом админском роуте (lib/adminAuth.ts)
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-
-// Имя cookie с "сессией" администратора. Значение — не сам пароль, а
-// SHA-256 хеш от него (см. sha256Hex ниже и app/api/admin/login/route.ts) —
-// так, даже если кто-то увидит содержимое cookie, сам пароль оттуда
-// не восстановить
-const AUTH_COOKIE_NAME = 'autokontur_admin_session';
+import { CUSTOMER_CABINET_DISABLED_MESSAGE, isCustomerCabinetEnabled } from '@/lib/customerCabinet';
+import { ADMIN_SESSION_COOKIE, verifySessionCookie } from '@/lib/adminSessionToken';
 
 const LOGIN_PATH = '/admin/login';
 
@@ -99,27 +95,14 @@ function isAuthorizedCronRoute(request: NextRequest): boolean {
   return authHeader === `Bearer ${cronSecret}`;
 }
 
-async function sha256Hex(text: string): Promise<string> {
-  const data = new TextEncoder().encode(text);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
-
+// Первый слой проверки сессии админа: cookie подписана нашим секретом
+// и не истекла (lib/adminSessionToken.ts). В базу middleware ходить не
+// может (Edge Runtime, без pg) — существование сессии в admin_sessions
+// проверяет requireAdmin() (lib/adminAuth.ts) в самих роутах и в
+// app/admin/layout.tsx. Старые cookie формата sha256(пароля) здесь не
+// проходят — после деплоя нужно войти заново
 async function isAuthenticated(request: NextRequest): Promise<boolean> {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  // Пароль вообще не настроен на сервере — намеренно считаем ЭТО
-  // "не авторизован", а не "пропустить всех": лучше временно
-  // недоступная админка, чем случайно незапароленная. См. подробности
-  // в комментарии в конце файла про переменную ADMIN_PASSWORD
-  if (!adminPassword) return false;
-
-  const cookieValue = request.cookies.get(AUTH_COOKIE_NAME)?.value;
-  if (!cookieValue) return false;
-
-  const expectedValue = await sha256Hex(adminPassword);
-  return cookieValue === expectedValue;
+  return (await verifySessionCookie(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)) !== null;
 }
 
 export async function middleware(request: NextRequest) {
@@ -128,10 +111,18 @@ export async function middleware(request: NextRequest) {
 
   // ---- страницы /admin/* ----
   if (pathname.startsWith('/admin')) {
+    // Передаём путь в app/admin/layout.tsx (layout сам его не знает) —
+    // там вторая проверка сессии уже по базе. Заголовок выставляет
+    // только middleware: присланный клиентом перезаписывается
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-admin-pathname', pathname);
+
+    // Страницу входа пускаем всегда. Раньше залогиненного отсюда сразу
+    // перекидывало в /admin — но теперь подпись cookie может быть верной,
+    // а сессия уже удалена из базы (после "Вийти"), и получалась бы
+    // бесконечная переадресация login ↔ admin
     if (pathname === LOGIN_PATH) {
-      // Уже авторизован — со страницы входа сразу отправляем в саму панель
-      if (authed) return NextResponse.redirect(new URL('/admin', request.url));
-      return NextResponse.next();
+      return NextResponse.next({ request: { headers: requestHeaders } });
     }
 
     if (!authed) {
@@ -142,12 +133,28 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(loginUrl);
     }
 
-    return NextResponse.next();
+    return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
   // ---- API-роуты ----
   if (pathname.startsWith('/api/')) {
-    if (isPublicApiRoute(pathname, request.method) || isAuthorizedCronRoute(request)) {
+    // Кабинет покупателя временно выключен (lib/customerCabinet.ts) —
+    // ВСЕ /api/customer/* (любой метод) отвечают 403 одной проверкой,
+    // раньше белого списка ниже. Включается CUSTOMER_CABINET_ENABLED=true
+    if (/^\/api\/customer(\/|$)/.test(pathname) && !isCustomerCabinetEnabled()) {
+      return NextResponse.json({ error: CUSTOMER_CABINET_DISABLED_MESSAGE }, { status: 403 });
+    }
+
+    // Cron-роуты — ТОЛЬКО по Authorization: Bearer CRON_SECRET. Cookie
+    // админа сюда не пускает (иначе ссылка на чужом сайте могла бы
+    // запустить тяжёлую пересборку от имени залогиненного админа)
+    if (CRON_ROUTE_PATTERN.test(pathname)) {
+      return isAuthorizedCronRoute(request)
+        ? NextResponse.next()
+        : NextResponse.json({ error: 'Потрібна авторизація.' }, { status: 401 });
+    }
+
+    if (isPublicApiRoute(pathname, request.method)) {
       return NextResponse.next();
     }
     if (!authed) {

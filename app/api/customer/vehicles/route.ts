@@ -92,8 +92,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, vehicles });
   } catch (error) {
     console.error('Ошибка при получении гаража клиента:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
-    return NextResponse.json({ error: 'Не вдалося отримати список авто: ' + message }, { status: 500 });
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
+    return NextResponse.json({ error: 'Сталася помилка, спробуйте пізніше' }, { status: 500 });
   }
 }
 
@@ -176,7 +176,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, vehicle }, { status: 201 });
   } catch (error) {
     console.error('Ошибка при добавлении автомобиля клиента:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
-    return NextResponse.json({ error: 'Не вдалося додати авто: ' + message }, { status: 500 });
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
+    return NextResponse.json({ error: 'Сталася помилка, спробуйте пізніше' }, { status: 500 });
   }
 }

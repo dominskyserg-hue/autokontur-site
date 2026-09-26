@@ -5,10 +5,10 @@
 // для страховки назв товарів (lib/corpusBuilder.ts) зі всіх активних
 // назв — нові слова з нових прайсів потрапляють у нього автоматично.
 // Захищено так само, як решта /api/cron/*: middleware.ts пропускає
-// лише запити з Authorization: Bearer CRON_SECRET (або з сесією адміна)
+// лише запити з Authorization: Bearer CRON_SECRET (сесія адміна сюди НЕ пускає — лише секрет cron)
 // ============================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { Pool } from 'pg';
 import { rebuildUkrainianCorpus } from '@/lib/corpusBuilder';
 
@@ -30,7 +30,14 @@ const pool =
 
 globalThis.pgPool = pool;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Своя проверка секрета (не только в middleware.ts): ТОЛЬКО
+  // Authorization: Bearer CRON_SECRET, cookie админа не принимается
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const { names, words } = await rebuildUkrainianCorpus(pool);
     return NextResponse.json({ success: true, names, words: words.length });

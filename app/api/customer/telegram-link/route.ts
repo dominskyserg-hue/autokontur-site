@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Ошибка при получении статуса привязки Telegram:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
-    return NextResponse.json({ error: 'Не вдалося отримати статус: ' + message }, { status: 500 });
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
+    return NextResponse.json({ error: 'Сталася помилка, спробуйте пізніше' }, { status: 500 });
   }
 }

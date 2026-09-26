@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, warehouses });
   } catch (error) {
     console.error('Ошибка при поиске отделений Новой Почты:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
-    return NextResponse.json({ error: 'Не вдалося знайти відділення: ' + message }, { status: 502 });
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
+    return NextResponse.json({ error: 'Сталася помилка, спробуйте пізніше' }, { status: 502 });
   }
 }

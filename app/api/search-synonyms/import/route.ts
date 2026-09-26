@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { Pool, PoolClient } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -129,6 +130,10 @@ async function importRows(client: PoolClient, rows: ParsedRow[]): Promise<{ crea
 }
 
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     const formData = await request.formData();
     const file = formData.get('file');

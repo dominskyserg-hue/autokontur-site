@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -60,6 +61,10 @@ interface PatchSitePageBody {
 // "Настройки" в адмінці — там усі три редагуються в одному місці)
 // ------------------------------------------------------------
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     const result = await pool.query(
       'SELECT slug, title, content, updated_at FROM site_pages ORDER BY slug'
@@ -88,6 +93,10 @@ export async function GET() {
 // PATCH /api/site-pages — оновити title/content ОДНІЄЇ сторінки
 // ------------------------------------------------------------
 export async function PATCH(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: PatchSitePageBody;
   try {
     body = await request.json();

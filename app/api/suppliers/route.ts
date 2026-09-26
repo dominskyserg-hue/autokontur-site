@@ -37,6 +37,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool, PoolClient } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -351,6 +352,10 @@ async function upsertMapping(
 // POST /api/suppliers — создать поставщика (и его маппинг)
 // ------------------------------------------------------------
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: CreateSupplierRequestBody;
 
   try {
@@ -507,6 +512,10 @@ export async function POST(request: NextRequest) {
 // GET /api/suppliers — список всех поставщиков с их маппингом
 // ------------------------------------------------------------
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     // Отдельный LEFT JOIN на подзапрос с MAX(products.updated_at) —
     // это и есть "когда последний раз загружали прайс" для каждого

@@ -29,6 +29,7 @@ import { Pool } from 'pg';
 import { createInternetDocument } from '@/lib/novaPoshta/createDocument';
 import { NovaPoshtaApiError } from '@/lib/novaPoshta/api';
 import { notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -60,6 +61,10 @@ interface CreateTtnBody {
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id } = await params;
 
   if (!UUID_PATTERN.test(id)) {

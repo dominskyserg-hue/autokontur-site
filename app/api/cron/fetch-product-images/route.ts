@@ -20,6 +20,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline';
+import { cleanupAdminAuthTables } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,16 @@ export async function GET(request: NextRequest) {
 
   if (!process.env.CRON_SECRET || authHeader !== expected) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // Попутная ежедневная чистка служебных таблиц входа в админку:
+  // истёкшие сессии и попытки входа старше суток. Отдельный try —
+  // сбой чистки не должен мешать основной работе (поиску фото)
+  try {
+    const cleaned = await cleanupAdminAuthTables();
+    console.log(`Чистка admin_sessions/admin_login_attempts: удалено сессий ${cleaned.sessions}, попыток ${cleaned.attempts}`);
+  } catch (error) {
+    console.error('Ошибка при чистке таблиц входа в админку:', error);
   }
 
   try {

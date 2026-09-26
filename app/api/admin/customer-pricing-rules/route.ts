@@ -16,6 +16,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { normalizePhone } from '@/lib/phoneNormalize';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -92,6 +93,10 @@ function validateInput(body: UpsertRuleRequestBody): string | null {
 // GET — список всех персональных правил
 // ------------------------------------------------------------
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     const result = await pool.query('SELECT * FROM customer_pricing_rules ORDER BY updated_at DESC');
     return NextResponse.json({ success: true, rules: result.rows.map(toResponse) });
@@ -106,6 +111,10 @@ export async function GET() {
 // POST — назначить правило (upsert по нормализованному телефону)
 // ------------------------------------------------------------
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: UpsertRuleRequestBody;
   try {
     body = await request.json();

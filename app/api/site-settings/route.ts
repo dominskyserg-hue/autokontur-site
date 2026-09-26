@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -71,9 +72,9 @@ export async function GET() {
     });
   } catch (error) {
     console.error('Ошибка при получении настроек сайта:', error);
-    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
     return NextResponse.json(
-      { error: 'Не удалось получить настройки сайта: ' + message },
+      { error: 'Сталася помилка, спробуйте пізніше' },
       { status: 500 }
     );
   }
@@ -83,6 +84,10 @@ export async function GET() {
 // PATCH /api/site-settings
 // ------------------------------------------------------------
 export async function PATCH(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: PatchSiteSettingsBody;
   try {
     body = await request.json();

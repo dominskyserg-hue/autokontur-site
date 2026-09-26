@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -72,6 +73,10 @@ function rowToRequisites(row: Record<string, unknown>) {
 }
 
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     const result = await pool.query(
       `SELECT legal_name, tax_id, iban, bank_name, legal_address, warehouse_address,
@@ -89,6 +94,10 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: PatchRequisitesBody;
   try {
     body = await request.json();

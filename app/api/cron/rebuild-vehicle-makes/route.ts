@@ -8,7 +8,7 @@
 // Захист — той самий CRON_SECRET, що й у решти /api/cron/* (middleware.ts)
 // ============================================================
 
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { Pool } from 'pg';
 import { rebuildAllVehicleMakes } from '@/lib/vehicleMakeIndex';
 
@@ -30,7 +30,14 @@ const pool =
 
 globalThis.pgPool = pool;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // Своя проверка секрета (не только в middleware.ts): ТОЛЬКО
+  // Authorization: Bearer CRON_SECRET, cookie админа не принимается
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret || request.headers.get('authorization') !== `Bearer ${cronSecret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   try {
     const rows = await rebuildAllVehicleMakes(pool);
     return NextResponse.json({ success: true, rows });

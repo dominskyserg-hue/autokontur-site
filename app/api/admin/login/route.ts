@@ -3,42 +3,60 @@
 // Адрес: POST /api/admin/login
 //
 // Проверяет пароль администратора (переменная окружения ADMIN_PASSWORD)
-// и, если он верный, выдаёт cookie-"сессию" — её потом на каждый
-// запрос проверяет middleware.ts, решая, пускать в /admin и в
-// административные API-роуты или отправлять на экран входа.
+// и, если он верный, создаёт СЕССИЮ:
+//   - случайный токен 32 байта (crypto.randomBytes через Web Crypto);
+//   - в базу (admin_sessions) — только sha256(токена), срок 7 дней,
+//     IP и браузер (для просмотра "кто и откуда входил");
+//   - в cookie — сам токен, подписанный SESSION_SECRET (см.
+//     lib/adminSessionToken.ts), с флагами HttpOnly, Secure, SameSite=Lax.
 //
-// В cookie кладётся НЕ сам пароль, а его SHA-256-хеш — так же его
-// проверяет middleware.ts (там ровно та же функция sha256Hex, но
-// продублированная, а не вынесенная в общий файл — см. комментарий
-// про это в middleware.ts: middleware выполняется в Edge Runtime,
-// этот же роут — в обычном Node.js, поэтому их проще держать
-// самостоятельными, чем городить общий модуль под оба рантайма).
+// Раньше cookie была просто sha256(пароля): одинаковая для всех входов,
+// вечная до смены пароля, "Вийти" её не отзывал, а из неё можно было
+// подбирать сам пароль. Теперь каждая сессия своя и удаляется при выходе.
+//
+// Защита от подбора: не больше 5 неудачных попыток за 15 минут с
+// одного IP (таблица admin_login_attempts), дальше — 429. Удачный вход
+// сбрасывает счётчик этого IP. Плюс общий лимит: больше 30 неудачных
+// входов за час со всех IP вместе — вход закрыт для всех на 15 минут и
+// владельцу приходит уведомление в Telegram (lib/adminAuth.ts).
+// IP — из x-real-ip, который ставит Vercel (клиент его не подменит).
 //
 // Здесь всего ОДИН пароль на всю админку (без логинов пользователей) —
-// это осознанное упрощение, ровно как и в остальной "авторизации"
-// проекта (например, вход покупателя в личный кабинет по одному
-// телефону, см. app/api/customer/orders/route.ts)
+// осознанное упрощение
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { createHash, timingSafeEqual } from 'crypto';
+import {
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_TTL_SECONDS,
+  generateSessionToken,
+  hashSessionToken,
+  signSessionCookie,
+} from '@/lib/adminSessionToken';
+import {
+  LOGIN_MAX_FAILED_ATTEMPTS,
+  clearFailedLogins,
+  countRecentFailedLogins,
+  createAdminSession,
+  getClientIp,
+  isGlobalLoginLockoutActive,
+  recordFailedLogin,
+} from '@/lib/adminAuth';
 
-// Хотя этот роут не обращается к базе данных, Node.js runtime указан
-// явно для единообразия с остальными роутами проекта
 export const runtime = 'nodejs';
-
-const AUTH_COOKIE_NAME = 'autokontur_admin_session';
-const THIRTY_DAYS_IN_SECONDS = 60 * 60 * 24 * 30;
-
-async function sha256Hex(text: string): Promise<string> {
-  const data = new TextEncoder().encode(text);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((byte) => byte.toString(16).padStart(2, '0'))
-    .join('');
-}
 
 interface LoginRequestBody {
   password?: string;
+}
+
+// Сравнение пароля за постоянное время. timingSafeEqual требует буферы
+// одинаковой длины — поэтому сравниваем sha256 обоих значений (всегда
+// 32 байта), а не сами строки разной длины
+function passwordsMatch(provided: string, expected: string): boolean {
+  const a = createHash('sha256').update(provided).digest();
+  const b = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(a, b);
 }
 
 export async function POST(request: NextRequest) {
@@ -51,29 +69,59 @@ export async function POST(request: NextRequest) {
 
   const adminPassword = process.env.ADMIN_PASSWORD;
   if (!adminPassword) {
-    // Переменная окружения не настроена вообще — это ошибка
-    // конфигурации сервера, а не неверный пароль пользователя
     return NextResponse.json(
       { error: 'На сервере не настроен пароль администратора (переменная ADMIN_PASSWORD).' },
       { status: 500 }
     );
   }
 
-  const password = (body.password || '').trim();
-  if (!password || password !== adminPassword) {
-    return NextResponse.json({ error: 'Неверный пароль.' }, { status: 401 });
+  const ip = await getClientIp();
+
+  try {
+    // Лимиты проверяем ДО сравнения пароля — пока действует блокировка,
+    // даже верный пароль не принимается:
+    //   - общая: >30 неудачных входов за час со всех IP — закрыто для всех на 15 минут;
+    //   - по IP: 5 неудачных за 15 минут с этого адреса
+    if (
+      (await isGlobalLoginLockoutActive()) ||
+      (await countRecentFailedLogins(ip)) >= LOGIN_MAX_FAILED_ATTEMPTS
+    ) {
+      return NextResponse.json({ error: 'Забагато спроб, спробуйте через 15 хвилин' }, { status: 429 });
+    }
+
+    const password = (body.password || '').trim();
+    if (!password || !passwordsMatch(password, adminPassword)) {
+      await recordFailedLogin(ip);
+      return NextResponse.json({ error: 'Неверный пароль.' }, { status: 401 });
+    }
+
+    const token = generateSessionToken();
+    const expiresAtUnix = Math.floor(Date.now() / 1000) + ADMIN_SESSION_TTL_SECONDS;
+    const cookieValue = await signSessionCookie(token, expiresAtUnix);
+    if (!cookieValue) {
+      // Подробности уже в console.error (lib/adminSessionToken.ts)
+      return NextResponse.json({ error: 'SESSION_SECRET не налаштовано' }, { status: 500 });
+    }
+
+    await createAdminSession(
+      await hashSessionToken(token),
+      new Date(expiresAtUnix * 1000),
+      ip,
+      request.headers.get('user-agent')
+    );
+    await clearFailedLogins(ip);
+
+    const response = NextResponse.json({ success: true });
+    response.cookies.set(ADMIN_SESSION_COOKIE, cookieValue, {
+      httpOnly: true, // недоступна из JavaScript — защита от кражи через XSS
+      secure: process.env.NODE_ENV === 'production', // только HTTPS (локально http://localhost — без него)
+      sameSite: 'lax',
+      maxAge: ADMIN_SESSION_TTL_SECONDS,
+      path: '/',
+    });
+    return response;
+  } catch (error) {
+    console.error('Ошибка при входе администратора:', error);
+    return NextResponse.json({ error: 'Сталася помилка, спробуйте пізніше' }, { status: 500 });
   }
-
-  const sessionToken = await sha256Hex(adminPassword);
-
-  const response = NextResponse.json({ success: true });
-  response.cookies.set(AUTH_COOKIE_NAME, sessionToken, {
-    httpOnly: true, // недоступна из JavaScript в браузере — защита от XSS-кражи cookie
-    secure: process.env.NODE_ENV === 'production', // на Vercel — только по HTTPS; локально (http://localhost) это бы сломало cookie
-    sameSite: 'lax',
-    maxAge: THIRTY_DAYS_IN_SECONDS,
-    path: '/',
-  });
-
-  return response;
 }

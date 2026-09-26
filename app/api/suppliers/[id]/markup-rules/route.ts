@@ -19,6 +19,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { getCategoryBySlug } from '@/lib/categories';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -136,6 +137,10 @@ function validateRuleInput(body: CreateRuleRequestBody): string | null {
 // GET /api/suppliers/[id]/markup-rules — список правил поставщика
 // ------------------------------------------------------------
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id: supplierId } = await params;
 
   if (!isValidUuid(supplierId)) {
@@ -163,6 +168,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 // POST /api/suppliers/[id]/markup-rules — создать новое правило
 // ------------------------------------------------------------
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id: supplierId } = await params;
 
   if (!isValidUuid(supplierId)) {

@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -48,6 +49,10 @@ const MAX_PAGE_SIZE = 100;
 const DEFAULT_PAGE_SIZE = 30;
 
 export async function GET(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const params = request.nextUrl.searchParams;
 
   const registerId = params.get('registerId');

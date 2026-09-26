@@ -126,8 +126,8 @@ export async function PATCH(
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Ошибка при обновлении автомобиля клиента:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
-    return NextResponse.json({ error: 'Не вдалося оновити авто: ' + message }, { status: 500 });
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
+    return NextResponse.json({ error: 'Сталася помилка, спробуйте пізніше' }, { status: 500 });
   } finally {
     client.release();
   }
@@ -163,7 +163,7 @@ export async function DELETE(
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Ошибка при удалении автомобиля клиента:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
-    return NextResponse.json({ error: 'Не вдалося видалити авто: ' + message }, { status: 500 });
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
+    return NextResponse.json({ error: 'Сталася помилка, спробуйте пізніше' }, { status: 500 });
   }
 }

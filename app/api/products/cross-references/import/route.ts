@@ -32,6 +32,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as XLSX from 'xlsx';
 import { Pool, PoolClient } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 // Библиотеки xlsx и pg используют Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -341,6 +342,10 @@ async function importCrossReferences(
 // ОБРАБОТЧИК POST-ЗАПРОСА
 // ------------------------------------------------------------
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     const formData = await request.formData();
 

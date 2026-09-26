@@ -41,7 +41,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Car, Package, Heart, Settings, Plus, Trash2, Copy, Check, Truck, Printer, RotateCcw, Star, Send, Users } from 'lucide-react';
 import { CUSTOMER_PHONE_COOKIE } from '@/lib/customerPhoneCookie';
 import { getCarMakeByName } from '@/lib/carMakes';
-import { normalizePhone } from '@/lib/phoneNormalize';
 import GarageCard, { type GarageVehicle } from '@/components/GarageCard';
 import {
   TECH_BG,
@@ -170,8 +169,13 @@ const CART_STORAGE_KEY = 'autokontur-cart';
 // підключати в клієнтський (браузерний) код
 const TELEGRAM_BOT_USERNAME = 'dominatorparts_orders_bot';
 
+// Номер в ссылке больше НЕ передаётся (аудит безопасности): бот на
+// /start показывает кнопку "📱 Поділитися номером" и берёт номер из
+// подтверждённого Telegram контакта. Параметр phone оставлен, чтобы не
+// менять места вызова
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function telegramConnectUrl(phone: string): string {
-  return `https://t.me/${TELEGRAM_BOT_USERNAME}?start=${normalizePhone(phone)}`;
+  return `https://t.me/${TELEGRAM_BOT_USERNAME}?start=link`;
 }
 
 function setCustomerPhoneCookie(phone: string) {

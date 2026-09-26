@@ -25,6 +25,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -119,6 +120,10 @@ function normalizeRequestBody(body: unknown): RateInput[] {
 // GET /api/rates — список всех сохранённых глобальных курсов
 // ------------------------------------------------------------
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     // ORDER BY currency — чтобы список на фронтенде не "прыгал"
     // между обновлениями страницы, а всегда шёл в одном порядке
@@ -150,6 +155,10 @@ export async function GET() {
 // POST /api/rates — обновить один курс или сразу несколько
 // ------------------------------------------------------------
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: unknown;
 
   try {

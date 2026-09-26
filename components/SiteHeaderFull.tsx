@@ -23,6 +23,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Search, Send, ShoppingCart, User, Phone, Menu, X } from 'lucide-react';
 import { DominatorLogo } from '@/components/SiteHeader';
+import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
 import {
   TECH_ACCENT,
   TECH_ACCENT_BRIGHT,
@@ -154,15 +155,18 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
           >
             Марки авто
           </Link>
-          <Link
-            href="/account"
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
-            style={{ fontFamily: TECH_BODY_FONT, color: TECH_MUTED }}
-            aria-label="Кабінет"
-          >
-            <User className="h-4 w-4" />
-            <span className="hidden sm:inline">Кабінет</span>
-          </Link>
+          {/* Скрыт, пока кабинет выключен (lib/customerCabinet.ts) */}
+          {isCustomerCabinetEnabled() && (
+            <Link
+              href="/account"
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
+              style={{ fontFamily: TECH_BODY_FONT, color: TECH_MUTED }}
+              aria-label="Кабінет"
+            >
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">Кабінет</span>
+            </Link>
+          )}
           <Link
             href="/?cart=1"
             className="relative flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold"

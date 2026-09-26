@@ -293,9 +293,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, options });
   } catch (error) {
     console.error('Ошибка при получении списка значений для подбора по автомобилю:', error);
-    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
     return NextResponse.json(
-      { error: 'Не удалось получить список значений: ' + message },
+      { error: 'Сталася помилка, спробуйте пізніше' },
       { status: 500 }
     );
   }

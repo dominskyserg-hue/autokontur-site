@@ -2,20 +2,27 @@
 // API Route (Route Handler) для Next.js App Router.
 // Адрес: POST /api/admin/logout
 //
-// Просто стирает cookie-сессию администратора (см. app/api/admin/
-// login/route.ts) — после этого middleware.ts снова отправит на
-// /admin/login при следующем заходе в панель
+// Кнопка "Вийти": удаляет сессию из базы (admin_sessions) и стирает
+// cookie. После этого та же cookie — даже если её кто-то скопировал —
+// больше ничего не открывает: requireAdmin() в роутах не найдёт сессию
 // ============================================================
 
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { ADMIN_SESSION_COOKIE } from '@/lib/adminSessionToken';
+import { deleteAdminSessionByCookie } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
-const AUTH_COOKIE_NAME = 'autokontur_admin_session';
+export async function POST(request: NextRequest) {
+  try {
+    await deleteAdminSessionByCookie(request.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+  } catch (error) {
+    // Даже если база недоступна — cookie ниже всё равно стираем
+    console.error('Ошибка при удалении сессии администратора:', error);
+  }
 
-export async function POST() {
   const response = NextResponse.json({ success: true });
-  response.cookies.set(AUTH_COOKIE_NAME, '', {
+  response.cookies.set(ADMIN_SESSION_COOKIE, '', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',

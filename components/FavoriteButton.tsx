@@ -15,6 +15,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Heart } from 'lucide-react';
+import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
 
 const PHONE_STORAGE_KEY = 'autokontur-customer-phone';
 
@@ -22,7 +23,14 @@ interface FavoriteButtonProps {
   productId: string;
 }
 
+// Обране живе в кабінеті покупця (/api/customer/favorites) — поки
+// кабінет вимкнений (lib/customerCabinet.ts), кнопку не показуємо зовсім
 export default function FavoriteButton({ productId }: FavoriteButtonProps) {
+  if (!isCustomerCabinetEnabled()) return null;
+  return <FavoriteButtonInner productId={productId} />;
+}
+
+function FavoriteButtonInner({ productId }: FavoriteButtonProps) {
   const [phone, setPhone] = useState<string | null>(null);
   const [isFavorite, setIsFavorite] = useState(false);
   const [checking, setChecking] = useState(true);

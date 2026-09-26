@@ -20,6 +20,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -67,6 +68,10 @@ async function callNovaPoshta<T>(
 }
 
 export async function GET(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const apiKey = process.env.NOVA_POSHTA_API_KEY;
   if (!apiKey) {
     return NextResponse.json({ success: true, phone: null });

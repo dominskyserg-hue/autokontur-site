@@ -37,6 +37,7 @@ import { Pool } from 'pg';
 import { sendTelegramMessage, sendTelegramMessageTo } from '@/lib/telegramNotify';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { computeCustomerPrice, type CustomerPricingRule } from '@/lib/customerPricing';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -96,6 +97,10 @@ interface ProductSnapshotRow {
 }
 
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: OrderCreateRequestBody;
   try {
     body = await request.json();

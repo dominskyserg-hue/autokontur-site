@@ -15,6 +15,7 @@ import { NextResponse } from 'next/server';
 import { resolveDocumentData } from '@/lib/documents/requestValidation';
 import { renderDocumentHtml } from '@/lib/documents/renderDocumentHtml';
 import { renderHtmlToPdf } from '@/lib/documents/renderPdf';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -26,6 +27,10 @@ const FILENAME_PREFIX: Record<string, string> = {
 };
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string; docType: string }> }) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const { id, docType } = await params;
 
   const resolved = await resolveDocumentData(id, docType, request);

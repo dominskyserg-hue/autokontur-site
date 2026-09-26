@@ -7,9 +7,9 @@
 // https://api.telegram.org/bot<ТОКЕН>/setWebhook — див. коментар у
 // lib/telegramNotify.ts). Тут кілька різних сценаріїв:
 //
-//   1. Команда "/start <телефон>" — якою бот дізнається, ЧИЙ це
-//      chat_id, щоб надсилати покупцю персональні сповіщення про
-//      замовлення (детально нижче).
+//   1. Кнопка "📱 Поділитися номером" (request_contact) — так бот
+//      дізнається, ЧИЙ це chat_id, щоб надсилати покупцю персональні
+//      сповіщення про замовлення (детально нижче).
 //   2. Команда "/register_support" — власник магазину один раз
 //      надсилає її у СВОЮ ЗАКРИТУ групу-форум (Group Info → Edit →
 //      Topics), щоб бот запам'ятав: "ось куди створювати окрему тему
@@ -35,19 +35,20 @@
 //      той самий, що і в кроці 3), "Мої замовлення" читає замовлення
 //      покупця з тієї ж бази, що й Особистий кабінет на сайті
 //
-// Звідки береться "/start <телефон>": особистий кабінет покупця
-// (components/CustomerDashboard.tsx) показує посилання-запрошення
-// виду "https://t.me/dominatorparts_orders_bot?start=501234567" —
-// коли покупець тисне на нього і потім "Start" у самому Telegram,
-// клієнт Telegram сам надсилає боту повідомлення "/start 501234567".
-// Це і є весь механізм: бот не може написати покупцю першим, тому
-// покупець сам "знайомить" бота зі своїм акаунтом.
+// Привязка номера (ИЗМЕНЕНО по аудиту безопасности): раньше номер
+// брался из текста "/start <телефон>" (ссылка из кабинета) — и любой
+// мог сам написать боту "/start <чужой номер>" и получать чужие
+// уведомления. Теперь "/start" (с чем угодно после него, в т.ч. старые
+// ссылки и новая t.me/бот?start=link) только показывает кнопку
+// "📱 Поділитися номером". Номер принимается ТОЛЬКО из message.contact
+// и только если contact.user_id === from.id (свой номер, а не
+// пересланный чужой контакт). Если номер уже был привязан к другому
+// чату — перепривязываем (номер подтверждён Telegram), но старому чату
+// пишем "Ваш номер відв'язано від цього чату".
 //
-// БЕЗПЕКА: без перевірки нижче будь-хто, хто дізнається адресу цього
-// роута (вона не секретна — звичайний URL сайту), міг би слати сюди
-// підроблені запити виду "/start <чужий телефон>" зі СВОЇМ chat_id —
-// і тоді сповіщення про замовлення чужої людини (склад, адреса,
-// пізніше ТТН) почали б приходити ЙОМУ. Тому Telegram підписує кожен
+// БЕЗПЕКА ЗАПРОСОВ: без перевірки нижче будь-хто, хто дізнається адресу
+// цього роута (вона не секретна — звичайний URL сайту), міг би слати
+// сюди підроблені апдейти від імені Telegram. Тому Telegram підписує кожен
 // реальний запит заголовком X-Telegram-Bot-Api-Secret-Token (значення
 // задається один раз при реєстрації вебхука) — звіряємо його з тим же
 // детермінованим хешем, що рахує computeTelegramWebhookSecret().
@@ -70,6 +71,7 @@ import {
 import { searchProductsForBot, type BotSearchResult } from '@/lib/productSearch';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
+import { normalizePhone } from '@/lib/phoneNormalize';
 
 export const runtime = 'nodejs';
 
@@ -87,15 +89,6 @@ const pool =
 
 globalThis.pgPool = pool;
 
-// Telegram-параметр "/start <тут>" — і сам deep-link (t.me/bot?start=...),
-// і команда, яку клієнт Telegram надсилає у відповідь, обмежені набором
-// символів [A-Za-z0-9_-], тому телефон передається як нормалізовані
-// 9 цифр (lib/phoneNormalize.ts) — крапок/плюсів/пробілів там немає
-function extractStartPayload(text: string): string | null {
-  const match = text.match(/^\/start(?:@\w+)?(?:\s+(\S+))?$/);
-  if (!match) return null;
-  return match[1] || null;
-}
 
 interface TelegramFrom {
   id: number;
@@ -118,6 +111,14 @@ interface TelegramUpdate {
     // (не в "Загальну" тему) — саме за цим id знаходимо, якому
     // покупцю адресована відповідь власника
     message_thread_id?: number;
+    // Заполнено, когда покупатель нажал кнопку "📱 Поділитися номером"
+    // (request_contact). user_id — Telegram-аккаунт ВЛАДЕЛЬЦА контакта:
+    // совпадает с from.id только если человек поделился СВОИМ номером,
+    // а не переслал чужой контакт из записной книжки
+    contact?: {
+      phone_number: string;
+      user_id?: number;
+    };
   };
 }
 
@@ -160,6 +161,49 @@ const MAIN_MENU_KEYBOARD: TelegramReplyKeyboard = {
   resize_keyboard: true,
 };
 
+// Клавиатура для ПРИВЯЗКИ номера: кнопка request_contact + то же меню.
+// Привязка номера — ТОЛЬКО через эту кнопку: номер тогда присылает сам
+// Telegram (подтверждённый номер аккаунта). Раньше номер брался из
+// текста "/start <номер>" — и любой мог ввести чужой номер и начать
+// получать чужие уведомления о заказах
+const BTN_SHARE_PHONE = '📱 Поділитися номером';
+
+const SHARE_PHONE_KEYBOARD: TelegramReplyKeyboard = {
+  keyboard: [[{ text: BTN_SHARE_PHONE, request_contact: true }], ...MAIN_MENU_KEYBOARD.keyboard],
+  resize_keyboard: true,
+};
+
+const SHARE_PHONE_PROMPT =
+  'Щоб отримувати тут сповіщення про свої замовлення (склад замовлення, номер ТТН), натисніть кнопку «📱 Поділитися номером» нижче — номер має збігатися з тим, що ви вказували при оформленні замовлення.';
+
+// Привязка ПОДТВЕРЖДЁННОГО Telegram номера к чату. Без ON CONFLICT DO
+// UPDATE: сначала смотрим, не привязан ли номер к ДРУГОМУ чату. Раз
+// номер подтверждён Telegram (contact.user_id === from.id), перепривязку
+// разрешаем, но прежний чат явно уведомляем — молча номер не уходит
+async function linkVerifiedPhone(chatId: number, phoneTail: string, username: string | null): Promise<void> {
+  const existing = await pool.query<{ telegram_chat_id: string }>(
+    'SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1',
+    [phoneTail]
+  );
+  const previousChatId = existing.rows[0]?.telegram_chat_id ?? null;
+
+  if (previousChatId === null) {
+    await pool.query(
+      'INSERT INTO customer_telegram_links (phone, telegram_chat_id, telegram_username) VALUES ($1, $2, $3)',
+      [phoneTail, chatId, username]
+    );
+  } else {
+    await pool.query(
+      'UPDATE customer_telegram_links SET telegram_chat_id = $2, telegram_username = $3 WHERE phone = $1',
+      [phoneTail, chatId, username]
+    );
+  }
+
+  if (previousChatId !== null && String(previousChatId) !== String(chatId)) {
+    await sendTelegramMessageTo(previousChatId, "Ваш номер відв'язано від цього чату.");
+  }
+}
+
 const STATUS_LABELS: Record<string, string> = {
   new: 'Новий',
   processing: 'В обробці',
@@ -173,8 +217,8 @@ const STATUS_LABELS: Record<string, string> = {
 // "Мої замовлення" — той самий принцип пошуку заказів за телефоном,
 // що й в Особистому кабінеті (app/api/customer/orders/route.ts), лише
 // телефон тут беремо не з форми входу, а з уже збереженої прив'язки
-// chat_id → телефон (customer_telegram_links, заповнюється при
-// "/start <телефон>" нижче). Один chat_id теоретично може бути
+// chat_id → телефон (customer_telegram_links, заповнюється, коли покупець
+// натискає "📱 Поділитися номером", див. linkVerifiedPhone). Один chat_id теоретично може бути
 // прив'язаний до кількох телефонів (якщо покупець оформлював
 // замовлення під різними номерами) — тому IN (...), а не "=" один
 async function fetchOrdersForChat(
@@ -213,7 +257,7 @@ function formatOrdersReply(
   orders: Array<{ id: string; orderNumber: number; status: string; itemsCount: number; totalAmount: number; createdAt: string }>
 ): string {
   if (orders.length === 0) {
-    return 'Замовлень поки не знайдено. Якщо ви вже оформлювали замовлення на сайті — переконайтесь, що Telegram підключений до того самого номера телефону (Особистий кабінет → «Налаштування» → «Підключити Telegram-сповіщення»).';
+    return 'Замовлень поки не знайдено. Якщо ви вже оформлювали замовлення на сайті — натисніть «📱 Поділитися номером» нижче (номер Telegram має збігатися з номером у замовленні).';
   }
 
   const lines = orders.map((o) => {
@@ -222,7 +266,9 @@ function formatOrdersReply(
     return `№${o.orderNumber} від ${date} — ${statusLabel}\n   ${o.itemsCount} поз. на ${o.totalAmount} грн`;
   });
 
-  return `📦 Ваші останні замовлення:\n\n${lines.join('\n\n')}\n\nПовна інформація й склад кожного замовлення — в Особистому кабінеті: ${SITE_URL}/account`;
+  // Ссылки на Особистий кабінет нет — кабинет временно выключен
+  // (CUSTOMER_CABINET_ENABLED, см. lib/customerCabinet.ts)
+  return `📦 Ваші останні замовлення:\n\n${lines.join('\n\n')}\n\nСклад і деталі замовлення підкаже менеджер — кнопка «${BTN_OPERATOR}».`;
 }
 
 // ============================================================
@@ -337,6 +383,42 @@ export async function POST(request: NextRequest) {
 
   const message = update.message;
   const text = message?.text;
+
+  // ---- покупатель поделился номером (кнопка request_contact) ----
+  // Это сообщение без text, поэтому обрабатываем ДО проверки ниже.
+  // Только личный чат с ботом (chat.id > 0) — в группах не привязываем
+  if (message?.contact && message.chat.id > 0) {
+    const contactChatId = message.chat.id;
+    const contact = message.contact;
+
+    // Номер принимаем ТОЛЬКО если человек поделился СВОИМ контактом:
+    // пересланный чужой контакт имеет другой user_id (или вовсе без него)
+    if (!message.from || !contact.user_id || contact.user_id !== message.from.id) {
+      await sendTelegramMessageTo(contactChatId, 'Будь ласка, поділіться своїм власним номером.', undefined, SHARE_PHONE_KEYBOARD);
+      return NextResponse.json({ ok: true });
+    }
+
+    // Тот же формат, что в заказах и кабинете: последние 9 цифр
+    const phoneTail = normalizePhone(contact.phone_number);
+    if (phoneTail.length < 9) {
+      await sendTelegramMessageTo(contactChatId, 'Не вдалося розпізнати номер телефону. Спробуйте ще раз.', undefined, SHARE_PHONE_KEYBOARD);
+      return NextResponse.json({ ok: true });
+    }
+
+    try {
+      await linkVerifiedPhone(contactChatId, phoneTail, message.from.username || null);
+      await sendTelegramMessageTo(
+        contactChatId,
+        'Готово! Тепер сюди приходитимуть сповіщення про ваші замовлення на DominatorParts — склад замовлення одразу після оформлення та номер ТТН Нової Пошти, коли ми відправимо посилку. А кнопками нижче можна одразу перевірити наявність деталі чи свої замовлення.',
+        undefined,
+        MAIN_MENU_KEYBOARD
+      );
+    } catch (error) {
+      console.error('Ошибка при сохранении привязки Telegram-чата покупателя:', error);
+      await sendTelegramMessageTo(contactChatId, 'Не вдалося зберегти номер — спробуйте, будь ласка, трохи пізніше.', undefined, SHARE_PHONE_KEYBOARD);
+    }
+    return NextResponse.json({ ok: true });
+  }
 
   // Не текстове повідомлення (стікер, фото тощо) — нам тут його
   // обробляти нема чим, Telegram все одно чекає 200 OK, інакше почне
@@ -455,7 +537,14 @@ export async function POST(request: NextRequest) {
     if (text === BTN_ORDERS) {
       try {
         const orders = await fetchOrdersForChat(chatId);
-        await sendTelegramMessageTo(chatId, formatOrdersReply(orders), undefined, MAIN_MENU_KEYBOARD);
+        // Заказов нет (часто — номер ещё не привязан) — сразу даём
+        // кнопку "Поділитися номером"
+        await sendTelegramMessageTo(
+          chatId,
+          formatOrdersReply(orders),
+          undefined,
+          orders.length === 0 ? SHARE_PHONE_KEYBOARD : MAIN_MENU_KEYBOARD
+        );
       } catch (error) {
         console.error('Ошибка при получении заказов клиента в Telegram-боте:', error);
         await sendTelegramMessageTo(
@@ -538,56 +627,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: true });
   }
 
-  const payload = extractStartPayload(text);
-
-  if (!payload) {
-    // "/start" без телефону — покупець відкрив бота напряму (не через
-    // посилання-запрошення з кабінету). Пояснюємо, як підключити
-    // сповіщення правильно, і одразу показуємо головне меню — бот
-    // корисний і без прив'язки телефону (пошук за авто/артикулом)
-    await sendTelegramMessageTo(
-      chatId,
-      'Вітаю! Я можу одразу підказати, що є в наявності — скористайтесь кнопками нижче.\n\nЩоб отримувати сповіщення про свої замовлення тут, перейдіть у свій Особистий кабінет на сайті → «Налаштування» → «Підключити Telegram-сповіщення».',
-      undefined,
-      MAIN_MENU_KEYBOARD
-    );
-    return NextResponse.json({ ok: true });
-  }
-
-  // payload — це нормалізовані 9 цифр телефону (див. extractStartPayload
-  // вище й normalizePhone у lib/phoneNormalize.ts) — саме за ними
-  // й порівнюються телефони скрізь у кабінеті покупця
-  const phoneTail = payload.replace(/\D/g, '').slice(-9);
-  if (phoneTail.length < 9) {
-    await sendTelegramMessageTo(
-      chatId,
-      'Не вдалося розпізнати номер телефону. Спробуйте перейти за посиланням із кабінету ще раз.',
-      undefined,
-      MAIN_MENU_KEYBOARD
-    );
-    return NextResponse.json({ ok: true });
-  }
-
-  try {
-    await pool.query(
-      `
-      INSERT INTO customer_telegram_links (phone, telegram_chat_id, telegram_username)
-      VALUES ($1, $2, $3)
-      ON CONFLICT (phone)
-      DO UPDATE SET telegram_chat_id = EXCLUDED.telegram_chat_id, telegram_username = EXCLUDED.telegram_username
-      `,
-      [phoneTail, chatId, message.from?.username || null]
-    );
-
-    await sendTelegramMessageTo(
-      chatId,
-      'Готово! Тепер сюди приходитимуть сповіщення про ваші замовлення на DominatorParts — склад замовлення одразу після оформлення та номер ТТН Нової Пошти, коли ми відправимо посилку. А кнопками нижче можна одразу перевірити наявність деталі чи свої замовлення.',
-      undefined,
-      MAIN_MENU_KEYBOARD
-    );
-  } catch (error) {
-    console.error('Ошибка при сохранении привязки Telegram-чата покупателя:', error);
-  }
-
+  // "/start" в любом виде ("/start", "/start link", старые ссылки
+  // "/start <номер>") НИЧЕГО не привязывает: номер из текста команды
+  // мог ввести кто угодно. Вместо этого — приветствие и кнопка
+  // "📱 Поділитися номером" (привязка — в обработчике message.contact выше)
+  await sendTelegramMessageTo(
+    chatId,
+    `Вітаю! Я можу одразу підказати, що є в наявності — скористайтесь кнопками нижче.\n\n${SHARE_PHONE_PROMPT}`,
+    undefined,
+    SHARE_PHONE_KEYBOARD
+  );
   return NextResponse.json({ ok: true });
 }

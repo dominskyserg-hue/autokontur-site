@@ -24,6 +24,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { autoAdvanceOrderStatus } from '@/lib/orderStatusPipeline';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -48,6 +49,10 @@ interface RequestBody {
 }
 
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: RequestBody;
   try {
     body = await request.json();

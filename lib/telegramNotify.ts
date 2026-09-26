@@ -65,8 +65,13 @@ export async function sendTelegramMessage(text: string): Promise<number | null> 
 // рядок перетворюється на об'єкт { text: рядок } нижче — сирий Bot API
 // (на відміну від деяких SDK) приймає лише таку форму, голий рядок
 // замість об'єкта Telegram просто відхилить разом з усім повідомленням
+// Кнопка може бути і об'єктом { text, request_contact: true } — це
+// кнопка "Поділитися номером": Telegram сам надсилає боту контакт
+// покупця (message.contact), набрати чужий номер вручну так не вийде
+export type TelegramKeyboardButton = string | { text: string; request_contact?: boolean };
+
 export interface TelegramReplyKeyboard {
-  keyboard: string[][];
+  keyboard: TelegramKeyboardButton[][];
   resize_keyboard: true;
 }
 
@@ -84,7 +89,12 @@ export async function sendTelegramMessageTo(
   if (!TELEGRAM_BOT_TOKEN) return null;
 
   const wireReplyMarkup = replyMarkup
-    ? { keyboard: replyMarkup.keyboard.map((row) => row.map((label) => ({ text: label }))), resize_keyboard: true }
+    ? {
+        keyboard: replyMarkup.keyboard.map((row) =>
+          row.map((button) => (typeof button === 'string' ? { text: button } : button))
+        ),
+        resize_keyboard: true,
+      }
     : undefined;
 
   try {

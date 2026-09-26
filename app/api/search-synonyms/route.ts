@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -57,6 +58,10 @@ function cleanTerms(terms: unknown): string[] {
 }
 
 export async function GET() {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   try {
     const result = await pool.query(
       'SELECT id, label, terms, updated_at FROM search_synonym_groups ORDER BY label'
@@ -82,6 +87,10 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: CreateGroupBody;
   try {
     body = await request.json();

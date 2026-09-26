@@ -15,6 +15,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -69,9 +70,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, announcements });
   } catch (error) {
     console.error('Ошибка при получении списка объявлений:', error);
-    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
     return NextResponse.json(
-      { error: 'Не удалось получить список объявлений: ' + message },
+      { error: 'Сталася помилка, спробуйте пізніше' },
       { status: 500 }
     );
   }
@@ -85,6 +86,10 @@ interface CreateAnnouncementBody {
 }
 
 export async function POST(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   let body: CreateAnnouncementBody;
   try {
     body = await request.json();

@@ -30,6 +30,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { requireAdmin } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -78,6 +79,10 @@ interface SupplierGroup {
 }
 
 export async function GET(request: NextRequest) {
+  // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
+  const adminDenied = await requireAdmin();
+  if (adminDenied) return adminDenied;
+
   const statusParam = request.nextUrl.searchParams.get('status') || 'pending';
   if (!(ALLOWED_STATUSES as readonly string[]).includes(statusParam)) {
     return NextResponse.json({ error: `status должен быть одним из: ${ALLOWED_STATUSES.join(', ')}.` }, { status: 400 });

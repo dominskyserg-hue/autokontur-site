@@ -528,9 +528,9 @@ export async function POST(request: NextRequest) {
     // без позиций (или наоборот) хуже, чем полностью отсутствующий заказ
     await client.query('ROLLBACK');
     console.error('Ошибка при создании заказа:', error);
-    const message = error instanceof Error ? error.message : 'Невідома помилка';
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
     return NextResponse.json(
-      { error: 'Не вдалося оформити замовлення: ' + message },
+      { error: 'Сталася помилка, спробуйте пізніше' },
       { status: 500 }
     );
   } finally {

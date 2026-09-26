@@ -518,9 +518,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(body);
   } catch (error) {
     console.error('Ошибка при получении списка товаров:', error);
-    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
     return NextResponse.json(
-      { error: 'Не удалось получить список товаров: ' + message },
+      { error: 'Сталася помилка, спробуйте пізніше' },
       { status: 500 }
     );
   }

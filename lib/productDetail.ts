@@ -500,7 +500,6 @@ export interface ProductDetail {
   // Назва цього ж артикула з іншого прайсу (див. loadFallbackName) —
   // ЛИШЕ якщо власна назва порожня/сміттєва, інакше null
   fallbackName: string | null;
-  supplierName: string;
   deliveryTime: string | null;
   updatedAt: string;
 }
@@ -525,7 +524,6 @@ export interface OtherOffer {
   id: string;
   retailPrice: number;
   stock: number;
-  supplierName: string;
 }
 
 export interface CrossRefItem {
@@ -542,7 +540,9 @@ export interface CrossRefItem {
 // ProductDetail (те, що реально йде в JSX/пропси сторінки) вона НЕ
 // потрапляє — щоб оптова собівартість випадково не опинилась у HTML,
 // відданому браузеру покупця
-type ProductDetailRaw = ProductDetail & { costPrice: number };
+// costPrice и supplierName — ТОЛЬКО для расчётов на сервере: в данные
+// страницы (и значит в HTML/RSC-ответ покупателю) они не попадают
+type ProductDetailRaw = ProductDetail & { costPrice: number; supplierName: string };
 
 // Найчастіша придатна назва (КРОК 1 >= 3 символів) того самого артикула
 // в інших активних товарах, де бренд — той самий або з затвердженої
@@ -627,7 +627,8 @@ const loadProductImages = cache(async function loadProductImages(productId: stri
   }));
 });
 
-type OtherOfferRaw = OtherOffer & { costPrice: number };
+// supplierName — только внутреннее поле: имя поставщика покупателю не показываем
+type OtherOfferRaw = OtherOffer & { costPrice: number; supplierName: string };
 
 const loadOtherOffers = cache(async function loadOtherOffers(
   product: ProductDetail
@@ -1013,7 +1014,6 @@ export async function loadProductPageData(
     metaDescriptionOverride: product.metaDescriptionOverride,
     carMake: product.carMake,
     carModel: product.carModel,
-    supplierName: product.supplierName,
     deliveryTime: product.deliveryTime,
     updatedAt: product.updatedAt,
   };
@@ -1021,7 +1021,6 @@ export async function loadProductPageData(
     id: offer.id,
     retailPrice: computeCustomerPrice(offer.costPrice, offer.retailPrice, customerPricingRule),
     stock: offer.stock,
-    supplierName: offer.supplierName,
   }));
   const toPublicCrossRef = (item: CrossRefItemRaw): CrossRefItem => ({
     brand: item.brand,

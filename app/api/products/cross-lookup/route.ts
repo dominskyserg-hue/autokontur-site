@@ -202,9 +202,9 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error('Ошибка при поиске детали с кросс-аналогами:', error);
-    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    // Подробности ошибки (в т.ч. текст из базы) — только в логи Vercel (console.error выше), покупателю — общий текст
     return NextResponse.json(
-      { error: 'Не удалось выполнить поиск: ' + message },
+      { error: 'Сталася помилка, спробуйте пізніше' },
       { status: 500 }
     );
   }

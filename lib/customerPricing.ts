@@ -27,6 +27,7 @@
 
 import type { Pool } from 'pg';
 import { normalizePhone } from './phoneNormalize';
+import { isCustomerCabinetEnabled } from './customerCabinet';
 
 export { CUSTOMER_PHONE_COOKIE } from './customerPhoneCookie';
 
@@ -44,6 +45,10 @@ export async function getCustomerPricingRule(
   rawPhone: string | undefined | null
 ): Promise<CustomerPricingRule | null> {
   if (!rawPhone) return null;
+  // Пока кабинет выключен, персональные цены по телефону из cookie НЕ
+  // применяем: cookie customer_phone любой может выставить себе сам с
+  // чужим номером и увидеть цены "закупка ± %" (см. lib/customerCabinet.ts)
+  if (!isCustomerCabinetEnabled()) return null;
   const phone = normalizePhone(rawPhone);
   if (phone.length < 9) return null;
 
