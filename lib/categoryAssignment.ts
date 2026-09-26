@@ -94,6 +94,24 @@ export async function recomputeInTransaction(
   );
   let assignments = inserted.rowCount ?? 0;
 
+  // 2а. Подкатегории с onlyWithinParent ("Гальмівні колодки передні/задні"):
+  // оставляем только товары, которые есть и в родительской категории.
+  // До шага 3 — чтобы убранные товары (датчики, тросы) без категории могли
+  // получить её по доп. правилам
+  const within = CATEGORIES.filter((c) => c.onlyWithinParent && c.parentCategorySlug);
+  if (within.length > 0) {
+    const withinParams: unknown[] = within.flatMap((c) => [c.slug, c.parentCategorySlug as string]);
+    const values = within.map((_, i) => `($${i * 2 + 1}::text, $${i * 2 + 2}::text)`).join(', ');
+    const removed = await client.query(
+      `DELETE FROM product_categories pc
+       USING (VALUES ${values}) AS v(child, parent)
+       WHERE pc.category_id = v.child
+         AND NOT EXISTS (SELECT 1 FROM product_categories pp WHERE pp.product_id = pc.product_id AND pp.category_id = v.parent)`,
+      withinParams
+    );
+    assignments -= removed.rowCount ?? 0;
+  }
+
   // 3. Дополнительные правила (lib/categoryRulesExtra.ts) — ТОЛЬКО для
   // товаров, которые после шага 2 остались без категории. Одна категория
   // на товар: CASE берёт первое подходящее правило по порядку списка

@@ -76,6 +76,11 @@ export interface CategoryDef {
   // "Решітка бампера" чи "Кільця поршневі") — тоді поле просто не
   // заповнюється, це нормально
   parentCategorySlug?: string;
+  // true — у підкатегорії лишаються ЛИШЕ товари, які вже є в батьківській
+  // категорії (lib/categoryAssignment.ts). Для "Гальмівні колодки
+  // передні/задні": їхнє правило (колодк + перед/зад) ширше за основне й
+  // затягувало датчики зносу та троси ручника — основне їх відсікає
+  onlyWithinParent?: boolean;
 
   // ---- Підбір авто через індекс сумісності TecDoc (замість тексту в назві) ----
   // Хвилі 1-4 (Lanos/Camry/Corolla/Pajero/Mazda6...) фільтрували модель
@@ -440,6 +445,7 @@ export const CATEGORIES: CategoryDef[] = [
     matchGroups: [['колодк'], ['перед']],
     hideFromIndex: true,
     parentCategorySlug: 'halmivni-kolodky',
+    onlyWithinParent: true,
   },
   {
     slug: 'halmivni-kolodky-zadni',
@@ -453,6 +459,7 @@ export const CATEGORIES: CategoryDef[] = [
     matchGroups: [['колодк'], ['зад']],
     hideFromIndex: true,
     parentCategorySlug: 'halmivni-kolodky',
+    onlyWithinParent: true,
   },
   {
     slug: 'halmivna-ridyna',
