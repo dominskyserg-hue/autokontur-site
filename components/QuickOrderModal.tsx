@@ -31,6 +31,7 @@
 // ============================================================
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { FormEvent } from 'react';
 import { trackBeginCheckout, trackPurchase } from '@/lib/analytics';
 
@@ -161,8 +162,14 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
         Купити в 1 клік
       </button>
 
-      {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Окно выносим порталом прямо в <body>: когда карточка товара
+          открыта всплывающим окном (components/ProductModalShell.tsx), у
+          него стоит backdrop-filter — а внутри такого предка position: fixed
+          считается НЕ от экрана, а от самого окна карточки, и "Купити в 1
+          клік" оказывалось внизу прокручиваемой карточки, обрезанным.
+          z-[60] — выше окна карточки (z-50) */}
+      {open && createPortal(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div className="absolute inset-0 backdrop-blur-sm" style={{ background: 'rgba(11,15,23,0.78)' }} onClick={close} />
 
           <div
@@ -274,7 +281,8 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
               </form>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
