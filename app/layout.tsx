@@ -224,13 +224,10 @@ export default function RootLayout({
             другого виклику gtag('config', ...) для GA4, сам Google Ads
             тег це ніяк не зачіпає.
 
-            Подія "покупка" (purchase) для конверсій Google Ads окремо
-            ніде не дублюється: вона й так один раз відправляється через
-            trackPurchase() у lib/analytics.ts (викликається з
-            components/StorefrontHome.tsx одразу після успішного
-            оформлення замовлення) — а gtag() сам розсилає кожну подію
-            відразу на ВСІ підключені тут config-цілі, і GA4, і Google
-            Ads, без додаткового коду */}
+            Конверсия Google Ads "Покупка" отправляется ОТДЕЛЬНЫМ событием
+            gtag('event','conversion', { send_to: 'AW-.../ЯРЛЫК' }) в
+            trackPurchase() (lib/analytics.ts) — одно событие 'purchase'
+            Google Ads как конверсию не засчитывает */}
         <Script src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ADS_ID}`} strategy="afterInteractive" />
         <Script id="gtag-init" strategy="afterInteractive">
           {`
@@ -310,13 +307,13 @@ export default function RootLayout({
 // Базовий тег (gtag('config', GOOGLE_ADS_ID)) стоїть безумовно на КОЖНІЙ
 // сторінці сайту — так вимагає Google Ads.
 //
-// Подія конверсії "purchase" окремого коду не потребує: вона й так
-// відправляється один раз на кожне успішно оформлене замовлення через
-// trackPurchase() у lib/analytics.ts (викликається з
-// components/StorefrontHome.tsx одразу після відповіді
-// POST /api/orders/create) — gtag() сам розсилає цю подію одразу на
-// GA4 і на Google Ads, тому що обидва підключені через 'config' в
-// одному й тому самому дата-шарі (dataLayer).
+// Конверсия "Покупка": событие 'purchase' (GA4) Google Ads сам НЕ
+// засчитывает — поэтому trackPurchase() в lib/analytics.ts отправляет
+// ещё и gtag('event','conversion', { send_to: 'AW-18434035736/ЯРЛЫК',
+// value, currency, transaction_id }), ровно один раз на заказ (защита
+// по номеру заказа в sessionStorage). Вызывается из корзины
+// (components/StorefrontHome.tsx) и из "Купити в 1 клік"
+// (components/QuickOrderModal.tsx) сразу после POST /api/orders/create.
 //
 // Якщо колись знадобиться замінити акаунт Google Ads — досить
 // поправити один рядок: const GOOGLE_ADS_ID = '...' вище у цьому файлі.

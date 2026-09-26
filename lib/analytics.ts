@@ -33,6 +33,35 @@ declare global {
 // Местная валюта магазина — все суммы в событиях передаются в гривнах
 const CURRENCY = 'UAH';
 
+// Конверсия "Покупка" в Google Ads: ID аккаунта (тот же GOOGLE_ADS_ID,
+// что в app/layout.tsx) + ЯРЛЫК конверсии из кабинета Google Ads
+// (Цели → Конверсии → действие "Покупка" → Настройка тега → send_to).
+// Событие 'purchase' само по себе в Google Ads НЕ засчитывается —
+// нужен отдельный gtag('event','conversion') с send_to
+const GOOGLE_ADS_PURCHASE_SEND_TO = 'AW-18434035736/Wp8WCNfy6O8cEJighNZE';
+
+// Ключ в sessionStorage со списком заказов, по которым покупка уже
+// отправлена в аналитику, — защита от повторной отправки одного и
+// того же заказа (повторный вызов, перерисовка, возврат на страницу)
+const SENT_PURCHASES_STORAGE_KEY = 'autokontur-sent-purchases';
+
+// true — если покупку с этим номером заказа уже отправляли в этой
+// вкладке; заодно помечает заказ как отправленный. sessionStorage
+// может быть недоступен (приватный режим, запрет cookies) — тогда
+// защиты нет, но и сайт не ломается
+function wasPurchaseAlreadySent(orderId: string): boolean {
+  try {
+    const raw = window.sessionStorage.getItem(SENT_PURCHASES_STORAGE_KEY);
+    const sent: string[] = raw ? JSON.parse(raw) : [];
+    if (sent.includes(orderId)) return true;
+    sent.push(orderId);
+    window.sessionStorage.setItem(SENT_PURCHASES_STORAGE_KEY, JSON.stringify(sent.slice(-50)));
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 // Один товар в терминах событий электронной торговли — то общее, что
 // нужно и для gtag, и для fbq. quantity по умолчанию 1 (для просмотра
 // товара количество не имеет смысла, для корзины — передаём явно)
@@ -159,7 +188,20 @@ export function trackBeginCheckout(items: AnalyticsItem[]): void {
 export function trackPurchase(orderId: string, items: AnalyticsItem[]): void {
   if (typeof window === 'undefined') return;
 
+  // Ровно один раз на заказ — повтор с тем же номером игнорируем
+  if (wasPurchaseAlreadySent(orderId)) return;
+
   const value = items.reduce((sum, item) => sum + item.price * (item.quantity ?? 1), 0);
+
+  // Конверсия Google Ads — отдельным событием с send_to (см. выше)
+  if (typeof window.gtag === 'function') {
+    window.gtag('event', 'conversion', {
+      send_to: GOOGLE_ADS_PURCHASE_SEND_TO,
+      value,
+      currency: CURRENCY,
+      transaction_id: orderId,
+    });
+  }
 
   if (typeof window.gtag === 'function') {
     window.gtag('event', 'purchase', {
