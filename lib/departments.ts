@@ -19,6 +19,8 @@
 // реальних каталогах
 // ============================================================
 
+import { getCategoryBySlug } from '@/lib/categories';
+
 export interface DepartmentDef {
   slug: string;
   name: string;
@@ -26,7 +28,10 @@ export interface DepartmentDef {
   categorySlugs: string[];
 }
 
-export const DEPARTMENTS: DepartmentDef[] = [
+// Категорії етапу 3 (lib/categoriesStage3.ts) вписані в розділи одразу, але
+// поки етап вимкнено, їх немає в CATEGORIES — такі slug-и відкидаються
+// (filter нижче), і розділ виглядає як раніше
+const ALL_DEPARTMENTS: DepartmentDef[] = [
   {
     slug: 'to',
     name: 'Запчастини для ТО',
@@ -39,7 +44,7 @@ export const DEPARTMENTS: DepartmentDef[] = [
       'motorni-olyvy',
     ],
   },
-  { slug: 'dvyhun-detali', name: 'Деталі двигуна', categorySlugs: ['prokladky-dvyhuna'] },
+  { slug: 'dvyhun-detali', name: 'Деталі двигуна', categorySlugs: ['prokladky-dvyhuna', 'detali-dvyhuna', 'turbiny'] },
   { slug: 'palyvna', name: 'Паливна система', categorySlugs: ['palyvna-systema'] },
   { slug: 'vypusk', name: 'Система випуску', categorySlugs: ['systema-vypusku'] },
   { slug: 'oholodzhennya', name: 'Система охолодження', categorySlugs: ['systema-oholodzhennya'] },
@@ -53,11 +58,11 @@ export const DEPARTMENTS: DepartmentDef[] = [
   {
     slug: 'hodova',
     name: 'Ходова, підвіска',
-    categorySlugs: ['amortyzatory', 'sailentbloky-vazhelia', 'vtulky-stabilizatora', 'kulovi-opory', 'pidshypnyky-matochyny'],
+    categorySlugs: ['amortyzatory', 'sailentbloky-vazhelia', 'vtulky-stabilizatora', 'stiiky-stabilizatora', 'kulovi-opory', 'pidshypnyky-matochyny'],
   },
   { slug: 'kuzov', name: 'Деталі кузова', categorySlugs: ['kuzov-detali'] },
   { slug: 'kriplennya', name: "Кріплення і кронштейни", categorySlugs: ['kriplennya-kronshteiny'] },
-  { slug: 'halmivna', name: 'Гальмівна система', categorySlugs: ['halmivni-kolodky', 'halmivni-dysky'] },
+  { slug: 'halmivna', name: 'Гальмівна система', categorySlugs: ['halmivni-kolodky', 'halmivni-dysky', 'halmivna-systema'] },
   { slug: 'kermo', name: 'Кермове управління', categorySlugs: ['kermove-upravlinnya'] },
   // Раніше називався "Елементи салону" — назва обіцяла ширше (оббивка,
   // накладки, органайзери), ніж насправді є в categorySlugs (тільки
@@ -69,9 +74,14 @@ export const DEPARTMENTS: DepartmentDef[] = [
   // відповідно), окрема сторінка категорії поки не виправдана
   { slug: 'dysky', name: 'Колісні диски', categorySlugs: [] },
   { slug: 'bezpeka', name: 'Система безпеки', categorySlugs: [] },
-  { slug: 'elektro', name: 'Електрообладнання', categorySlugs: ['generatory-startery'] },
+  { slug: 'elektro', name: 'Електрообладнання', categorySlugs: ['generatory-startery', 'datchyky'] },
   { slug: 'aksesuary', name: 'Аксесуари', categorySlugs: [] },
 ];
+
+export const DEPARTMENTS: DepartmentDef[] = ALL_DEPARTMENTS.map((d) => ({
+  ...d,
+  categorySlugs: d.categorySlugs.filter((slug) => Boolean(getCategoryBySlug(slug))),
+}));
 
 export function getDepartmentBySlug(slug: string): DepartmentDef | undefined {
   return DEPARTMENTS.find((d) => d.slug === slug);

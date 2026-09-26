@@ -22,6 +22,7 @@ import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { CATEGORIES, getCategoryBySlug, getSubcategories, findNarrowPageForVehicle } from '@/lib/categories';
+import { STAGE3_CATEGORIES } from '@/lib/categoriesStage3';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
@@ -282,9 +283,25 @@ export async function generateMetadata({
     // посилань на цю сторінку однаково дістається їй). Голий ?marka=
     // (без моделі/року/двигуна) під цю умову НЕ підпадає — то давніша,
     // уже проіндексована поведінка, яку свідомо не чіпаємо
-    robots: total === 0 || hasModelYearEngineFilter ? { index: false, follow: true } : undefined,
+    robots: total === 0 || hasModelYearEngineFilter || (await isThinSubcategory(category)) ? { index: false, follow: true } : undefined,
     alternates: { canonical: hasModelYearEngineFilter ? `${SITE_URL}/category/${slug}` : canonicalPath },
   };
+}
+
+// Підкатегорія етапу 3 (напр. "Датчики ABS"), у якій у наявності менше 20
+// товарів, — noindex: занадто "тонка" сторінка для Google. Сама сторінка
+// працює, посилання з блоку "Підкатегорії" лишається. Старі сторінки
+// (напр. "Гальмівна рідина DOT 4") це правило свідомо не зачіпає
+const MIN_IN_STOCK_FOR_INDEX = 20;
+const STAGE3_SUBCATEGORY_SLUGS = new Set(STAGE3_CATEGORIES.filter((c) => c.parentCategorySlug).map((c) => c.slug));
+async function isThinSubcategory(category: { slug: string }): Promise<boolean> {
+  if (!STAGE3_SUBCATEGORY_SLUGS.has(category.slug)) return false;
+  const result = await pool.query<{ n: number }>(
+    `SELECT COUNT(*)::int AS n FROM product_categories pc JOIN products p ON p.id = pc.product_id
+     WHERE pc.category_id = $1 AND p.is_active = true AND p.stock > 0`,
+    [category.slug]
+  );
+  return result.rows[0].n < MIN_IN_STOCK_FOR_INDEX;
 }
 
 // Копійки покупцю не показуємо — тільки цілі гривні, округлені ВГОРУ

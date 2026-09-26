@@ -7,16 +7,17 @@
 // и товар мог лежать в одной категории, а в крошках показывать другую.
 //
 // У товара может быть несколько категорий — в крошки идёт ОДНА: первая
-// широкая категория по порядку списка CATEGORIES (тот же порядок, что был у
+// широкая категория по CATEGORY_PRIORITY_ORDER (тот же порядок, что у
 // detectCategoryForProductName). Если товар есть только в подкатегории —
 // её родительский раздел
 // ============================================================
 
 import type { Pool } from 'pg';
-import { CATEGORIES, getCategoryBySlug, type CategoryDef } from '@/lib/categories';
+import { CATEGORY_PRIORITY_ORDER, getCategoryBySlug, type CategoryDef } from '@/lib/categories';
 
-// Место широкой категории в списке CATEGORIES (меньше — важнее)
-const TOP_LEVEL_ORDER = new Map(CATEGORIES.filter((c) => !c.parentCategorySlug).map((c, i) => [c.slug, i]));
+// Место широкой категории в CATEGORY_PRIORITY_ORDER (меньше — важнее;
+// новые категории этапа 3 — первыми, см. lib/categories.ts)
+const TOP_LEVEL_ORDER = new Map(CATEGORY_PRIORITY_ORDER.filter((c) => !c.parentCategorySlug).map((c, i) => [c.slug, i]));
 
 export function pickBreadcrumbCategory(slugs: readonly string[]): CategoryDef | undefined {
   let best: string | undefined;

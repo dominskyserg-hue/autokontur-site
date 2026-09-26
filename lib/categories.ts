@@ -22,6 +22,7 @@
 // ============================================================
 
 import { foldLookalikes } from '@/lib/latinLookalikes';
+import { STAGE3_CATEGORIES } from '@/lib/categoriesStage3';
 
 export interface CategoryDef {
   slug: string;
@@ -84,6 +85,20 @@ export interface CategoryDef {
   // затягувало датчики зносу та троси ручника — основне їх відсікає
   onlyWithinParent?: boolean;
 
+  // ---- Додаткові умови правил (етап 3, див. STAGE3_ENABLED нижче) ----
+  // Назва ПОЧИНАЄТЬСЯ з одного з цих слів (після службового префікса
+  // постачальника "A1/"): "Датчик ABS ..." — датчик, а "Ступиця з
+  // датчиком ABS" — ні
+  startsWith?: string[];
+  // Альтернативні правила: товар підходить, якщо підійшло основне
+  // правило (matchGroups/excludeWords/startsWith) АБО будь-яке з цих
+  altRules?: CategoryRule[];
+  // Дозволити товари, які САМІ є датчиками (назва починається з
+  // "датчик/сенсор/лямбда..."). Після увімкнення етапу 3 датчики
+  // потрапляють лише в категорії з цим полем ("Датчики", датчики зносу
+  // колодок — у "Гальмівна система")
+  allowSensors?: boolean;
+
   // ---- Підбір авто через індекс сумісності TecDoc (замість тексту в назві) ----
   // Хвилі 1-4 (Lanos/Camry/Corolla/Pajero/Mazda6...) фільтрували модель
   // авто підрядком прямо в matchGroups (напр. ['pajero ii ']) — це
@@ -101,13 +116,21 @@ export interface CategoryDef {
   tecdocVehicle?: { make: string; models: string[] };
 }
 
+// Одне правило: хоча б одне слово з КОЖНОЇ групи all, жодного з exclude,
+// і (якщо задано) назва починається з одного зі startsWith
+export interface CategoryRule {
+  all: string[][];
+  exclude?: string[];
+  startsWith?: string[];
+}
+
 // Слова, по яких назва — це сам РЕМІНЬ (а не шків чи ролик до нього).
 // Із пробілом/комою в кінці: "шків ременя" сюди НЕ потрапляє
 const BELT_WORDS = ['ремень ', 'ремінь ', 'ремень,', 'ремінь,', 'пас генератор', 'пасок'];
 // Ремені ГУР (для "Кермове управління")
 const GUR_BELT_WORDS = ['ремень гур', 'ремінь гур', 'ремень насоса гур', 'ремінь насоса гур', 'ремень г/у', 'ремень гидроусил', 'ремінь гідропідс'];
 
-export const CATEGORIES: CategoryDef[] = [
+const BASE_CATEGORIES: CategoryDef[] = [
   {
     slug: 'halmivni-kolodky',
     name: 'Гальмівні колодки',
@@ -2598,6 +2621,9 @@ export const CATEGORIES: CategoryDef[] = [
     // "без коробки" — уточнение в названии другой детали ("Фільтр повітряний
     // ... (без коробки)"), а не деталь коробки передач
     excludeWords: ['компресор', 'компрессор', 'кондиц', 'кондиціон', 'без коробк'],
+    // Прокладки и уплотнительные кольца АКПП/КПП — и здесь, и в "Прокладки,
+    // сальники та кільця двигуна" (решение владельца, этап 3)
+    altRules: [{ all: [['прокладк', 'прокладок', 'кільц', 'кольц'], ['кпп']], exclude: ['подушк', 'опор', 'кронштейн'] }],
   },
   {
     slug: 'kuzov-detali',
@@ -2624,6 +2650,85 @@ export const CATEGORIES: CategoryDef[] = [
     matchGroups: [['кронштейн', 'подушка двигун', 'опора двигун', 'подушка кпп']],
   },
 ];
+
+// ------------------------------------------------------------
+// ЕТАП 3: нові категорії (lib/categoriesStage3.ts)
+// ------------------------------------------------------------
+// Увімкнено після підтвердження власником звіту scripts/category-review/stage3.md.
+// Поки було вимкнено, звіти вмикали етап змінною середовища CATEGORIES_STAGE3=1.
+// Після зміни правил — npm run categories:rebuild
+const STAGE3_ENABLED = true;
+export const CATEGORIES_STAGE3_ACTIVE =
+  STAGE3_ENABLED || (typeof process !== 'undefined' && process.env.CATEGORIES_STAGE3 === '1');
+
+// Нові категорії вставляються після insertAfter — так вони стоять поруч зі
+// спорідненими в сітці каталогу
+function withStage3(base: CategoryDef[]): CategoryDef[] {
+  if (!CATEGORIES_STAGE3_ACTIVE) return base;
+  const result = [...base];
+  for (const { insertAfter, ...category } of STAGE3_CATEGORIES) {
+    // Кілька записів з одним insertAfter (підкатегорії датчиків) — у порядку списку
+    let index = result.findIndex((c) => c.slug === insertAfter);
+    while (index + 1 < result.length && result[index + 1].parentCategorySlug === insertAfter && category.parentCategorySlug === insertAfter) index++;
+    result.splice(index === -1 ? result.length : index + 1, 0, category);
+  }
+  return result;
+}
+
+export const CATEGORIES: CategoryDef[] = withStage3(BASE_CATEGORIES);
+
+// Порядок широких категорій для ОДНІЄЇ категорії товару (хлібні крихти,
+// блок категорій хабу моделі, H1): нові категорії етапу 3 — першими, бо
+// вони точніші за старі широкі ("Прокладка турбіни" — це "Турбіни", а не
+// "Прокладки"; "Кронштейн супорта" — "Гальмівна система", а не "Кріплення")
+const STAGE3_TOP_LEVEL = new Set(STAGE3_CATEGORIES.filter((c) => !c.parentCategorySlug).map((c) => c.slug));
+export const CATEGORY_PRIORITY_ORDER: CategoryDef[] = [
+  ...CATEGORIES.filter((c) => STAGE3_TOP_LEVEL.has(c.slug)),
+  ...CATEGORIES.filter((c) => !STAGE3_TOP_LEVEL.has(c.slug)),
+];
+
+// Назва САМОГО датчика починається з одного з цих слів. Після увімкнення
+// етапу 3 такі товари потрапляють лише в категорії з allowSensors
+export const SENSOR_START_WORDS = ['датчик', 'сенсор', 'лямбда', 'витратомір', 'расходомер', 'дмрв', 'кисневий датчик', 'кислородный датчик'];
+
+// Службовий префікс постачальника на початку назви ("A1/", "H2/") —
+// регулярка для name_search (вже в нижньому регістрі, латиниця замінена)
+const NAME_PREFIX_RE = '^[[:space:]]*(?:[a-zа-яіїєґ]?[0-9]+/)*[[:space:]]*';
+const NAME_PREFIX_JS = /^\s*(?:[a-zа-яіїєґ]?\d+\/)*\s*/;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// Регулярка "назва починається з одного з цих слів" (для SQL і JS)
+function startsWithPattern(words: string[]): string {
+  return `${NAME_PREFIX_RE}(?:${words.map((w) => escapeRegExp(foldLookalikes(w))).join('|')})`;
+}
+
+// Усі правила категорії: основне + альтернативні
+function categoryRules(category: CategoryDef): CategoryRule[] {
+  return [
+    { all: category.matchGroups, exclude: category.excludeWords, startsWith: category.startsWith },
+    ...(category.altRules ?? []),
+  ];
+}
+
+// JS-версія тієї ж перевірки, що й SQL у buildCategoryRuleClause (назва
+// порівнюється після foldLookalikes — як name_search у базі)
+export function categoryMatchesName(category: CategoryDef, name: string | null | undefined): boolean {
+  if (!name || nameStartsWithBoot(name)) return false;
+  const folded = foldLookalikes(name);
+  const withoutPrefix = folded.replace(NAME_PREFIX_JS, '');
+  if (CATEGORIES_STAGE3_ACTIVE && !category.allowSensors && SENSOR_START_WORDS.some((w) => withoutPrefix.startsWith(foldLookalikes(w)))) {
+    return false;
+  }
+  return categoryRules(category).some(
+    (rule) =>
+      rule.all.every((group) => group.some((word) => folded.includes(foldLookalikes(word)))) &&
+      !(rule.exclude ?? []).some((word) => folded.includes(foldLookalikes(word))) &&
+      (!rule.startsWith || rule.startsWith.some((word) => withoutPrefix.startsWith(foldLookalikes(word))))
+  );
+}
 
 export function getCategoryBySlug(slug: string): CategoryDef | undefined {
   return CATEGORIES.find((c) => c.slug === slug);
@@ -2654,13 +2759,7 @@ export function nameStartsWithBoot(name: string | null | undefined): boolean {
 export function detectCategoryForProductName(name: string | null | undefined): CategoryDef | undefined {
   if (!name) return undefined;
   if (nameStartsWithBoot(name)) return undefined;
-  const lower = name.toLowerCase();
-  return CATEGORIES.find(
-    (c) =>
-      !c.parentCategorySlug &&
-      c.matchGroups.every((group) => group.some((word) => lower.includes(word.toLowerCase()))) &&
-      !(c.excludeWords ?? []).some((word) => lower.includes(word.toLowerCase()))
-  );
+  return CATEGORY_PRIORITY_ORDER.find((c) => !c.parentCategorySlug && categoryMatchesName(c, name));
 }
 
 // ------------------------------------------------------------
@@ -2734,13 +2833,8 @@ export function detectCategoryForProductH1(
 ): CategoryDef | undefined {
   if (!name) return undefined;
   if (nameStartsWithBoot(name)) return undefined;
-  const lower = name.toLowerCase();
-  const matchesNameFilter = (c: CategoryDef) =>
-    c.matchGroups.every((group) => group.some((word) => lower.includes(word.toLowerCase()))) &&
-    !(c.excludeWords ?? []).some((word) => lower.includes(word.toLowerCase()));
-
   const narrow = CATEGORIES.find(
-    (c) => c.tecdocVehicle && matchesNameFilter(c) && narrowCategoryMatchesVehicle(c, carMake, carModel)
+    (c) => c.tecdocVehicle && categoryMatchesName(c, name) && narrowCategoryMatchesVehicle(c, carMake, carModel)
   );
   if (narrow) return narrow;
 
@@ -2933,16 +3027,29 @@ export function buildCategoryRuleClause(
   conditions.push(
     "p.name_search !~* '^[[:space:]]*([A-Za-zА-Яа-яІіЇїЄєҐґ]?[0-9]+/)*[[:space:]]*(пыльник|пильник|пильовик)'"
   );
-  conditions.push(...category.matchGroups.map((group, i) => {
-    params.push(group.map((word) => `%${foldLookalikes(word)}%`));
-    return `p.name_search ILIKE ANY($${startParamIndex + i})`;
-  }));
+  // Параметр → його номер у запиті
+  const param = (value: unknown): string => {
+    params.push(value);
+    return `$${startParamIndex + params.length - 1}`;
+  };
 
-  if (category.excludeWords && category.excludeWords.length > 0) {
-    const excludeParamIdx = startParamIndex + params.length;
-    params.push(category.excludeWords.map((word) => `%${foldLookalikes(word)}%`));
-    conditions.push(`NOT (p.name_search ILIKE ANY($${excludeParamIdx}))`);
+  // Етап 3: сам датчик — лише в категоріях з allowSensors
+  if (CATEGORIES_STAGE3_ACTIVE && !category.allowSensors) {
+    conditions.push(`p.name_search !~ ${param(startsWithPattern(SENSOR_START_WORDS))}`);
   }
+
+  // Основне правило + альтернативні (етап 3) — через АБО
+  const ruleSql = categoryRules(category).map((rule) => {
+    const parts = rule.all.map((group) => `p.name_search ILIKE ANY(${param(group.map((word) => `%${foldLookalikes(word)}%`))}::text[])`);
+    if (rule.exclude && rule.exclude.length > 0) {
+      parts.push(`NOT (p.name_search ILIKE ANY(${param(rule.exclude.map((word) => `%${foldLookalikes(word)}%`))}::text[]))`);
+    }
+    if (rule.startsWith && rule.startsWith.length > 0) {
+      parts.push(`p.name_search ~ ${param(startsWithPattern(rule.startsWith))}`);
+    }
+    return parts.length > 0 ? `(${parts.join(' AND ')})` : 'true';
+  });
+  conditions.push(ruleSql.length === 1 ? ruleSql[0] : `(${ruleSql.join(' OR ')})`);
 
   if (category.tecdocVehicle) {
     const makeParamIdx = startParamIndex + params.length;
