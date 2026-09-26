@@ -2500,3 +2500,33 @@ CREATE TABLE IF NOT EXISTS telegram_login_intents (
   chat_id BIGINT PRIMARY KEY,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+
+-- ============================================================
+-- ТАБЛИЦА product_categories — категории товаров (хранятся, а не
+-- вычисляются при каждом открытии страницы)
+-- ============================================================
+-- Раньше категория товара считалась на лету: страница категории делала
+-- запрос по названию товара (ILIKE по словам правил из lib/categories.ts).
+-- Теперь правила применяются ОДИН раз при пересчёте (lib/categoryAssignment.ts),
+-- а страницы категорий, марок, поиск по авто и счётчики читают эту таблицу.
+--
+-- Один товар может быть в нескольких категориях (широкая + узкая,
+-- например "Гальмівні колодки" и "Колодки передні Camry") — поэтому
+-- первичный ключ (product_id, category_id).
+-- category_id — slug категории из lib/categories.ts (сами категории
+-- описаны в коде, отдельной таблицы категорий нет).
+-- rule_id — каким правилом товар попал в категорию ('base' — основные
+-- правила категории; дополнительные правила — их id из lib/categoryRulesExtra.ts).
+--
+-- Пересчёт: после импорта прайса (товары поставщика), ежедневный cron
+-- (изменённые за 2 дня), полный — npm run categories:rebuild
+CREATE TABLE IF NOT EXISTS product_categories (
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  category_id TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (product_id, category_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_product_categories_category ON product_categories (category_id, product_id);

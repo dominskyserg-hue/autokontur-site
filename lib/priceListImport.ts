@@ -21,6 +21,7 @@ import { Pool, PoolClient } from 'pg';
 import { after } from 'next/server';
 import { rebuildUkrainianCorpusSafely } from '@/lib/corpusBuilder';
 import { refreshVehicleMakesForSupplier } from '@/lib/vehicleMakeIndex';
+import { recomputeProductCategoriesSafely } from '@/lib/categoryAssignment';
 import { getCategoryBySlug, productMatchesCategory } from '@/lib/categories';
 
 // ------------------------------------------------------------
@@ -627,7 +628,10 @@ export async function importPriceListForSupplier(
   // скрипт) просто запускаємо у фоні
   // Те саме для таблиці "марка авто -> товари" (пошук, lib/vehicleMakeIndex.ts) —
   // лише товари цього постачальника
+  // Категорії товарів цього постачальника (таблиця product_categories,
+  // lib/categoryAssignment.ts) — першими: від них залежать сторінки категорій
   const afterImport = async () => {
+    await recomputeProductCategoriesSafely(pool, { kind: 'supplier', supplierId });
     await refreshVehicleMakesForSupplier(pool, supplierId);
     await rebuildUkrainianCorpusSafely(pool);
   };

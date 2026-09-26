@@ -21,7 +21,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
-import { CATEGORIES, getCategoryBySlug, findNarrowPageForVehicle } from '@/lib/categories';
+import { CATEGORIES, getCategoryBySlug, getSubcategories, findNarrowPageForVehicle } from '@/lib/categories';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
@@ -380,6 +380,7 @@ export default async function CategoryPage({
   // тому вони завжди збігаються. Останній пункт — поточна сторінка
   // (з тими самими параметрами, що й canonical)
   const parentCategory = category.parentCategorySlug ? getCategoryBySlug(category.parentCategorySlug) : undefined;
+  const subcategories = getSubcategories(slug);
   const breadcrumbItems = [
     { name: 'Головна', url: SITE_URL },
     { name: 'Каталог', url: `${SITE_URL}/category` },
@@ -433,6 +434,25 @@ export default async function CategoryPage({
             </p>
           )}
         </header>
+
+        {/* ==================== ПІДКАТЕГОРІЇ ==================== */}
+        {/* Загальні підкатегорії (не під модель авто), напр. у "Ремені та
+            ролики" — "Ремені та ролики ГРМ" і "Поліклинові ремені та ролики".
+            Усі їхні товари є і тут, у батьківській категорії */}
+        {!make && subcategories.length > 0 && (
+          <nav aria-label="Підкатегорії" className="mb-5 flex flex-wrap gap-2">
+            {subcategories.map((sub) => (
+              <Link
+                key={sub.slug}
+                href={`/category/${sub.slug}`}
+                className="rounded-full px-3.5 py-2 text-sm font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+                style={{ border: `1px solid ${TECH_BORDER}`, color: TECH_ACCENT_BRIGHT }}
+              >
+                {sub.name} →
+              </Link>
+            ))}
+          </nav>
+        )}
 
         {/* ==================== ФІЛЬТР ЗА АВТОМОБІЛЕМ ==================== */}
         <CategoryVehicleFilter value={{ makeSlug: marka ?? '', model: model ?? '', year: year ?? '', engine: engine ?? '' }} />
