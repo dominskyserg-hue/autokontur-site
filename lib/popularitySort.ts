@@ -68,7 +68,9 @@ const BRAND_GROUP_SQL = `(CASE WHEN ${BRAND_KEY_SQL} = ANY(${textArrayLiteral(BR
 // "ORDER BY …" для запросов, где товары — это таблица products с псевдонимом p
 export function buildPopularOrderBy(soldProductIds: string[]): string {
   const ids = soldProductIds.filter((id) => UUID_RE.test(id));
-  const soldSql = ids.length > 0 ? `(p.id = ANY(ARRAY[${ids.map((id) => `'${id}'`).join(',')}]::uuid[]))` : 'FALSE';
+  // Нет продаж — всегда-ложное ВЫРАЖЕНИЕ, а не голый FALSE: константа
+  // в ORDER BY даёт ошибку Postgres "non-integer constant in ORDER BY"
+  const soldSql = ids.length > 0 ? `(p.id = ANY(ARRAY[${ids.map((id) => `'${id}'`).join(',')}]::uuid[]))` : '(p.id IS NULL)';
   return `ORDER BY (p.stock > 0) DESC, ${soldSql} DESC, (p.image_url IS NOT NULL) DESC, ${BRAND_GROUP_SQL} ASC, p.retail_price ASC`;
 }
 
