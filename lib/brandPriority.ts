@@ -99,6 +99,13 @@ export const BRAND_GROUP_1: string[] = [
   'ATE',
   'FEBI',
   'FEBI BILSTEIN', // вариант написания
+  'MITSUBISHI ELECTRIC',
+  'NTK', // свечи и датчики, дочерний бренд NGK
+  'FAG', // подшипники, группа Schaeffler (как INA и LUK)
+  'CONTINENTAL',
+  'CONTINENTAL / VDO', // "CONTINENTAL/VDO" совпадает автоматически
+  'VALEO/MANDO',
+  'VICTOR REINZ/MAHLE',
 ];
 
 export const BRAND_GROUP_2: string[] = [
@@ -125,6 +132,8 @@ export const BRAND_GROUP_2: string[] = [
   'POLCAR',
   'POLCAR/SRL', // вариант написания
   'TENACITY',
+  'LUCAS', // тормоза TRW Lucas
+  'KOYORAD', // радиаторы (другая компания, не подшипники Koyo)
 ];
 
 // Ключ для сравнения: верхний регистр, без пробелов и дефисов.
