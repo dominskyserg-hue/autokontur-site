@@ -59,6 +59,7 @@ import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPric
 import { CUSTOMER_SESSION_COOKIE, getCustomerSessionPhoneFromRequest } from '@/lib/customerAuth';
 import { buildTextSearchClause } from '@/lib/productSearch';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
+import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import { isAdminRequest } from '@/lib/adminSession';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
@@ -144,6 +145,10 @@ interface ProductResponse {
   // вітрині ТІЛЬКИ якщо товару немає в наявності (stock = 0), див.
   // components/StorefrontHome.tsx
   deliveryTime: string | null;
+  // Группы бренд+артикул (lib/productGroups.ts) — только для покупателей:
+  // лучшее предложение группы (кнопка "Купити") и сколько предложений всего
+  offerId?: string;
+  offerCount?: number;
   updatedAt: string;
 }
 
@@ -360,6 +365,14 @@ export async function GET(request: NextRequest) {
       conditions.push('p.stock > 0');
     }
 
+    // Покупателям — одна карточка на бренд+артикул (главная группы с лучшим
+    // предложением, lib/productGroups.ts). Админке — каждый товар отдельно,
+    // как раньше (b — тот же товар)
+    const g = isAdmin
+      ? { join: 'JOIN products b ON b.id = p.id', where: 'true', image: 'p.image_url', name: 'p.name', offerCount: '1' }
+      : groupedListSql();
+    if (g.where !== 'true') conditions.push(g.where);
+
     const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
     // При пошуку (є текст search) пріоритет видачі: спершу те, що
@@ -375,7 +388,7 @@ export async function GET(request: NextRequest) {
     // марках і хабах (lib/popularitySort.ts): наявність → продаж за 180
     // днів → фото → група бренду (lib/brandPriority.ts) → ціна за зростанням
     const orderBySql = search
-      ? buildPopularOrderBy(await getRecentlySoldProductIds(pool))
+      ? groupedOrderBy(buildPopularOrderBy(await getRecentlySoldProductIds(pool)))
       : featured
         ? 'ORDER BY p.updated_at DESC'
         : 'ORDER BY p.article ASC';
@@ -408,26 +421,29 @@ export async function GET(request: NextRequest) {
       `
       SELECT
         p.id,
+        b.id AS offer_id,
+        ${g.offerCount} AS offer_count,
         p.article,
         p.brand,
-        p.name,
+        ${g.name} AS name,
         p.car_make,
         p.car_model,
         p.car_year,
         p.engine_volume,
         p.meta_description,
-        p.image_url,
+        ${g.image} AS image_url,
         p.image_search_attempted_at,
-        p.cost_price,
-        p.retail_price,
-        p.discount_percent,
-        p.stock,
-        p.supplier_id,
+        b.cost_price,
+        b.retail_price,
+        b.discount_percent,
+        b.stock,
+        b.supplier_id,
         s.name AS supplier_name,
         s.delivery_time,
         p.updated_at${useApproxCount ? '' : ', COUNT(*) OVER() AS total_count'}
       FROM products p
-      JOIN suppliers s ON s.id = p.supplier_id
+      ${g.join}
+      JOIN suppliers s ON s.id = b.supplier_id
       ${whereSql}
       ${orderBySql}
       LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
@@ -468,6 +484,8 @@ export async function GET(request: NextRequest) {
       ...(isAdmin ? { supplierId: row.supplier_id, supplierName: row.supplier_name } : {}),
       deliveryTime: row.delivery_time,
       updatedAt: row.updated_at,
+      // Группы: карточка ведёт на главную (id), а в корзину идёт лучшее предложение
+      ...(isAdmin ? {} : { offerId: row.offer_id, offerCount: row.offer_count }),
     }));
 
     // ------------------------------------------------------------

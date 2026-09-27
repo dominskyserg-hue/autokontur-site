@@ -28,6 +28,7 @@ import { buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
+import OfferCountNote from '@/components/OfferCountNote';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import {
   TECH_BG,
@@ -241,7 +242,7 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
             {products.map((product) => (
               <Link
                 key={product.id}
-                href={buildProductPath(product.id, product)}
+                href={buildProductPath(product.pageId, product)}
                 prefetch={false}
                 className="flex items-start gap-3 rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                 style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
@@ -277,6 +278,7 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
                       <StockBadge stock={product.stock} />
                     </div>
                   )}
+                  <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />
                   <div className="flex items-center justify-between gap-2">
                     <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
                       {formatMoney(product.retailPrice)} грн

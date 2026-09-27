@@ -31,6 +31,7 @@ import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import { getSeoOverride, type SeoOverride, type SeoOverrideFaqItem } from '@/data/seo-overrides';
+import { PRODUCT_GROUPS_ACTIVE } from '@/lib/productGroups';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -502,6 +503,16 @@ export interface ProductDetail {
   fallbackName: string | null;
   deliveryTime: string | null;
   updatedAt: string;
+  // Группы бренд+артикул (lib/productGroups.ts):
+  // canonicalPath — адрес для <link rel="canonical"> и JSON-LD: свой адрес
+  //   (слаг из СОБСТВЕННОГО названия, как в sitemap) или, у двойника, адрес
+  //   главной страницы группы;
+  // alsoKnownAs — другие названия этой детали у поставщиков (до 5), строка
+  //   "Також відомий як" под H1 главной;
+  // hasGroupOffers — главная страница группы с 2+ предложениями (AggregateOffer)
+  canonicalPath: string;
+  alsoKnownAs: string[];
+  hasGroupOffers: boolean;
 }
 
 // Одне ДОДАТКОВЕ фото галереї товару (не плутати з product.imageUrl —
@@ -573,9 +584,12 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     `
     SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url,
            p.meta_description, p.meta_description_override, p.car_make, p.car_model, p.updated_at,
-           s.name AS supplier_name, s.delivery_time
+           s.name AS supplier_name, s.delivery_time,
+           p.is_group_primary, p.group_offer_count, p.group_display_name, p.group_other_names,
+           gp.id AS primary_id, gp.brand AS primary_brand, gp.article AS primary_article, gp.name AS primary_name
     FROM products p
     JOIN suppliers s ON s.id = p.supplier_id
+    LEFT JOIN products gp ON gp.id = p.group_primary_id AND gp.id <> p.id AND gp.is_active = true
     WHERE p.id = $1 AND p.is_active = true
     `,
     [id]
@@ -592,11 +606,24 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     fallbackName = await loadFallbackName(row.id, row.article, row.brand);
   }
 
+  // Главная страница группы: H1/title — по самому подробному названию группы
+  // ("Сальник штока муфты подключения переднего моста" вместо "Сальник
+  // коробки передач"), но canonical — по собственному названию (как в sitemap)
+  const groupPrimary = PRODUCT_GROUPS_ACTIVE && row.is_group_primary && row.group_offer_count > 1;
+  const seoName: string | null = groupPrimary && row.group_display_name ? row.group_display_name : row.name;
+  const canonicalPath =
+    PRODUCT_GROUPS_ACTIVE && row.primary_id
+      ? buildProductPath(row.primary_id, { brand: row.primary_brand, article: row.primary_article, name: row.primary_name })
+      : buildProductPath(row.id, { brand: row.brand, article: row.article, name: row.name });
+
   return {
     id: row.id,
     article: row.article,
     brand: row.brand,
-    name: row.name,
+    name: seoName,
+    canonicalPath,
+    alsoKnownAs: groupPrimary ? (row.group_other_names ?? []) : [],
+    hasGroupOffers: groupPrimary,
     fallbackName,
     costPrice: parseFloat(row.cost_price),
     retailPrice: parseFloat(row.retail_price),
@@ -1015,6 +1042,9 @@ export async function loadProductPageData(
     carModel: product.carModel,
     deliveryTime: product.deliveryTime,
     updatedAt: product.updatedAt,
+    canonicalPath: product.canonicalPath,
+    alsoKnownAs: product.alsoKnownAs,
+    hasGroupOffers: product.hasGroupOffers,
   };
   const otherOffers: OtherOffer[] = rawOtherOffers.map((offer) => ({
     id: offer.id,
@@ -1129,7 +1159,7 @@ const loadSimilarProducts = cache(async function loadSimilarProducts(
   // у JS — DISTINCT ON у SQL змушував би сортувати ВСІ товари категорії
   const result = await pool.query(
     `
-    SELECT p.id, p.article, p.brand, p.name, p.image_url, p.stock, p.cost_price, p.retail_price
+    SELECT p.id, p.article, p.brand, p.name, p.image_url, p.stock, p.cost_price, p.retail_price, p.group_primary_id
     FROM products p
     WHERE ${conditions.join(' AND ')}
     ORDER BY (p.image_url IS NOT NULL) DESC
@@ -1146,7 +1176,8 @@ const loadSimilarProducts = cache(async function loadSimilarProducts(
       return true;
     })
     .map((row) => ({
-      id: row.id,
+      // Ссылка "схожого" — на главную страницу группы бренд+артикул (lib/productGroups.ts)
+      id: PRODUCT_GROUPS_ACTIVE ? row.group_primary_id ?? row.id : row.id,
       article: row.article,
       brand: row.brand,
       name: row.name,
@@ -1155,5 +1186,6 @@ const loadSimilarProducts = cache(async function loadSimilarProducts(
       costPrice: parseFloat(row.cost_price),
       retailPrice: parseFloat(row.retail_price),
     }))
+    .filter((item) => item.id !== excludeId)
     .slice(0, 8);
 });

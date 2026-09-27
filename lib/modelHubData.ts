@@ -12,6 +12,7 @@ import { cache } from 'react';
 import { Pool } from 'pg';
 import { detectCategoryForProductName, getCategoryBySlug, type CategoryDef } from '@/lib/categories';
 import { loadBreadcrumbCategories } from '@/lib/productCategoryLookup';
+import { PRODUCT_GROUPS_ACTIVE } from '@/lib/productGroups';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { MODEL_HUBS, MIN_HUB_PRODUCTS, PRIORITY_CATEGORY_SLUGS, type ModelHubDef } from '@/lib/modelHubs';
 import { comparePopular, getRecentlySoldProductIds } from '@/lib/popularitySort';
@@ -42,6 +43,12 @@ export interface HubProduct {
   stock: number;
   imageUrl: string | null;
   deliveryTime: string | null;
+  // Группы бренд+артикул (lib/productGroups.ts): id — лучшее предложение
+  // (цена, "Купити"), pageId — главная страница группы (ссылка карточки),
+  // offerCount — сколько предложений у этой запчасти на хабе
+  pageId: string;
+  offerCount: number;
+  groupPrimaryId: string | null;
 }
 
 export interface HubCategoryCount {
@@ -58,7 +65,7 @@ export interface HubData {
 }
 
 const HUB_PRODUCTS_SQL = `
-  SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time
+  SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time, p.group_primary_id
   FROM tecdoc_compatibility tc
   JOIN products p ON p.brand = tc.brand AND p.article = tc.article AND p.is_active = true
   JOIN suppliers s ON s.id = p.supplier_id
@@ -90,6 +97,9 @@ export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): P
     stock: row.stock,
     imageUrl: row.image_url,
     deliveryTime: row.delivery_time,
+    pageId: row.id,
+    offerCount: 1,
+    groupPrimaryId: row.group_primary_id,
   }));
 
   // Той самий товар (бренд + артикул) часто є в кількох постачальників —
@@ -104,7 +114,17 @@ export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): P
       bestByPart.set(key, offer);
     }
   }
-  const products = [...bestByPart.values()];
+  // Ссылка — на главную страницу группы, пометка "N пропозицій" — по числу предложений на хабе
+  const offersByPart = new Map<string, number>();
+  for (const offer of offers) {
+    const key = `${(offer.brand ?? '').toUpperCase()}|${offer.article}`;
+    offersByPart.set(key, (offersByPart.get(key) ?? 0) + 1);
+  }
+  const products = [...bestByPart.values()].map((best) => ({
+    ...best,
+    pageId: PRODUCT_GROUPS_ACTIVE ? best.groupPrimaryId ?? best.id : best.id,
+    offerCount: PRODUCT_GROUPS_ACTIVE ? offersByPart.get(`${(best.brand ?? '').toUpperCase()}|${best.article}`) ?? 1 : 1,
+  }));
 
   // Категорії — тим самим способом, що й хлібні крихти товару: з таблиці
   // product_categories (lib/productCategoryLookup.ts), запасний варіант —

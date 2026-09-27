@@ -23,6 +23,7 @@ import { Pool } from 'pg';
 import { buildProductPath } from './slug';
 import { SITE_URL } from './siteConfig';
 import { BRAND_GROUP_1_KEYS, BRAND_GROUP_2_KEYS } from './brandPriority';
+import { PRODUCT_GROUPS_ACTIVE } from './productGroups';
 import type { SitemapUrlEntry } from './sitemapXml';
 
 declare global {
@@ -45,8 +46,14 @@ export const SITEMAP_PRODUCTS_CHUNK_SIZE = 45_000;
 // Товари, яких немає в наявності довше, ніж стільки днів, у сайтмап не йдуть
 const OUT_OF_STOCK_DAYS = 90;
 
-const IN_STOCK_SQL = 'is_active = true AND stock > 0';
-const RECENTLY_OUT_SQL = `is_active = true AND stock <= 0 AND stock_zero_since > now() - interval '${OUT_OF_STOCK_DAYS} days'`;
+// Группы бренд+артикул (lib/productGroups.ts): в sitemap — только главная
+// страница группы; "в наличии" — если в наличии хоть одно предложение группы
+const PRIMARY_SQL = PRODUCT_GROUPS_ACTIVE ? ' AND is_group_primary' : '';
+const HAS_STOCK_SQL = PRODUCT_GROUPS_ACTIVE
+  ? '(stock > 0 OR EXISTS (SELECT 1 FROM products t WHERE t.group_primary_id = products.id AND t.is_active AND t.stock > 0))'
+  : 'stock > 0';
+const IN_STOCK_SQL = `is_active = true${PRIMARY_SQL} AND ${HAS_STOCK_SQL}`;
+const RECENTLY_OUT_SQL = `is_active = true${PRIMARY_SQL} AND NOT ${HAS_STOCK_SQL} AND stock_zero_since > now() - interval '${OUT_OF_STOCK_DAYS} days'`;
 
 // Група бренду в SQL: $1 — ключі групи 1, $2 — групи 2 (normalizeBrandKey)
 const BRAND_GROUP_SQL = `CASE WHEN upper(regexp_replace(coalesce(brand, ''), '[[:space:]-]', '', 'g')) = ANY($1::text[]) THEN 1

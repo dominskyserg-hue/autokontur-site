@@ -11,7 +11,8 @@
     "tecdoc:import": "tsx scripts/tecdoc/import-dump.ts",
     "corpus:rebuild": "tsx scripts/rebuild-ukrainian-corpus.ts",
     "vehicle-makes:rebuild": "tsx scripts/rebuild-vehicle-makes.ts",
-    "categories:rebuild": "tsx scripts/rebuild-categories.ts"
+    "categories:rebuild": "tsx scripts/rebuild-categories.ts",
+    "groups:rebuild": "tsx scripts/rebuild-groups.ts"
   },
   "dependencies": {
     "@sparticuz/chromium": "^153.0.0",

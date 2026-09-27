@@ -14,6 +14,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { Pool } from 'pg';
 import { recomputeProductCategories } from '@/lib/categoryAssignment';
+import { recomputeProductGroupsSafely } from '@/lib/productGroups';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,6 +41,8 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    // Группы бренд+артикул (lib/productGroups.ts) — сначала, категории зависят от них
+    await recomputeProductGroupsSafely(pool);
     const result = await recomputeProductCategories(pool, { kind: 'updated_since_days', days: 2 });
     console.log(`Категории пересчитаны: товаров ${result.products}, назначений ${result.assignments}, ${result.ms} мс`);
     return NextResponse.json({ success: true, ...result });

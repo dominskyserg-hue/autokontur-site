@@ -123,7 +123,20 @@ export default function ProductDetailContent({
   // override.h1) це давало ІНШИЙ слаг, ніж справжній canonical (баг:
   // артикул у слазі задвоювався). Тепер url передається явно —
   // productJsonLd (lib/structuredData.ts) більше нічого не пересчитує
-  const canonicalUrl = `${SITE_URL}${buildProductPath(product.id, product)}`;
+  const canonicalUrl = `${SITE_URL}${product.canonicalPath}`;
+
+  // Главная страница группы с несколькими предложениями — в разметке
+  // AggregateOffer по ВИДИМЫМ ценам: основное предложение + "Інші пропозиції"
+  const visibleOffers = [{ retailPrice: product.retailPrice, stock: product.stock }, ...otherOffers];
+  const aggregateOffer =
+    product.hasGroupOffers && otherOffers.length > 0
+      ? {
+          lowPrice: Math.min(...visibleOffers.map((o) => o.retailPrice)),
+          highPrice: Math.max(...visibleOffers.map((o) => o.retailPrice)),
+          offerCount: visibleOffers.length,
+          inStock: visibleOffers.some((o) => o.stock > 0),
+        }
+      : undefined;
 
   const faqItems = resolveFaqItems(seoOverride?.faq);
 
@@ -174,6 +187,7 @@ export default function ProductDetailContent({
               name: displayName,
               description: buildSeoProductDescription(product),
               url: canonicalUrl,
+              aggregateOffer,
             })
           ),
         }}
@@ -218,6 +232,14 @@ export default function ProductDetailContent({
           >
             {displayName}
           </h1>
+          {/* Інші назви цієї ж деталі в прайсах постачальників (група бренд+артикул,
+              lib/productGroups.ts) — звичайний видимий текст: покупець і Google
+              бачать, що "Сальник тяги моста" і "Сальник коробки передач" — одне й те саме */}
+          {product.alsoKnownAs.length > 0 && (
+            <p className="mb-3 text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
+              Також відомий як: {product.alsoKnownAs.join('; ')}
+            </p>
+          )}
 
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <span

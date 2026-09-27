@@ -25,6 +25,8 @@ import { buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
+import OfferCountNote from '@/components/OfferCountNote';
+import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import {
@@ -83,6 +85,10 @@ interface MakeProduct {
   stock: number;
   deliveryTime: string | null;
   imageUrl: string | null;
+  // Группы бренд+артикул (lib/productGroups.ts): id — главная страница,
+  // offerId — лучшее предложение (цена, наличие, "Купити"), offerCount — сколько предложений
+  offerId: string;
+  offerCount: number;
 }
 
 // Той самий вибір сортування, що й на app/category/[slug]/page.tsx
@@ -111,19 +117,23 @@ const loadMakeProducts = cache(async function loadMakeProducts(
 
   // Персональна ціна покупця — див. коментар біля того ж коду в
   // app/category/[slug]/page.tsx
+  // Одна карточка на бренд+артикул — главная группы с лучшим предложением
+  const g = groupedListSql();
   const [productsResult, countResult, customerPricingRule] = await Promise.all([
     pool.query(
       `
-      SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time
+      SELECT p.id, p.article, p.brand, ${g.name} AS name, b.id AS offer_id, ${g.offerCount} AS offer_count,
+             b.cost_price, b.retail_price, b.stock, ${g.image} AS image_url, s.delivery_time
       FROM products p
-      JOIN suppliers s ON s.id = p.supplier_id
-      WHERE ${clause}
-      ${makeOrderByClause(sort, soldProductIds)}
+      ${g.join}
+      JOIN suppliers s ON s.id = b.supplier_id
+      WHERE ${clause} AND ${g.where}
+      ${groupedOrderBy(makeOrderByClause(sort, soldProductIds))}
       LIMIT $2 OFFSET $3
       `,
       [param, PAGE_SIZE, offset]
     ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`, [param]),
+    pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause} AND ${g.where}`, [param]),
     getCustomerPricingRule(pool, await getCustomerSessionPhone()),
   ]);
 
@@ -136,6 +146,8 @@ const loadMakeProducts = cache(async function loadMakeProducts(
     stock: row.stock,
     deliveryTime: row.delivery_time,
     imageUrl: row.image_url,
+    offerId: row.offer_id,
+    offerCount: row.offer_count,
   }));
 
   return { products, total: countResult.rows[0]?.total ?? 0 };
@@ -413,6 +425,7 @@ export default async function CarMakePage({
                         <StockBadge stock={product.stock} />
                       </div>
                     )}
+                    <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />
                     <div className="flex items-center justify-between gap-2">
                       <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
                         {formatMoney(product.retailPrice)} грн
@@ -421,7 +434,7 @@ export default async function CarMakePage({
                           не уводя со страницы; без наличия — серый "Під замовлення" */}
                       <CardBuyButton
                         product={{
-                          id: product.id,
+                          id: product.offerId,
                           article: product.article,
                           brand: product.brand,
                           name: product.name || `Деталь для ${make.name}`,

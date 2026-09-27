@@ -2580,3 +2580,22 @@ CREATE TRIGGER trg_products_track_content_change
 -- Товары, которых уже нет в наличии на момент появления поля: точная дата
 -- неизвестна, считаем с сегодняшнего дня (из sitemap уйдут через 90 дней)
 UPDATE products SET stock_zero_since = now() WHERE stock <= 0 AND stock_zero_since IS NULL;
+
+
+-- ============================================================
+-- ГРУППЫ БРЕНД + АРТИКУЛ (одна главная страница на группу)
+-- ============================================================
+-- Один артикул от нескольких поставщиков = одна деталь. Главная страница
+-- группы — самый старый активный товар; у остальных canonical на неё.
+-- Колонки считает lib/productGroups.ts (recomputeProductGroups) — после
+-- импорта прайса, в cron и вручную: npm run groups:rebuild. У одиночек
+-- (артикул только у одного поставщика) — значения по умолчанию
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_primary_id UUID;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_group_primary BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_offer_count INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_best_offer_id UUID;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_image_url TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_display_name TEXT;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_other_names TEXT[];
+-- Двойники по главной странице (sitemap: "в наличии ли хоть одно предложение группы")
+CREATE INDEX IF NOT EXISTS idx_products_group_primary ON products (group_primary_id) WHERE group_primary_id IS NOT NULL;

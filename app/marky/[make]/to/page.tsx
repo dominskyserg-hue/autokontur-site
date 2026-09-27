@@ -28,6 +28,8 @@ import { buildProductListJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
+import OfferCountNote from '@/components/OfferCountNote';
+import { groupedListSql } from '@/lib/productGroups';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import {
   TECH_BG,
@@ -80,6 +82,10 @@ interface ToProduct {
   retailPrice: number;
   stock: number;
   deliveryTime: string | null;
+  // Группы бренд+артикул (lib/productGroups.ts): id — главная страница,
+  // offerId — лучшее предложение (цена, наличие, "Купити"), offerCount — сколько предложений
+  offerId: string;
+  offerCount: number;
 }
 
 interface ToSection {
@@ -103,20 +109,24 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
     categories.map(async (category): Promise<ToSection> => {
       const { clause, params } = buildCategoryAndMakeWhereClause(category, make, 1);
 
+      // Одна карточка на бренд+артикул — главная группы с лучшим предложением
+      const g = groupedListSql();
       const [productsResult, countResult] = await Promise.all([
         pool.query(
           `
-          SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, s.delivery_time
+          SELECT p.id, p.article, p.brand, ${g.name} AS name, b.id AS offer_id, ${g.offerCount} AS offer_count,
+                 b.cost_price, b.retail_price, b.stock, s.delivery_time
           FROM products p
-          JOIN suppliers s ON s.id = p.supplier_id
-          WHERE ${clause}
-          ORDER BY (p.stock > 0) DESC, p.name ASC NULLS LAST
+          ${g.join}
+          JOIN suppliers s ON s.id = b.supplier_id
+          WHERE ${clause} AND ${g.where}
+          ORDER BY (b.stock > 0) DESC, ${g.name} ASC NULLS LAST
           LIMIT $${params.length + 1}
           `,
           [...params, PREVIEW_SIZE]
         ),
         pool.query(
-          `SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`,
+          `SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause} AND ${g.where}`,
           params
         ),
       ]);
@@ -129,6 +139,8 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
         retailPrice: computeCustomerPrice(parseFloat(row.cost_price), parseFloat(row.retail_price), customerPricingRule),
         stock: row.stock,
         deliveryTime: row.delivery_time,
+        offerId: row.offer_id,
+        offerCount: row.offer_count,
       }));
 
       return { category, products, total: countResult.rows[0]?.total ?? 0 };
@@ -277,6 +289,7 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
                           <StockBadge stock={product.stock} />
                         </div>
                       )}
+                      <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />
                       <div className="flex items-center justify-between gap-2">
                         <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 16, color: '#fff' }}>
                           {formatMoney(product.retailPrice)} грн
@@ -285,7 +298,7 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
                             не уводя со страницы; без наличия — серый "Під замовлення" */}
                         <CardBuyButton
                           product={{
-                            id: product.id,
+                            id: product.offerId,
                             article: product.article,
                             brand: product.brand,
                             name: product.name || category.name,

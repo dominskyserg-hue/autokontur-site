@@ -68,7 +68,9 @@ export async function generateMetadata({
   const product = await loadProduct(id);
   if (!product) return {};
 
-  const canonicalUrl = `${SITE_URL}${buildProductPath(id, product)}`;
+  // У двойника (тот же бренд+артикул у другого поставщика) canonical — на
+  // главную страницу группы (lib/productGroups.ts); у остальных — свой адрес
+  const canonicalUrl = `${SITE_URL}${product.canonicalPath}`;
   // title/description — обидва враховують ручний SEO-оверрайд товару
   // (data/seo-overrides.ts) з найвищим пріоритетом, інакше будуються
   // з того самого шаблону, що й видимий H1 на сторінці

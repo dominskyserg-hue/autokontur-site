@@ -43,6 +43,9 @@ export interface SchemaProduct {
   // задвоював артикул). Списки категорій/марок (buildProductListJsonLd)
   // це поле не передають — там name і так сирий, розбіжності нема
   url?: string;
+  // Кілька пропозицій однієї деталі (група бренд+артикул, lib/productGroups.ts) —
+  // тоді замість Offer розмітка AggregateOffer. Ціни — ті самі, що видно на сторінці
+  aggregateOffer?: { lowPrice: number; highPrice: number; offerCount: number; inStock: boolean };
 }
 
 // Дуже поширений випадок саме в автозапчастинах (особливо стартери й
@@ -107,7 +110,20 @@ export function productJsonLd(product: SchemaProduct) {
     ...(product.imageUrl ? { image: product.imageUrl } : {}),
     ...(product.description ? { description: product.description } : {}),
     url,
-    offers: {
+    offers: product.aggregateOffer
+      ? {
+          '@type': 'AggregateOffer',
+          url,
+          priceCurrency: 'UAH',
+          lowPrice: Math.ceil(product.aggregateOffer.lowPrice),
+          highPrice: Math.ceil(product.aggregateOffer.highPrice),
+          offerCount: product.aggregateOffer.offerCount,
+          availability: product.aggregateOffer.inStock ? 'https://schema.org/InStock' : 'https://schema.org/BackOrder',
+          itemCondition: REFURBISHED_PATTERN.test(product.name || '')
+            ? 'https://schema.org/RefurbishedCondition'
+            : 'https://schema.org/NewCondition',
+        }
+      : {
       '@type': 'Offer',
       url,
       priceCurrency: 'UAH',

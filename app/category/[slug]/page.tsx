@@ -39,6 +39,8 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
+import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
+import OfferCountNote from '@/components/OfferCountNote';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -97,6 +99,11 @@ interface CategoryProduct {
   stock: number;
   deliveryTime: string | null;
   imageUrl: string | null;
+  // Группы бренд+артикул (lib/productGroups.ts): id — главная страница
+  // группы (ссылка карточки), offerId — лучшее предложение (цена, наличие,
+  // кнопка "Купити"), offerCount — сколько предложений в группе
+  offerId: string;
+  offerCount: number;
 }
 
 // cache() від React дедуплікує виклик У МЕЖАХ ОДНОГО HTTP-запиту —
@@ -166,19 +173,24 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
   // не віддасть цю сторінку зі статичного кешу одному покупцю з ціною
   // іншого — використання cookies()/headers() саме собою вимикає
   // статичну генерацію для сторінки, що її викликає
+  // Одна карточка на бренд+артикул: главная страница группы (p) с ценой,
+  // наличием и сроком лучшего предложения (b); счётчик — тоже по группам
+  const g = groupedListSql();
   const [productsResult, countResult, customerPricingRule] = await Promise.all([
     pool.query(
       `
-      SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.discount_percent, p.stock, p.image_url, s.delivery_time
+      SELECT p.id, p.article, p.brand, ${g.name} AS name, b.id AS offer_id, ${g.offerCount} AS offer_count,
+             b.cost_price, b.retail_price, b.discount_percent, b.stock, ${g.image} AS image_url, s.delivery_time
       FROM products p
-      JOIN suppliers s ON s.id = p.supplier_id
-      WHERE ${clause}
-      ${categoryOrderByClause(sort, soldProductIds)}
-      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      ${g.join}
+      JOIN suppliers s ON s.id = b.supplier_id
+      WHERE ${clause} AND ${g.where}
+      ${groupedOrderBy(categoryOrderByClause(sort, soldProductIds))}
+      LIMIT ${params.length + 1} OFFSET ${params.length + 2}
       `,
       [...params, PAGE_SIZE, offset]
     ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause}`, params),
+    pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause} AND ${g.where}`, params),
     getCustomerPricingRule(pool, await getCustomerSessionPhone()),
   ]);
 
@@ -192,6 +204,8 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
     stock: row.stock,
     deliveryTime: row.delivery_time,
     imageUrl: row.image_url,
+    offerId: row.offer_id,
+    offerCount: row.offer_count,
   }));
 
   return { products, total: countResult.rows[0]?.total ?? 0 };
@@ -590,6 +604,7 @@ export default async function CategoryPage({
                         <StockBadge stock={product.stock} />
                       </div>
                     )}
+                    <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-baseline gap-1.5 min-w-0">
                         <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
@@ -613,7 +628,7 @@ export default async function CategoryPage({
                           не уводя со страницы; без наличия — серый "Під замовлення" */}
                       <CardBuyButton
                         product={{
-                          id: product.id,
+                          id: product.offerId,
                           article: product.article,
                           brand: product.brand,
                           name: product.name || category.name,

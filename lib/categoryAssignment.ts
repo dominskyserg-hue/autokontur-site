@@ -22,6 +22,7 @@ import type { Pool, PoolClient } from 'pg';
 import { CATEGORIES, CATEGORIES_STAGE5_ACTIVE, buildCategoryRuleClause } from '@/lib/categories';
 import { EXTRA_CATEGORY_RULES, buildExtraRuleCondition } from '@/lib/categoryRulesExtra';
 import { twinIsSamePart } from '@/lib/twinMatch';
+import { PRODUCT_GROUPS_ACTIVE } from '@/lib/productGroups';
 
 // Дополнительные правила этапа 2 (lib/categoryRulesExtra.ts). Включены после
 // проверки владельцем отчёта scripts/category-review/stage2.md.
@@ -179,6 +180,26 @@ export async function recomputeInTransaction(
       pairParams
     );
     assignments += parents.rowCount ?? 0;
+  }
+
+  // 5. Группы бренд+артикул (lib/productGroups.ts): в списках показывается
+  // только ГЛАВНАЯ страница группы, поэтому она получает категории всех
+  // участников группы — иначе группа пропала бы из категории, куда попал
+  // лишь двойник ("Сальник тяги моста" при главной "Сальник коробки
+  // передач"). Узкие категории "по модели авто" не переносятся
+  if (PRODUCT_GROUPS_ACTIVE) {
+    const filter = scopeFilter(scope, 2);
+    const grouped = await client.query(
+      `INSERT INTO product_categories (product_id, category_id, rule_id)
+       SELECT DISTINCT m.group_primary_id, pc.category_id, 'group'
+       FROM products m
+       JOIN product_categories pc ON pc.product_id = m.id
+       WHERE m.group_primary_id IS NOT NULL AND m.id <> m.group_primary_id AND m.is_active
+         AND pc.category_id = ANY($1::text[])${filter.sql.replace(/\bp\./g, 'm.')}
+       ON CONFLICT (product_id, category_id) DO NOTHING`,
+      [TWIN_CATEGORY_SLUGS, ...filter.params]
+    );
+    assignments += grouped.rowCount ?? 0;
   }
 
   const count = scopeFilter(scope, 1);

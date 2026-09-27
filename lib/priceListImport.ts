@@ -22,6 +22,7 @@ import { after } from 'next/server';
 import { rebuildUkrainianCorpusSafely } from '@/lib/corpusBuilder';
 import { refreshVehicleMakesForSupplier } from '@/lib/vehicleMakeIndex';
 import { recomputeProductCategoriesSafely } from '@/lib/categoryAssignment';
+import { recomputeProductGroupsSafely } from '@/lib/productGroups';
 import { getCategoryBySlug, productMatchesCategory } from '@/lib/categories';
 
 // ------------------------------------------------------------
@@ -631,6 +632,9 @@ export async function importPriceListForSupplier(
   // Категорії товарів цього постачальника (таблиця product_categories,
   // lib/categoryAssignment.ts) — першими: від них залежать сторінки категорій
   const afterImport = async () => {
+    // Группы бренд+артикул (lib/productGroups.ts) — ДО категорий: главная
+    // страница группы получает категории всех двойников
+    await recomputeProductGroupsSafely(pool);
     await recomputeProductCategoriesSafely(pool, { kind: 'supplier', supplierId });
     await refreshVehicleMakesForSupplier(pool, supplierId);
     await rebuildUkrainianCorpusSafely(pool);

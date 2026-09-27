@@ -63,6 +63,7 @@ import CategoryGridSection from '@/components/CategoryGridSection';
 import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
 import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
 import CardBuyButton from '@/components/CardBuyButton';
+import OfferCountNote from '@/components/OfferCountNote';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -89,6 +90,15 @@ interface Product {
   // Термін поставки під замовлення постачальника цього товару —
   // показуємо ЛИШЕ якщо stock === 0 (див. app/api/products/route.ts)
   deliveryTime: string | null;
+  // Группы бренд+артикул (lib/productGroups.ts): id — главная страница
+  // (ссылка), offerId — лучшее предложение (корзина), offerCount — сколько предложений
+  offerId?: string;
+  offerCount?: number;
+}
+
+// В корзину кладём лучшее предложение группы, а не главную страницу
+function toCartProduct(product: Product): Product {
+  return product.offerId ? { ...product, id: product.offerId } : product;
 }
 
 // Одна позиция в корзине — "снимок" товара на момент добавления
@@ -2420,14 +2430,15 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                                   </span>
                                 </div>
                               )}
+                              <OfferCountNote count={product.offerCount ?? 1} fromPrice={formatMoney(product.retailPrice)} />
                             </div>
 
                             <CardBuyButton
-                              product={product}
+                              product={toCartProduct(product)}
                               listName="Результати пошуку"
                               compact
-                              inCart={cart.some((item) => item.id === product.id)}
-                              onAdd={() => addToCart(product)}
+                              inCart={cart.some((item) => item.id === toCartProduct(product).id)}
+                              onAdd={() => addToCart(toCartProduct(product))}
                               onOpenCart={() => setCartOpen(true)}
                             />
                           </div>
@@ -2524,6 +2535,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                               )}
                             </span>
                           </div>
+                          <OfferCountNote count={product.offerCount ?? 1} fromPrice={formatMoney(product.retailPrice)} />
 
                           {product.stock <= 0 && product.deliveryTime && (
                             <p className="-mt-2 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
@@ -2532,11 +2544,11 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                           )}
 
                           <CardBuyButton
-                            product={product}
+                            product={toCartProduct(product)}
                             listName="Результати пошуку"
                             className="w-full"
-                            inCart={cart.some((item) => item.id === product.id)}
-                            onAdd={() => addToCart(product)}
+                            inCart={cart.some((item) => item.id === toCartProduct(product).id)}
+                            onAdd={() => addToCart(toCartProduct(product))}
                             onOpenCart={() => setCartOpen(true)}
                           />
                         </div>
@@ -2762,11 +2774,11 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                         </span>
                       </span>
                       <CardBuyButton
-                        product={product}
+                        product={toCartProduct(product)}
                         listName="Популярні товари"
                         compact
-                        inCart={cart.some((item) => item.id === product.id)}
-                        onAdd={() => addToCart(product)}
+                        inCart={cart.some((item) => item.id === toCartProduct(product).id)}
+                        onAdd={() => addToCart(toCartProduct(product))}
                         onOpenCart={() => setCartOpen(true)}
                       />
                     </div>
