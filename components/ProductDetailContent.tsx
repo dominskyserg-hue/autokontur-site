@@ -428,6 +428,7 @@ export default function ProductDetailContent({
               <Link
                 key={offer.id}
                 href={buildProductPath(offer.id, product)}
+                prefetch={false}
                 className="flex items-center justify-between rounded-xl p-3.5 text-sm transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                 style={{ fontFamily: BODY_FONT, background: SURFACE_GLASS, border: `1px solid ${BORDER_SOFT}`, color: PAPER }}
               >
@@ -661,6 +662,7 @@ function SimilarProductCard({ item, categorySlug }: { item: SimilarProduct; cate
   return (
     <Link
       href={buildProductPath(item.id, item)}
+      prefetch={false}
       className="flex flex-col rounded-xl p-3 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
       style={{ background: SURFACE_GLASS, border: `1px solid ${BORDER_SOFT}` }}
     >
@@ -693,6 +695,7 @@ function CrossRefList({ items, product }: { items: CrossRefItem[]; product: Prod
           <Link
             key={`${item.brand}-${item.partNumber}`}
             href={buildProductPath(item.productId, product)}
+            prefetch={false}
             className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
             style={{ fontFamily: BODY_FONT, border: `1px solid ${BORDER_SOFT}`, color: ACCENT }}
           >
@@ -721,6 +724,7 @@ function TecdocCrossList({ items }: { items: TecdocCrossItem[] }) {
           <Link
             key={`${item.brand}-${item.article}`}
             href={item.productPath}
+            prefetch={false}
             className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
             style={{ fontFamily: BODY_FONT, border: `1px solid ${BORDER_SOFT}`, color: ACCENT }}
           >

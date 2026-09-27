@@ -529,6 +529,7 @@ export default async function CategoryPage({
                 <Link
                   key={product.id}
                   href={buildProductPath(product.id, product)}
+                  prefetch={false}
                   className="flex items-start gap-3 rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                   style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                 >

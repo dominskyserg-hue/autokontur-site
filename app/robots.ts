@@ -7,6 +7,12 @@
 // /api — службові маршрути, не сторінки для людей.
 // /account — особистий кабінет покупця (історія ЙОГО замовлень) —
 // приватні дані, індексувати нема чого й не можна.
+//
+// ?_rsc= — службові дані Next.js для переходів усередині сайту (не
+// сторінки). За Search Console це було 38% запитів Googlebot — він
+// витрачав на них бюджет обходу замість справжніх сторінок. Правила
+// з "*" і "?"/"&" закривають ЛИШЕ адреси з цим параметром: /p/..., /category/...,
+// /marky/..., картинки та /_next/static (CSS, JS) лишаються відкритими
 // ============================================================
 
 import type { MetadataRoute } from 'next';
@@ -17,7 +23,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: '*',
       allow: '/',
-      disallow: ['/admin', '/api', '/account'],
+      disallow: ['/admin', '/api', '/account', '/*?_rsc=', '/*&_rsc='],
     },
     sitemap: `${SITE_URL}/sitemap.xml`,
   };

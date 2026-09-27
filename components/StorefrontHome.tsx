@@ -2366,6 +2366,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                               </div>
                               <Link
                                 href={buildProductPath(product.id, product)}
+                                prefetch={false}
                                 className="truncate text-sm leading-snug hover:underline"
                                 style={{ fontFamily: SANS_TECH, color: TECH_INK }}
                               >
@@ -2468,7 +2469,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                             )}
                           </div>
 
-                          <Link href={buildProductPath(product.id, product)} className="block hover:underline">
+                          <Link prefetch={false} href={buildProductPath(product.id, product)} className="block hover:underline">
                             <p className="mb-1 flex items-center gap-1.5 text-xs" style={{ fontFamily: SANS_TECH }}>
                               <span className="font-bold uppercase tracking-wide" style={{ color: TECH_ACCENT_BRIGHT }}>
                                 {product.brand || 'Без бренду'}
@@ -2718,7 +2719,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                         кнопка нижче — окремий елемент поряд, а не всередині Link,
                         той самий прийом, що і в "звичайних" картках результатів
                         пошуку вище */}
-                    <Link href={buildProductPath(product.id, product)} className="flex flex-col gap-2.5">
+                    <Link prefetch={false} href={buildProductPath(product.id, product)} className="flex flex-col gap-2.5">
                       <div
                         className="flex aspect-square w-full items-center justify-center overflow-hidden rounded-lg"
                         style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}

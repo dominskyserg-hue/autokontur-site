@@ -258,6 +258,7 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
                     <Link
                       key={product.id}
                       href={buildProductPath(product.id, product)}
+                      prefetch={false}
                       className="block rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
                       style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
                     >

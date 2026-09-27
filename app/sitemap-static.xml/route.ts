@@ -77,7 +77,12 @@ export async function GET() {
     priority: 0.7,
   }));
 
-  const xml = buildUrlsetXml([...staticPages, ...categoryPages, ...makePages, ...makeToPages, ...hubPages]);
+  // Порядок: головна й каталог → категорії та підкатегорії → хаби моделей →
+  // марки → інформаційні сторінки. Google обходить сайтмап зверху, тож
+  // найважливіші для пошуку сторінки мають бути першими
+  // staticPages: [головна, /category, /marky, ...інформаційні]
+  const [homePage, catalogPage, makesIndexPage, ...infoPages] = staticPages;
+  const xml = buildUrlsetXml([homePage, catalogPage, ...categoryPages, ...hubPages, makesIndexPage, ...makePages, ...makeToPages, ...infoPages]);
   const response = xmlResponse(xml);
   response.headers.set('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=3600');
   return response;

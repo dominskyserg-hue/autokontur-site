@@ -10,7 +10,10 @@
 
 export interface SitemapUrlEntry {
   loc: string;
-  lastmod: string; // YYYY-MM-DD
+  // YYYY-MM-DD. Необов'язковий: якщо чесної дати зміни немає, краще не
+  // писати lastmod зовсім, ніж ставити дату генерації (Google тоді
+  // перестає довіряти lastmod усього сайту)
+  lastmod?: string;
   changefreq?: 'always' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'never';
   priority?: number;
 }
@@ -38,8 +41,8 @@ export function buildUrlsetXml(entries: SitemapUrlEntry[]): string {
     .map(
       (entry) => `
   <url>
-    <loc>${escapeXml(entry.loc)}</loc>
-    <lastmod>${entry.lastmod}</lastmod>${
+    <loc>${escapeXml(entry.loc)}</loc>${entry.lastmod ? `
+    <lastmod>${entry.lastmod}</lastmod>` : ''}${
       entry.changefreq ? `\n    <changefreq>${entry.changefreq}</changefreq>` : ''
     }${entry.priority !== undefined ? `\n    <priority>${entry.priority}</priority>` : ''}
   </url>`

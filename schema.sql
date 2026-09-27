@@ -2530,3 +2530,53 @@ CREATE TABLE IF NOT EXISTS product_categories (
 );
 
 CREATE INDEX IF NOT EXISTS idx_product_categories_category ON product_categories (category_id, product_id);
+
+
+-- ============================================================
+-- ЧЕСТНЫЙ lastmod ДЛЯ SITEMAP И "НЕТ В НАЛИЧИИ С ..."
+-- ============================================================
+-- products.updated_at меняется при КАЖДОМ импорте прайса (даже если в
+-- строке ничего не поменялось), поэтому lastmod в sitemap у всех товаров
+-- был равен дате последнего импорта — Google зря переобходил 360 тыс.
+-- страниц. Отдельные поля, которые ставит триггер ниже при ЛЮБОМ
+-- изменении (импорт, заказ, возврат, ручная правка в админке):
+--   content_changed_at — когда реально изменились цена, скидка, название
+--     или наличие (есть / нет; само количество 5 → 4 — не изменение).
+--     Для товаров, заведённых до появления поля, NULL: честной даты нет,
+--     в sitemap такой товар идёт без lastmod;
+--   stock_zero_since — с какого момента товара нет в наличии (NULL, если
+--     есть). Товары, которых нет больше 90 дней, не попадают в sitemap.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS content_changed_at TIMESTAMPTZ;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_zero_since TIMESTAMPTZ;
+
+CREATE OR REPLACE FUNCTION products_track_content_change() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    NEW.content_changed_at := now();
+    NEW.stock_zero_since := CASE WHEN NEW.stock > 0 THEN NULL ELSE now() END;
+    RETURN NEW;
+  END IF;
+  IF NEW.retail_price IS DISTINCT FROM OLD.retail_price
+     OR NEW.discount_percent IS DISTINCT FROM OLD.discount_percent
+     OR NEW.name IS DISTINCT FROM OLD.name
+     OR (NEW.stock > 0) IS DISTINCT FROM (OLD.stock > 0)
+     OR NEW.is_active IS DISTINCT FROM OLD.is_active THEN
+    NEW.content_changed_at := now();
+  END IF;
+  IF NEW.stock > 0 THEN
+    NEW.stock_zero_since := NULL;
+  ELSIF OLD.stock > 0 OR OLD.stock_zero_since IS NULL THEN
+    NEW.stock_zero_since := now();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_products_track_content_change ON products;
+CREATE TRIGGER trg_products_track_content_change
+  BEFORE INSERT OR UPDATE ON products
+  FOR EACH ROW EXECUTE FUNCTION products_track_content_change();
+
+-- Товары, которых уже нет в наличии на момент появления поля: точная дата
+-- неизвестна, считаем с сегодняшнего дня (из sitemap уйдут через 90 дней)
+UPDATE products SET stock_zero_since = now() WHERE stock <= 0 AND stock_zero_since IS NULL;
