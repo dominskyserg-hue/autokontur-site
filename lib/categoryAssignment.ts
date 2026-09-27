@@ -19,8 +19,9 @@
 // ============================================================
 
 import type { Pool, PoolClient } from 'pg';
-import { CATEGORIES, buildCategoryRuleClause } from '@/lib/categories';
+import { CATEGORIES, CATEGORIES_STAGE5_ACTIVE, buildCategoryRuleClause } from '@/lib/categories';
 import { EXTRA_CATEGORY_RULES, buildExtraRuleCondition } from '@/lib/categoryRulesExtra';
+import { twinIsSamePart } from '@/lib/twinMatch';
 
 // Дополнительные правила этапа 2 (lib/categoryRulesExtra.ts). Включены после
 // проверки владельцем отчёта scripts/category-review/stage2.md.
@@ -144,6 +145,18 @@ export async function recomputeInTransaction(
     assignments += extra.rowCount ?? 0;
   }
 
+  // 3б. Этап 5: категория "по двойнику". Товар, которому не подошло ни одно
+  // правило ("A1/САЛЬНИК"), получает категории товара с тем же брендом и
+  // артикулом у другого поставщика, у которого название нормальное
+  // ("Сальник заднего редуктора"). Строгий вариант (решение владельца):
+  // двойник должен описывать ту же деталь (lib/twinMatch.ts); кроссы TecDoc
+  // не используются. Берутся только категории, найденные ПРАВИЛАМИ (не
+  // другими двойниками), без узких "по модели авто". Если двойники дают
+  // больше 2 разных широких категорий — не угадываем, товар пропускаем
+  if (CATEGORIES_STAGE5_ACTIVE) {
+    assignments += await assignByTwins(client, scope);
+  }
+
   // 4. Товар подкатегории — и в родительском разделе, но ТОЛЬКО для разделов
   // из PARENTS_INCLUDE_CHILDREN ("Ремені та ролики" ← "Ремені та ролики ГРМ" и
   // "Поліклинові ремені та ролики"). Для остальных (например "Гальмівні
@@ -174,6 +187,52 @@ export async function recomputeInTransaction(
   ).rows[0].n;
 
   return { products, assignments, ms: Date.now() - started };
+}
+
+// Категории, которые можно переносить с двойника: все, кроме узких "по модели авто"
+const TWIN_CATEGORY_SLUGS = CATEGORIES.filter((c) => !c.modelGroup && !c.tecdocVehicle).map((c) => c.slug);
+const TOP_LEVEL_SLUGS = new Set(CATEGORIES.filter((c) => !c.parentCategorySlug).map((c) => c.slug));
+
+async function assignByTwins(client: PoolClient, scope: CategoryRecomputeScope): Promise<number> {
+  // Кандидаты: товар без категории × двойник (тот же бренд + артикул) × категория двойника
+  const filter = scopeFilter(scope, 2);
+  const candidates = await client.query<{ id: string; own: string; twin: string; category_id: string }>(
+    `SELECT l.id, l.name_search AS own, q.name_search AS twin, pc.category_id
+     FROM products l
+     JOIN products q ON q.article = l.article AND upper(q.brand) = upper(l.brand) AND q.id <> l.id
+     JOIN product_categories pc ON pc.product_id = q.id AND pc.rule_id <> 'twin'
+     WHERE NOT EXISTS (SELECT 1 FROM product_categories x WHERE x.product_id = l.id)
+       AND l.brand IS NOT NULL AND l.brand <> '' AND l.article <> ''
+       AND pc.category_id = ANY($1::text[])${filter.sql.replace(/\bp\./g, 'l.')}`,
+    [TWIN_CATEGORY_SLUGS, ...filter.params]
+  );
+
+  // Оставляем категории только от двойников, описывающих ту же деталь (lib/twinMatch.ts)
+  const byProduct = new Map<string, Set<string>>();
+  for (const row of candidates.rows) {
+    if (!twinIsSamePart(row.own, row.twin)) continue;
+    if (!byProduct.has(row.id)) byProduct.set(row.id, new Set());
+    byProduct.get(row.id)!.add(row.category_id);
+  }
+
+  // Больше 2 разных широких категорий — двойники противоречат друг другу, не угадываем
+  const ids: string[] = [];
+  const slugs: string[] = [];
+  for (const [id, categories] of byProduct) {
+    if ([...categories].filter((slug) => TOP_LEVEL_SLUGS.has(slug)).length > 2) continue;
+    for (const slug of categories) {
+      ids.push(id);
+      slugs.push(slug);
+    }
+  }
+  if (ids.length === 0) return 0;
+  const inserted = await client.query(
+    `INSERT INTO product_categories (product_id, category_id, rule_id)
+     SELECT unnest($1::uuid[]), unnest($2::text[]), 'twin'
+     ON CONFLICT (product_id, category_id) DO NOTHING`,
+    [ids, slugs]
+  );
+  return inserted.rowCount ?? 0;
 }
 
 export async function recomputeProductCategories(pool: Pool, scope: CategoryRecomputeScope): Promise<CategoryRecomputeResult> {

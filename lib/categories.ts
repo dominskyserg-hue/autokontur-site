@@ -32,6 +32,15 @@ import { STAGE4_CATEGORIES } from '@/lib/categoriesStage4';
 const STAGE4_ENABLED = true;
 export const CATEGORIES_STAGE4_ACTIVE =
   STAGE4_ENABLED || (typeof process !== 'undefined' && process.env.CATEGORIES_STAGE4 === '1');
+// ЕТАП 5: сальники й болти за сполученнями (STAGE5_EXTRA_RULES у
+// lib/categoryRulesExtra.ts) + категорія "за двійником" (крок 3б у
+// lib/categoryAssignment.ts, строгий варіант без кросів). Увімкнено після
+// підтвердження власником (scripts/category-review/stage5.md, ручна звірка 100
+// товарів — 1 помилка). Після зміни правил — npm run categories:rebuild
+const STAGE5_ENABLED = true;
+export const CATEGORIES_STAGE5_ACTIVE =
+  STAGE5_ENABLED || (typeof process !== 'undefined' && process.env.CATEGORIES_STAGE5 === '1');
+
 // Слова-виключення старих категорій, що діють лише з етапом 4
 const stage4 = (words: string[]): string[] => (CATEGORIES_STAGE4_ACTIVE ? words : []);
 

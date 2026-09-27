@@ -39,7 +39,7 @@
 // ============================================================
 
 import { foldLookalikes } from '@/lib/latinLookalikes';
-import { CATEGORIES_STAGE4_ACTIVE } from '@/lib/categories';
+import { CATEGORIES_STAGE4_ACTIVE, CATEGORIES_STAGE5_ACTIVE } from '@/lib/categories';
 
 export interface ExtraCategoryRule {
   // Уникальный id — сохраняется в product_categories.rule_id
@@ -258,6 +258,30 @@ const STAGE4_EXTRA_RULES: ExtraCategoryRule[] = [
   { id: 'x4-ac-compressor', category: 'opalennya-klimat', all: [['підшипник', 'подшипник', 'сальник', 'клапан'], ['компресора кондиц', 'компрессора кондиц']] },
 ];
 
+// ------------------------------------------------------------
+// ЭТАП 5: сальники и болты по сочетаниям (разбор владельцем — см.
+// scripts/category-review/stage5.md). Стоят ПЕРВЫМИ — самые конкретные.
+// Голые "Сальник", "Болт крепления", "Болт подвески" сюда не попадают —
+// часть из них получит категорию "по двойнику" (lib/categoryAssignment.ts)
+// ------------------------------------------------------------
+const STAGE5_EXTRA_RULES: ExtraCategoryRule[] = [
+  // Сальники
+  { id: 'x5-seal-engine', category: 'prokladky-dvyhuna', all: [['сальник'], ['балансир', 'масляного насос', 'маслонасос', 'оливного насос', 'вала двигун', 'валу двигун', 'розп. вал', 'розп.вал', 'шахты свеч', 'шахти свіч', 'свечи накал', 'свічки розжар', 'охолоджувача мастила', 'маслоохолодж', 'маслоохлад']] },
+  { id: 'x5-seal-trans', category: 'transmisiya-kpp', all: [['сальник'], ['первичн', 'первинн', 'вторичн', 'вторинн', 'штока выбора', 'штока вибору', 'выбора передач', 'коробк', 'трансмісс', 'трансмисс', 'гідромуфт', 'гидромуфт', 'подвесного подшип', 'підвісного підшип', 'півос', 'напівос', 'заднього мост', 'заднего мост', 'переднього мост', 'переднего мост']], exclude: ['кермов', 'рулев', 'рульов', 'гур', 'компрес'] },
+  // Сальник компрессора (CARGO, SANTECH — детали компрессоров кондиционера) — решение владельца
+  { id: 'x5-seal-ac', category: 'opalennya-klimat', all: [['сальник'], ['компресор', 'компрессор']], exclude: ['пневм', 'повітр', 'воздуш', 'гальм', 'тормоз'] },
+  // Болты
+  { id: 'x5-bolt-camber', category: 'vazheli-pidvisky', all: [['болт'], ['развал', 'розвал', 'эксцентрик', 'ексцентрик', 'рычага', 'важеля']] },
+  { id: 'x5-bolt-engine', category: 'detali-dvyhuna', all: [['болт'], ['клапанн', 'шатун', 'распредвал', 'распределит', 'розподільч', 'розподільн', 'бугел', 'бегел', 'коленвал', 'колінвал', 'коленчат', 'колінчаст', 'піддон', 'поддон', 'рокер']], exclude: ['колес', 'кузов'] },
+  { id: 'x5-bolt-hub', category: 'pidshypnyky-matochyny', all: [['болт'], ['ступиц', 'маточин']], exclude: ['колес', 'колёс', 'колеса'] },
+  { id: 'x5-bolt-chain', category: 'remeni-rolyky-grm-komplekty', all: [['болт'], ['натягувача ланцюга', 'натяжителя цеп', 'натяжителя ланц']] },
+  { id: 'x5-bolt-exhaust', category: 'systema-vypusku', all: [['болт'], ['глушит', 'глушник', 'вихлоп', 'выхлоп']] },
+  // Стремянка (U-образный болт) рессоры — "Пружини підвіски" (решение владельца)
+  { id: 'x5-bolt-leaf', category: 'pruzhyny-pidvisky', all: [['болт', 'стремянк', 'драбин'], ['рессор', 'ресор']] },
+  // Болт стабилизатора — "Втулки стабілізатора" (решение владельца)
+  { id: 'x5-bolt-stab', category: 'vtulky-stabilizatora', all: [['болт'], ['стабил', 'стабіл']], exclude: ['тяг', 'стійк', 'стойк'] },
+];
+
 // Ролики без уточнения привода ("Ролик паска приводного", "Ролик натяжний") —
 // в раздел "Ремені та ролики". ПОСЛЕ правил этапа 2: иначе ролики
 // поликлинового ремня ("Ролик приводного ремня генератора") ушли бы из
@@ -271,9 +295,12 @@ const STAGE4_LATE_RULES: ExtraCategoryRule[] = [
   },
 ];
 
-export const EXTRA_CATEGORY_RULES: ExtraCategoryRule[] = CATEGORIES_STAGE4_ACTIVE
-  ? [...STAGE4_EXTRA_RULES, ...BASE_EXTRA_RULES, ...STAGE4_LATE_RULES]
-  : BASE_EXTRA_RULES;
+export const EXTRA_CATEGORY_RULES: ExtraCategoryRule[] = [
+  ...(CATEGORIES_STAGE5_ACTIVE ? STAGE5_EXTRA_RULES : []),
+  ...(CATEGORIES_STAGE4_ACTIVE ? STAGE4_EXTRA_RULES : []),
+  ...BASE_EXTRA_RULES,
+  ...(CATEGORIES_STAGE4_ACTIVE ? STAGE4_LATE_RULES : []),
+];
 
 // Все корни одним списком — для SQL (поиск по name_search). Слова правил
 // проходят ту же замену латинских двойников, что и name_search
