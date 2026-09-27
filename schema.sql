@@ -2681,3 +2681,31 @@ CREATE TRIGGER trg_products_refresh_group_offers
 
 -- Первичное заполнение
 SELECT refresh_product_group_offers(ARRAY(SELECT DISTINCT group_primary_id FROM products WHERE group_primary_id IS NOT NULL));
+
+
+-- ============================================================
+-- ЖУРНАЛ ВРЕМЕНИ ИМПОРТА ПРАЙСОВ (все способы: загрузка, email, ссылка)
+-- ============================================================
+-- Одна строка на импорт: сколько секунд заняла каждая часть. Импорт сам
+-- пишет разбор файла, запись в базу и пересчёт групп; "хвост" — категории,
+-- индекс марок, словарь названий — считается ОТДЕЛЬНЫМ вызовом
+-- (/api/cron/import-followup, lib/importFollowup.ts) и дописывает свои поля.
+-- Вызов дольше 50 с — уведомление владельцу в Telegram (lib/importTimings.ts)
+CREATE TABLE IF NOT EXISTS price_import_timings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  supplier_id UUID REFERENCES suppliers(id) ON DELETE SET NULL,
+  source TEXT NOT NULL,                  -- upload | email | url
+  rows_count INTEGER,
+  parse_ms INTEGER,                      -- курс, правила наценки, разбор Excel
+  save_ms INTEGER,                       -- запись товаров + поля групп (одна транзакция)
+  groups_ms INTEGER,                     -- пересчёт групп бренд+артикул
+  import_total_ms INTEGER,               -- весь импорт (без хвоста)
+  categories_ms INTEGER,                 -- хвост: категории
+  vehicle_makes_ms INTEGER,              -- хвост: индекс "марка авто -> товары"
+  corpus_ms INTEGER,                     -- хвост: словарь украинских слов
+  followup_total_ms INTEGER,             -- весь хвост
+  followup_error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  followup_finished_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS idx_price_import_timings_created ON price_import_timings (created_at DESC);

@@ -503,7 +503,8 @@ async function processMessage(
       supplier.id,
       supplier.currency,
       supplier.mapping,
-      attachment
+      attachment,
+      'email'
     );
 
     const entry: EmailImportLogEntry = {

@@ -200,7 +200,8 @@ export async function runUrlPriceImport(pool: Pool): Promise<UrlImportSummary> {
         supplier.id,
         supplier.currency,
         supplier.mapping,
-        buffer
+        buffer,
+        'url'
       );
 
       const entry: UrlImportLogEntry = {

@@ -19,10 +19,9 @@
 import * as XLSX from 'xlsx';
 import { Pool, PoolClient } from 'pg';
 import { after } from 'next/server';
-import { rebuildUkrainianCorpusSafely } from '@/lib/corpusBuilder';
-import { refreshVehicleMakesForSupplier } from '@/lib/vehicleMakeIndex';
-import { recomputeProductCategoriesSafely } from '@/lib/categoryAssignment';
 import { recomputeProductGroupsSafely } from '@/lib/productGroups';
+import { startImportFollowup } from '@/lib/importFollowup';
+import { alertIfSlowImport, createImportTiming, updateImportTiming, type ImportSource } from '@/lib/importTimings';
 import { getCategoryBySlug, productMatchesCategory } from '@/lib/categories';
 
 // ------------------------------------------------------------
@@ -615,13 +614,17 @@ export async function getActiveMarkupRules(pool: Pool, supplierId: string): Prom
 // Использует и app/api/suppliers/parse-excel/route.ts (ручная загрузка
 // из браузера), и lib/emailPriceImport.ts (автозагрузка из письма) —
 // оба уже знают supplierId и currency поставщика заранее
+// source — откуда импорт (ручная загрузка, письмо, ссылка) — для журнала
+// времени price_import_timings (lib/importTimings.ts)
 export async function importPriceListForSupplier(
   pool: Pool,
   supplierId: string,
   supplierCurrency: string,
   mapping: MappingSettings,
-  buffer: Buffer
+  buffer: Buffer,
+  source: ImportSource = 'upload'
 ): Promise<UpsertResult & { productsFound: number }> {
+  const started = Date.now();
   const exchangeRate = await getExchangeRateForCurrency(pool, supplierCurrency);
   const markupRules = await getActiveMarkupRules(pool, supplierId);
 
@@ -631,7 +634,15 @@ export async function importPriceListForSupplier(
   }
 
   const uniqueProducts = deduplicateByArticle(allProducts);
+  const parseMs = Date.now() - started;
+  const saveStarted = Date.now();
   const { addedCount, updatedCount } = await saveProductsToDatabase(pool, supplierId, uniqueProducts);
+  const saveMs = Date.now() - saveStarted;
+  const timingId = await createImportTiming(pool, supplierId, source, {
+    rows_count: uniqueProducts.length,
+    parse_ms: parseMs,
+    save_ms: saveMs,
+  });
 
   // Нові назви з прайсу -> перебудувати корпус українських слів (страховка
   // H1, lib/corpusBuilder.ts) — ПІСЛЯ відповіді, щоб не затримувати імпорт.
@@ -641,13 +652,27 @@ export async function importPriceListForSupplier(
   // лише товари цього постачальника
   // Категорії товарів цього постачальника (таблиця product_categories,
   // lib/categoryAssignment.ts) — першими: від них залежать сторінки категорій
+  // В ЭТОМ вызове — только пересчёт групп бренд+артикул (lib/productGroups.ts):
+  // новые двойники и главные страницы нужны спискам сразу. Категории, индекс
+  // марок и словарь — "хвост" импорта ОТДЕЛЬНЫМ вызовом, импорт его не ждёт
+  // (lib/importFollowup.ts): иначе самый большой прайс подбирался к лимиту
+  // функции Vercel в 60 с. Группы — ДО хвоста: главная страница группы
+  // получает категории всех двойников
   const afterImport = async () => {
-    // Группы бренд+артикул (lib/productGroups.ts) — ДО категорий: главная
-    // страница группы получает категории всех двойников
+    const groupsStarted = Date.now();
     await recomputeProductGroupsSafely(pool, { supplierId });
-    await recomputeProductCategoriesSafely(pool, { kind: 'supplier', supplierId });
-    await refreshVehicleMakesForSupplier(pool, supplierId);
-    await rebuildUkrainianCorpusSafely(pool);
+    const groupsMs = Date.now() - groupsStarted;
+    const importTotalMs = Date.now() - started;
+    console.log(
+      `Импорт прайса (${source}, ${uniqueProducts.length} строк): разбор ${parseMs} мс, запись ${saveMs} мс, группы ${groupsMs} мс, всего ${importTotalMs} мс`
+    );
+    await updateImportTiming(pool, timingId, { groups_ms: groupsMs, import_total_ms: importTotalMs });
+    await alertIfSlowImport(pool, 'імпорт', supplierId, importTotalMs, {
+      'розбір файлу': parseMs,
+      'запис у базу': saveMs,
+      'групи бренд+артикул': groupsMs,
+    });
+    await startImportFollowup(pool, supplierId, timingId);
   };
   try {
     after(afterImport);
