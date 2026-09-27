@@ -19,7 +19,19 @@ import { CATEGORY_PRIORITY_ORDER, getCategoryBySlug, type CategoryDef } from '@/
 // новые категории этапа 3 — первыми, см. lib/categories.ts)
 const TOP_LEVEL_ORDER = new Map(CATEGORY_PRIORITY_ORDER.filter((c) => !c.parentCategorySlug).map((c, i) => [c.slug, i]));
 
-export function pickBreadcrumbCategory(slugs: readonly string[]): CategoryDef | undefined {
+// Исключения из общего порядка (решение владельца): прокладки и кольца
+// АКПП/КПП/CVT лежат и в "Прокладки, сальники та кільця двигуна", и в
+// "Трансмісія і КПП" — в крошках у них трансмиссия. Пары [важнее, чем]
+const PREFERRED_OVER: Array<[string, string]> = [['transmisiya-kpp', 'prokladky-dvyhuna']];
+
+// options.legacy — прежний порядок без исключений (только для отчёта
+// scripts/category-review/check-crumbs-transmission.mts)
+export function pickBreadcrumbCategory(slugs: readonly string[], options: { legacy?: boolean } = {}): CategoryDef | undefined {
+  if (!options.legacy) {
+    for (const [preferred, over] of PREFERRED_OVER) {
+      if (slugs.includes(preferred) && slugs.includes(over)) slugs = slugs.filter((slug) => slug !== over);
+    }
+  }
   let best: string | undefined;
   for (const slug of slugs) {
     if (!TOP_LEVEL_ORDER.has(slug)) continue;
