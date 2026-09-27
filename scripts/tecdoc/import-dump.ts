@@ -165,10 +165,12 @@ async function main() {
       'і стрімимо art_lookup (кроси) в Supabase...'
   );
 
+  // Источник строк для tecdoc_crosses.source (см. scripts/tecdoc/schema.sql)
+  const CROSSES_SOURCE = 'tecdoc_2016';
   const crossesInserter = new BatchInserter(
     pool,
     'tecdoc_crosses',
-    ['brand_a', 'article_a', 'brand_b', 'article_b', 'relation_type'],
+    ['brand_a', 'article_a', 'brand_b', 'article_b', 'relation_type', 'source'],
     BATCH_SIZE
   );
   const compatibilityInserter = new BatchInserter(
@@ -274,8 +276,8 @@ async function main() {
         const crossBrand =
           reference.brandsById.get(otherBrandId) || reference.manufacturersById.get(otherBrandId) || UNKNOWN_BRAND;
 
-        await crossesInserter.add([ourMatch.brand, ourMatch.article, crossBrand, crossArticle, 'cross']);
-        await crossesInserter.add([crossBrand, crossArticle, ourMatch.brand, ourMatch.article, 'cross']);
+        await crossesInserter.add([ourMatch.brand, ourMatch.article, crossBrand, crossArticle, 'cross', CROSSES_SOURCE]);
+        await crossesInserter.add([crossBrand, crossArticle, ourMatch.brand, ourMatch.article, 'cross', CROSSES_SOURCE]);
       }
     },
   });

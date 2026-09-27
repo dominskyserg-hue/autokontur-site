@@ -100,7 +100,7 @@ export async function generateMetadata({ params }: { params: Promise<PageParams>
 
   return {
     title: `Запчастини ${make.name} ${hub.label} ${yearsLabel(hub)} — купити | DominatorParts`,
-    description: `${data.total} ${partsWord(data.total)} для ${fullNameWithAlt(make.name, hub)} ${yearsLabel(hub)}${topCategories ? `: ${topCategories} та інше` : ''}. Сумісність за TecDoc, доставка по Україні.`,
+    description: `${data.total} ${partsWord(data.total)} для ${fullNameWithAlt(make.name, hub)} ${yearsLabel(hub)}${topCategories ? `: ${topCategories} та інше` : ''}. Сумісність за каталогами виробників та OEM-номерами, доставка по Україні.`,
     alternates: { canonical: `${SITE_URL}${hubPath(hub)}` },
   };
 }

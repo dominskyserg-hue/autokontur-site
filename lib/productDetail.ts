@@ -23,6 +23,7 @@ import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { loadBreadcrumbCategories } from '@/lib/productCategoryLookup';
 import { buildDisplayProductNameDetailed } from '@/lib/productNameTranslation';
 import { brandsAreSameFamily } from '@/lib/brandFamilies';
+import { crossBrandKeys, crossBrandKeySql } from '@/lib/crossBrandMatch';
 import { ensureUkrainianCorpusFresh } from '@/lib/ukrainianCorpus';
 import { findHubForTecdocModel, hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
@@ -833,7 +834,16 @@ const TECDOC_COMPATIBILITY_LIMIT = 20;
 // тому пряме порівняння текстом коректне
 type TecdocCrossItemRaw = TecdocCrossItem & { costPrice: number | null };
 
-const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string): Promise<TecdocCrossItemRaw[]> {
+// brand — бренд самого товара: строки кроссов берутся только того же
+// производителя (lib/crossBrandMatch.ts), иначе совпадение одного
+// артикула у разных брендов давало чужие аналоги
+const loadTecdocCrosses = cache(async function loadTecdocCrosses(
+  article: string,
+  brand: string | null
+): Promise<TecdocCrossItemRaw[]> {
+  const brandKeys = crossBrandKeys(brand);
+  if (brandKeys.length === 0) return [];
+
   const result = await pool.query(
     `
     SELECT
@@ -854,6 +864,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string
       -- 1 у всій таблиці на момент імпорту) — жоден справжній
       -- OEM/крос-номер настільки коротким не буває
       WHERE article_a = $1 AND article_b <> $1 AND LENGTH(article_b) >= 3
+        AND ${crossBrandKeySql('brand_a')} = ANY($2::text[])
     ) tc
     LEFT JOIN LATERAL (
       SELECT id, brand, article, name, cost_price, retail_price, stock
@@ -867,7 +878,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(article: string
     ORDER BY (p.id IS NOT NULL) DESC, tc.brand_b, tc.article_b
     LIMIT ${TECDOC_CROSSES_LIMIT}
     `,
-    [article]
+    [article, brandKeys]
   );
 
   return result.rows.map((row) => ({
@@ -1010,7 +1021,7 @@ export async function loadProductPageData(
       loadProductImages(id),
       loadOtherOffers(product),
       loadCrossReferences(product),
-      loadTecdocCrosses(product.article),
+      loadTecdocCrosses(product.article, product.brand),
       loadTecdocCompatibility(product.article),
       // Запит на пару виконуємо ЛИШЕ якщо оверрайд її взагалі задає —
       // для решти товарів (без seoOverride.pairPart) зайвий SQL-запит

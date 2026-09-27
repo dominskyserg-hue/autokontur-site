@@ -101,6 +101,21 @@ CREATE TABLE IF NOT EXISTS tecdoc_crosses (
 -- на кожен пошук
 CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (article_a);
 
+-- Источник строки кросса. В таблице лежат не только данные TecDoc, но и
+-- кроссы из прайсов поставщиков, поэтому источник храним явно:
+--   tecdoc_2016   — старый дамп TecDoc (scripts/tecdoc/import-dump.ts)
+--   tecdoc_2018   — OEM-номера из дампа 2018 (import-2018-fr-oe.ts)
+--   trw_2025      — OEM-справочник TRW (import-trw-oe.ts)
+--   autohelp      — прайс Autohelp (import-autohelp-crosses.ts)
+--   price_nippon  — прайс NMCO/Nippon (import-nippon-crosses.ts)
+--   price_cardon  — справочник CarDon (import-cardon-crosses.ts)
+--   price_va      — справочник VA (import-va-crosses.ts)
+--   unknown       — источник определить не удалось
+-- Каждый скрипт импорта сам пишет свой source. Строки, загруженные до
+-- появления колонки, размечены scripts/tecdoc/backfill-crosses-source.ts.
+-- Константный DEFAULT не переписывает таблицу — ALTER выполняется мгновенно
+ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'unknown';
+
 
 -- ------------------------------------------------------------
 -- Застосовність до автомобілів: "бренд+артикул" <-> модифікація авто

@@ -62,7 +62,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['CAMRY Stufenheck (MCV3_, ACV3_, _XV3_)'],
     modelGroups: ['toyota-camry'],
     intro:
-      'Запчастини для Toyota Camry XV30 (2001–2006) з бензиновими двигунами 2.4 і 3.0. Сумісність кожної деталі перевірена за каталогом TecDoc саме для цього покоління, тож підібрані тут деталі підходять для XV30.',
+      'Запчастини для Toyota Camry XV30 (2001–2006) з бензиновими двигунами 2.4 і 3.0. Сумісність кожної деталі перевірена за каталогами виробників та OEM-номерами саме для цього покоління, тож підібрані тут деталі підходять для XV30.',
   },
   {
     makeSlug: 'toyota',
@@ -74,7 +74,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['CAMRY Stufenheck (_XV4_)'],
     modelGroups: ['toyota-camry'],
     intro:
-      'Запчастини для Toyota Camry XV40 (2006–2011) — седана з двигунами 2.4 і 3.5. Усі деталі на сторінці підібрані за каталогом TecDoc саме під це покоління. Якщо потрібної деталі немає, підберемо її за VIN-кодом.',
+      'Запчастини для Toyota Camry XV40 (2006–2011) — седана з двигунами 2.4 і 3.5. Усі деталі на сторінці підібрані за каталогами виробників та OEM-номерами саме під це покоління. Якщо потрібної деталі немає, підберемо її за VIN-кодом.',
   },
   {
     makeSlug: 'toyota',
@@ -87,7 +87,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['AXIO/ALTIS Stufenheck (_E12J_, _E12T_)', 'RUNX (ZZE12_, NDE12_, ZDE12_)', 'COROLLA Combi (_E12J_, _E12T_)'],
     modelGroups: ['toyota-corolla-e120'],
     intro:
-      "Запчастини для Toyota Corolla E12 (2001–2007): седан, хетчбек і універсал. У каталозі TecDoc ця Corolla записана також як Altis (седан) і RunX (хетчбек) — деталі для всіх трьох кузовів зібрані тут в одному місці.",
+      "Запчастини для Toyota Corolla E12 (2001–2007): седан, хетчбек і універсал. У каталогах виробників ця Corolla записана також як Altis (седан) і RunX (хетчбек) — деталі для всіх трьох кузовів зібрані тут в одному місці.",
   },
   {
     makeSlug: 'toyota',
@@ -100,7 +100,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['ALTIS Stufenheck (E15_)', 'COROLLA Hatchback (E15)'],
     modelGroups: ['toyota-corolla-e150'],
     intro:
-      'Запчастини для Toyota Corolla E150 (2006–2013). У каталозі TecDoc седан цього покоління записаний як Corolla Altis — сумісність деталей нижче перевірена саме для нього.',
+      'Запчастини для Toyota Corolla E150 (2006–2013). У каталогах виробників седан цього покоління записаний як Corolla Altis — сумісність деталей нижче перевірена саме для нього.',
   },
   {
     makeSlug: 'honda',
@@ -126,7 +126,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['CIVIC VIII Hatchback (FN, FK)', 'BALLADE VIII Stufenheck (FD, FA)'],
     modelGroups: ['honda-civic-4d'],
     intro:
-      'Запчастини для Honda Civic VIII (2005–2011): хетчбек 5D (FN, FK) і седан 4D (FD). Кузови відрізняються підвіскою та багатьма деталями, тому сумісність кожної деталі перевірена за каталогом TecDoc.',
+      'Запчастини для Honda Civic VIII (2005–2011): хетчбек 5D (FN, FK) і седан 4D (FD). Кузови відрізняються підвіскою та багатьма деталями, тому сумісність кожної деталі перевірена за каталогами виробників та OEM-номерами.',
   },
   {
     makeSlug: 'mazda',
@@ -139,7 +139,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)', 'ATENZA Kombi (GY)'],
     modelGroups: ['mazda6-gg'],
     intro:
-      'Запчастини для Mazda 6 GG (2002–2008) — седан, ліфтбек і універсал GY. У каталозі TecDoc ця модель записана як Mazda Atenza, тому деталі з позначкою Atenza теж підходять на вашу «шістку».',
+      'Запчастини для Mazda 6 GG (2002–2008) — седан, ліфтбек і універсал GY. У каталогах виробників ця модель записана як Mazda Atenza, тому деталі з позначкою Atenza теж підходять на вашу «шістку».',
   },
   {
     makeSlug: 'mazda',
@@ -152,7 +152,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['3 (BK)', 'AXELA Stufenheck (BK)'],
     modelGroups: ['mazda-3'],
     intro:
-      'Запчастини для Mazda 3 першого покоління BK (2003–2009): хетчбек і седан. У каталозі TecDoc седан цього покоління записаний як Mazda Axela — так модель називалась у Японії, тож деталі з такою позначкою теж підходять.',
+      'Запчастини для Mazda 3 першого покоління BK (2003–2009): хетчбек і седан. У каталогах виробників седан цього покоління записаний як Mazda Axela — так модель називалась у Японії, тож деталі з такою позначкою теж підходять.',
   },
   {
     // Пілот: 27 унікальних запчастин < MIN_HUB_PRODUCTS — хаб прихований
@@ -166,7 +166,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['CX-5 (KE, GH)'],
     modelGroups: ['mazda-cx5'],
     intro:
-      'Запчастини для Mazda CX-5 першого покоління KE (2011–2017). Деталі підібрані за каталогом TecDoc саме під цей кросовер; потрібну позицію також можна знайти за артикулом або VIN-кодом.',
+      'Запчастини для Mazda CX-5 першого покоління KE (2011–2017). Деталі підібрані за каталогами виробників та OEM-номерами саме під цей кросовер; потрібну позицію також можна знайти за артикулом або VIN-кодом.',
   },
   {
     makeSlug: 'nissan',
@@ -179,7 +179,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['DUALIS (J10, JJ10)'],
     modelGroups: [],
     intro:
-      'Запчастини для Nissan Qashqai першого покоління J10 (2007–2013), включно з семимісною версією Qashqai+2 (JJ10). У каталозі TecDoc ця модель записана як Nissan Dualis — так вона називалась на ринку Японії.',
+      'Запчастини для Nissan Qashqai першого покоління J10 (2007–2013), включно з семимісною версією Qashqai+2 (JJ10). У каталогах виробників ця модель записана як Nissan Dualis — так вона називалась на ринку Японії.',
   },
   {
     makeSlug: 'nissan',
@@ -191,7 +191,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['X-TRAIL (T31)'],
     modelGroups: [],
     intro:
-      'Запчастини для Nissan X-Trail T31 (2007–2014). Деталі перевірені за каталогом TecDoc саме для цього покоління — вони відрізняються від попереднього X-Trail T30.',
+      'Запчастини для Nissan X-Trail T31 (2007–2014). Деталі перевірені за каталогами виробників та OEM-номерами саме для цього покоління — вони відрізняються від попереднього X-Trail T30.',
   },
   {
     makeSlug: 'mitsubishi',
@@ -209,7 +209,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     ],
     modelGroups: ['mitsubishi-pajero-2'],
     intro:
-      'Запчастини для Mitsubishi Pajero II (1990–2006), включно з Pajero Classic. У каталозі TecDoc цей позашляховик записаний як Shogun II та Montero — так його продавали у Великій Британії та Америці.',
+      'Запчастини для Mitsubishi Pajero II (1990–2006), включно з Pajero Classic. У каталогах виробників цей позашляховик записаний як Shogun II та Montero — так його продавали у Великій Британії та Америці.',
   },
   {
     makeSlug: 'suzuki',
@@ -221,7 +221,7 @@ export const MODEL_HUBS: ModelHubDef[] = [
     tecdocModels: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'],
     modelGroups: ['suzuki-sx4'],
     intro:
-      'Запчастини для Suzuki SX4 першого покоління (2006–2014): хетчбек і седан. Сумісність кожної деталі перевірена за каталогом TecDoc; чого немає в наявності — привеземо під замовлення.',
+      'Запчастини для Suzuki SX4 першого покоління (2006–2014): хетчбек і седан. Сумісність кожної деталі перевірена за каталогами виробників та OEM-номерами; чого немає в наявності — привеземо під замовлення.',
   },
 ];
 

@@ -89,10 +89,12 @@ async function main() {
   console.log(`  Усього рядків у файлі: ${rows.length.toLocaleString('uk-UA')}\n`);
 
   console.log('Крок 3/3: зіставляємо з каталогом і записуємо нові кроси...');
+  // Источник строк для tecdoc_crosses.source (см. scripts/tecdoc/schema.sql)
+  const CROSSES_SOURCE = 'autohelp';
   const inserter = new BatchInserter(
     pool,
     'tecdoc_crosses',
-    ['brand_a', 'article_a', 'brand_b', 'article_b', 'relation_type'],
+    ['brand_a', 'article_a', 'brand_b', 'article_b', 'relation_type', 'source'],
     BATCH_SIZE
   );
 
@@ -136,8 +138,8 @@ async function main() {
     brandsUsed.add(ourBrand);
 
     for (const { number, brand } of crossPairs) {
-      await inserter.add([ourBrand, ourArticle, brand, number, 'cross']);
-      await inserter.add([brand, number, ourBrand, ourArticle, 'cross']);
+      await inserter.add([ourBrand, ourArticle, brand, number, 'cross', CROSSES_SOURCE]);
+      await inserter.add([brand, number, ourBrand, ourArticle, 'cross', CROSSES_SOURCE]);
       pairsFound++;
 
       if (examples.length < 15) examples.push(`  ${ourBrand} ${ourArticle} <-> ${brand} ${number}`);
