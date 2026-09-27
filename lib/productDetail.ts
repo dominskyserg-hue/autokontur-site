@@ -339,6 +339,7 @@ export function buildSeoProductDescription(product: {
   stock: number;
   deliveryTime?: string | null;
   retailPrice: number;
+  groupMinPrice?: number | null;
 }): string {
   const override = getSeoOverride(product.article);
   if (override?.description) return override.description;
@@ -354,7 +355,13 @@ export function buildSeoProductDescription(product: {
   // покупцю) і легко застаріває чи плутає. Лишається лише сам статус
   const displayName = buildSeoProductName(product);
   const stockPart = product.stock > 0 ? 'В наявності' : 'Під замовлення';
-  return `${displayName}. Ціна ${formatPriceUk(product.retailPrice)} грн. ${stockPart}, доставка по Україні, оплата при отриманні.`;
+  // Главная группы бренд+артикул с более дешёвым предложением — "Ціна від X",
+  // как в AggregateOffer (lowPrice) и в пометке "N пропозицій від X грн"
+  const pricePart =
+    product.groupMinPrice && product.groupMinPrice < product.retailPrice
+      ? `Ціна від ${formatPriceUk(product.groupMinPrice)} грн`
+      : `Ціна ${formatPriceUk(product.retailPrice)} грн`;
+  return `${displayName}. ${pricePart}. ${stockPart}, доставка по Україні, оплата при отриманні.`;
 }
 
 // <title> сторінки товару. Пріоритет той самий, що й в описі вище:
@@ -513,6 +520,8 @@ export interface ProductDetail {
   canonicalPath: string;
   alsoKnownAs: string[];
   hasGroupOffers: boolean;
+  // Самая низкая цена в группе (без персональных цен) — "Ціна від X грн" в описании
+  groupMinPrice: number | null;
 }
 
 // Одне ДОДАТКОВЕ фото галереї товару (не плутати з product.imageUrl —
@@ -585,7 +594,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url,
            p.meta_description, p.meta_description_override, p.car_make, p.car_model, p.updated_at,
            s.name AS supplier_name, s.delivery_time,
-           p.is_group_primary, p.group_offer_count, p.group_display_name, p.group_other_names,
+           p.is_group_primary, p.group_offer_count, p.group_display_name, p.group_other_names, p.group_min_price,
            gp.id AS primary_id, gp.brand AS primary_brand, gp.article AS primary_article, gp.name AS primary_name
     FROM products p
     JOIN suppliers s ON s.id = p.supplier_id
@@ -624,6 +633,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     canonicalPath,
     alsoKnownAs: groupPrimary ? (row.group_other_names ?? []) : [],
     hasGroupOffers: groupPrimary,
+    groupMinPrice: groupPrimary && row.group_min_price !== null ? parseFloat(row.group_min_price) : null,
     fallbackName,
     costPrice: parseFloat(row.cost_price),
     retailPrice: parseFloat(row.retail_price),
@@ -1045,6 +1055,7 @@ export async function loadProductPageData(
     canonicalPath: product.canonicalPath,
     alsoKnownAs: product.alsoKnownAs,
     hasGroupOffers: product.hasGroupOffers,
+    groupMinPrice: product.groupMinPrice,
   };
   const otherOffers: OtherOffer[] = rawOtherOffers.map((offer) => ({
     id: offer.id,

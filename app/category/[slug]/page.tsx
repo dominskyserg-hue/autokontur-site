@@ -175,22 +175,32 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
   // статичну генерацію для сторінки, що її викликає
   // Одна карточка на бренд+артикул: главная страница группы (p) с ценой,
   // наличием и сроком лучшего предложения (b); счётчик — тоже по группам
+  // cat — товары категории ($1 — slug категории, см. buildCategoryWhereClause).
+  // MATERIALIZED заставляет базу СНАЧАЛА взять их (для "Прокладок" ~30 тыс.),
+  // а потом сортировать: без этого планировщик сортировал весь каталог
+  // (~315 тыс.) и искал среди него товары категории — 1,8 с вместо 0,3 с
   const g = groupedListSql();
+  const categoryCte = 'WITH cat AS MATERIALIZED (SELECT pc.product_id FROM product_categories pc WHERE pc.category_id = $1)';
   const [productsResult, countResult, customerPricingRule] = await Promise.all([
     pool.query(
       `
+      ${categoryCte}
       SELECT p.id, p.article, p.brand, ${g.name} AS name, b.id AS offer_id, ${g.offerCount} AS offer_count,
              b.cost_price, b.retail_price, b.discount_percent, b.stock, ${g.image} AS image_url, s.delivery_time
-      FROM products p
+      FROM cat
+      JOIN products p ON p.id = cat.product_id
       ${g.join}
       JOIN suppliers s ON s.id = b.supplier_id
       WHERE ${clause} AND ${g.where}
       ${groupedOrderBy(categoryOrderByClause(sort, soldProductIds))}
-      LIMIT ${params.length + 1} OFFSET ${params.length + 2}
+      LIMIT $${params.length + 1} OFFSET $${params.length + 2}
       `,
       [...params, PAGE_SIZE, offset]
     ),
-    pool.query(`SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause} AND ${g.where}`, params),
+    pool.query(
+      `${categoryCte} SELECT COUNT(*)::int AS total FROM cat JOIN products p ON p.id = cat.product_id WHERE ${clause} AND ${g.where}`,
+      params
+    ),
     getCustomerPricingRule(pool, await getCustomerSessionPhone()),
   ]);
 

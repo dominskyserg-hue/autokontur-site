@@ -200,9 +200,15 @@ export async function recomputeProductGroups(pool: Pool): Promise<{ groups: numb
     // Товары, которые больше не в группе (двойник ушёл или стал неактивным) — сброс
     const reset = await client.query(`
       UPDATE products p SET group_primary_id = NULL, is_group_primary = true, group_offer_count = 1,
-        group_best_offer_id = NULL, group_image_url = NULL, group_display_name = NULL, group_other_names = NULL
+        group_best_offer_id = NULL, group_image_url = NULL, group_display_name = NULL, group_other_names = NULL,
+        group_best_price = NULL, group_best_cost = NULL, group_best_discount = NULL, group_best_stock = NULL,
+        group_best_supplier_id = NULL, group_min_price = NULL, group_max_price = NULL, group_in_stock = NULL
       WHERE (p.group_primary_id IS NOT NULL OR p.is_group_primary = false)
         AND NOT EXISTS (SELECT 1 FROM tmp_groups t WHERE t.id = p.id)`);
+
+    // Готовые поля лучшего предложения (цена, наличие, мин./макс.) — для всех
+    // главных страниц; дальше их поддерживает триггер при каждом изменении цены
+    await client.query(`SELECT refresh_product_group_offers(ARRAY(SELECT DISTINCT primary_id FROM tmp_groups))`);
 
     await client.query('COMMIT');
     return { groups: groups.size, members: ids.length, changed: (updated.rowCount ?? 0) + (reset.rowCount ?? 0), ms: Date.now() - started };
@@ -228,15 +234,23 @@ export async function recomputeProductGroupsSafely(pool: Pool): Promise<void> {
 // SQL для списков товаров (категории, марки, ТО, поиск, "схожие")
 // ------------------------------------------------------------
 // Список строится по ГЛАВНЫМ страницам групп (p), а цена, наличие, срок
-// доставки и кнопка "Купити" — по ЛУЧШЕМУ предложению группы (b).
-// Выключено — b это тот же товар (соединение по первичному ключу), и
-// списки работают как раньше
+// доставки и кнопка "Купити" — по ЛУЧШЕМУ предложению группы (b). Поля
+// лучшего предложения хранятся у главной (group_best_*, их обновляет
+// триггер в базе при любом изменении цены/наличия, schema.sql), поэтому b —
+// это не соединение таблицы с самой собой, а просто те же поля строки p
+// (у одиночек — собственные поля товара). Так список не медленнее, чем до групп
 export function groupedListSql(): { join: string; where: string; image: string; name: string; offerCount: string } {
   if (!PRODUCT_GROUPS_ACTIVE) {
     return { join: 'JOIN products b ON b.id = p.id', where: 'true', image: 'p.image_url', name: 'p.name', offerCount: '1' };
   }
   return {
-    join: 'JOIN products b ON b.id = COALESCE(p.group_best_offer_id, p.id)',
+    join: `CROSS JOIN LATERAL (SELECT
+      COALESCE(p.group_best_offer_id, p.id) AS id,
+      COALESCE(p.group_best_cost, p.cost_price) AS cost_price,
+      COALESCE(p.group_best_price, p.retail_price) AS retail_price,
+      COALESCE(p.group_best_discount, p.discount_percent) AS discount_percent,
+      COALESCE(p.group_best_stock, p.stock) AS stock,
+      COALESCE(p.group_best_supplier_id, p.supplier_id) AS supplier_id) b`,
     where: 'p.is_group_primary',
     image: 'COALESCE(p.image_url, p.group_image_url)',
     // Самое подробное название группы (то же, что в H1 главной)

@@ -2599,3 +2599,83 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS group_display_name TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS group_other_names TEXT[];
 -- Двойники по главной странице (sitemap: "в наличии ли хоть одно предложение группы")
 CREATE INDEX IF NOT EXISTS idx_products_group_primary ON products (group_primary_id) WHERE group_primary_id IS NOT NULL;
+
+-- ------------------------------------------------------------
+-- Готовые поля лучшего предложения у ГЛАВНОЙ страницы группы
+-- ------------------------------------------------------------
+-- Списки (категории, марки, поиск) показывают цену, наличие и кнопку
+-- "Купити" лучшего предложения группы. Раньше они брались соединением
+-- таблицы товаров с самой собой на каждом запросе (+30% к времени
+-- категории) — теперь хранятся у главной страницы:
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_best_price NUMERIC(12, 2);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_best_cost NUMERIC(12, 2);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_best_discount NUMERIC(6, 2);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_best_stock INTEGER;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_best_supplier_id UUID;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_min_price NUMERIC(12, 2);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_max_price NUMERIC(12, 2);
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_in_stock BOOLEAN;
+
+-- Пересчёт этих полей для указанных главных страниц. Лучшее предложение:
+-- в наличии и дешевле всех (нет в наличии ни у кого — просто дешевле всех)
+CREATE OR REPLACE FUNCTION refresh_product_group_offers(primary_ids UUID[]) RETURNS void AS $$
+BEGIN
+  WITH m AS (
+    SELECT q.group_primary_id AS pid, q.id, q.retail_price, q.cost_price, q.discount_percent, q.stock, q.supplier_id
+    FROM products q
+    WHERE q.group_primary_id = ANY(primary_ids) AND q.is_active
+  ),
+  best AS (
+    SELECT DISTINCT ON (pid) pid, id, retail_price, cost_price, discount_percent, stock, supplier_id
+    FROM m ORDER BY pid, (stock > 0) DESC, retail_price, id
+  ),
+  agg AS (
+    SELECT pid, count(*)::int AS cnt, min(retail_price) AS mn, max(retail_price) AS mx, bool_or(stock > 0) AS ins
+    FROM m GROUP BY pid
+  )
+  UPDATE products p SET
+    group_best_offer_id = best.id,
+    group_best_price = best.retail_price,
+    group_best_cost = best.cost_price,
+    group_best_discount = best.discount_percent,
+    group_best_stock = best.stock,
+    group_best_supplier_id = best.supplier_id,
+    group_min_price = agg.mn,
+    group_max_price = agg.mx,
+    group_in_stock = agg.ins,
+    group_offer_count = agg.cnt
+  FROM best JOIN agg USING (pid)
+  WHERE p.id = best.pid AND (
+    p.group_best_offer_id IS DISTINCT FROM best.id OR p.group_best_price IS DISTINCT FROM best.retail_price
+    OR p.group_best_cost IS DISTINCT FROM best.cost_price OR p.group_best_discount IS DISTINCT FROM best.discount_percent
+    OR p.group_best_stock IS DISTINCT FROM best.stock OR p.group_best_supplier_id IS DISTINCT FROM best.supplier_id
+    OR p.group_min_price IS DISTINCT FROM agg.mn OR p.group_max_price IS DISTINCT FROM agg.mx
+    OR p.group_in_stock IS DISTINCT FROM agg.ins OR p.group_offer_count IS DISTINCT FROM agg.cnt);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Цена или наличие поменялись (импорт прайса, заказ, возврат, правка в
+-- админке) — поля группы обновляются В ТОЙ ЖЕ транзакции, одним запросом
+-- на всю пачку изменённых строк (триггер на оператор, а не на строку).
+-- Обновление самих полей группы снова вызывает триггер — pg_trigger_depth
+-- обрывает повтор
+CREATE OR REPLACE FUNCTION products_refresh_group_offers() RETURNS trigger AS $$
+BEGIN
+  IF pg_trigger_depth() > 1 THEN
+    RETURN NULL;
+  END IF;
+  PERFORM refresh_product_group_offers(ARRAY(
+    SELECT DISTINCT group_primary_id FROM changed_rows WHERE group_primary_id IS NOT NULL
+  ));
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_products_refresh_group_offers ON products;
+CREATE TRIGGER trg_products_refresh_group_offers
+  AFTER UPDATE ON products
+  REFERENCING NEW TABLE AS changed_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION products_refresh_group_offers();
+
+-- Первичное заполнение
+SELECT refresh_product_group_offers(ARRAY(SELECT DISTINCT group_primary_id FROM products WHERE group_primary_id IS NOT NULL));

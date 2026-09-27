@@ -49,9 +49,7 @@ const OUT_OF_STOCK_DAYS = 90;
 // Группы бренд+артикул (lib/productGroups.ts): в sitemap — только главная
 // страница группы; "в наличии" — если в наличии хоть одно предложение группы
 const PRIMARY_SQL = PRODUCT_GROUPS_ACTIVE ? ' AND is_group_primary' : '';
-const HAS_STOCK_SQL = PRODUCT_GROUPS_ACTIVE
-  ? '(stock > 0 OR EXISTS (SELECT 1 FROM products t WHERE t.group_primary_id = products.id AND t.is_active AND t.stock > 0))'
-  : 'stock > 0';
+const HAS_STOCK_SQL = PRODUCT_GROUPS_ACTIVE ? 'COALESCE(group_in_stock, stock > 0)' : 'stock > 0';
 const IN_STOCK_SQL = `is_active = true${PRIMARY_SQL} AND ${HAS_STOCK_SQL}`;
 const RECENTLY_OUT_SQL = `is_active = true${PRIMARY_SQL} AND NOT ${HAS_STOCK_SQL} AND stock_zero_since > now() - interval '${OUT_OF_STOCK_DAYS} days'`;
 
