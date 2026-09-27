@@ -676,6 +676,8 @@ export default async function CategoryPage({
               <Link
                 key={c.slug}
                 href={`/category/${c.slug}`}
+                // Без предзагрузки: ~40 ссылок блока давали ~40 запросов ?_rsc= на каждую страницу категории
+                prefetch={false}
                 className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:bg-[rgba(59,130,246,0.08)]"
                 style={{ border: `1px solid ${TECH_BORDER}`, color: TECH_MUTED }}
               >
