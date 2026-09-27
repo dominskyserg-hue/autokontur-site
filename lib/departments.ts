@@ -28,8 +28,8 @@ export interface DepartmentDef {
   categorySlugs: string[];
 }
 
-// Категорії етапу 3 (lib/categoriesStage3.ts) вписані в розділи одразу, але
-// поки етап вимкнено, їх немає в CATEGORIES — такі slug-и відкидаються
+// Категорії етапів 3–4 (lib/categoriesStage3.ts, lib/categoriesStage4.ts) вписані
+// в розділи одразу, але поки етап вимкнено, їх немає в CATEGORIES — такі slug-и відкидаються
 // (filter нижче), і розділ виглядає як раніше
 const ALL_DEPARTMENTS: DepartmentDef[] = [
   {
@@ -42,6 +42,7 @@ const ALL_DEPARTMENTS: DepartmentDef[] = [
       'svichky-zapaliuvannia',
       'remeni-rolyky-grm',
       'motorni-olyvy',
+      'masla-ridyny',
     ],
   },
   { slug: 'dvyhun-detali', name: 'Деталі двигуна', categorySlugs: ['prokladky-dvyhuna', 'detali-dvyhuna', 'turbiny'] },
@@ -58,9 +59,9 @@ const ALL_DEPARTMENTS: DepartmentDef[] = [
   {
     slug: 'hodova',
     name: 'Ходова, підвіска',
-    categorySlugs: ['amortyzatory', 'sailentbloky-vazhelia', 'vtulky-stabilizatora', 'stiiky-stabilizatora', 'kulovi-opory', 'pidshypnyky-matochyny'],
+    categorySlugs: ['amortyzatory', 'sailentbloky-vazhelia', 'vtulky-stabilizatora', 'stiiky-stabilizatora', 'pruzhyny-pidvisky', 'opory-pylovyky-amortyzatoriv', 'kulovi-opory', 'pidshypnyky-matochyny'],
   },
-  { slug: 'kuzov', name: 'Деталі кузова', categorySlugs: ['kuzov-detali'] },
+  { slug: 'kuzov', name: 'Деталі кузова', categorySlugs: ['kuzov-detali', 'shchitky-skloochysnyka', 'trosy'] },
   { slug: 'kriplennya', name: "Кріплення і кронштейни", categorySlugs: ['kriplennya-kronshteiny'] },
   { slug: 'halmivna', name: 'Гальмівна система', categorySlugs: ['halmivni-kolodky', 'halmivni-dysky', 'halmivna-systema'] },
   { slug: 'kermo', name: 'Кермове управління', categorySlugs: ['kermove-upravlinnya'] },
@@ -74,7 +75,7 @@ const ALL_DEPARTMENTS: DepartmentDef[] = [
   // відповідно), окрема сторінка категорії поки не виправдана
   { slug: 'dysky', name: 'Колісні диски', categorySlugs: [] },
   { slug: 'bezpeka', name: 'Система безпеки', categorySlugs: [] },
-  { slug: 'elektro', name: 'Електрообладнання', categorySlugs: ['generatory-startery', 'datchyky'] },
+  { slug: 'elektro', name: 'Електрообладнання', categorySlugs: ['generatory-startery', 'datchyky', 'osvitlennya', 'systema-zapaliuvannia'] },
   { slug: 'aksesuary', name: 'Аксесуари', categorySlugs: [] },
 ];
 

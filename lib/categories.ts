@@ -23,6 +23,17 @@
 
 import { foldLookalikes } from '@/lib/latinLookalikes';
 import { STAGE3_CATEGORIES } from '@/lib/categoriesStage3';
+import { STAGE4_CATEGORIES } from '@/lib/categoriesStage4';
+
+// ЕТАП 4 (lib/categoriesStage4.ts + STAGE4_EXTRA_RULES у lib/categoryRulesExtra.ts).
+// Увімкнено після підтвердження власником звіту scripts/category-review/stage4.md.
+// Поки було вимкнено, звіти вмикали етап змінною середовища CATEGORIES_STAGE4=1.
+// Після зміни правил — npm run categories:rebuild
+const STAGE4_ENABLED = true;
+export const CATEGORIES_STAGE4_ACTIVE =
+  STAGE4_ENABLED || (typeof process !== 'undefined' && process.env.CATEGORIES_STAGE4 === '1');
+// Слова-виключення старих категорій, що діють лише з етапом 4
+const stage4 = (words: string[]): string[] => (CATEGORIES_STAGE4_ACTIVE ? words : []);
 
 export interface CategoryDef {
   slug: string;
@@ -98,6 +109,10 @@ export interface CategoryDef {
   // потрапляють лише в категорії з цим полем ("Датчики", датчики зносу
   // колодок — у "Гальмівна система")
   allowSensors?: boolean;
+  // Дозволити товари, назва яких ПОЧИНАЄТЬСЯ з "пильовик/пыльник" (за
+  // замовчуванням вони не потрапляють нікуди — рішення власника). Лише для
+  // "Опори, пильовики та відбійники амортизаторів" (етап 4)
+  allowBoots?: boolean;
 
   // ---- Підбір авто через індекс сумісності TecDoc (замість тексту в назві) ----
   // Хвилі 1-4 (Lanos/Camry/Corolla/Pajero/Mazda6...) фільтрували модель
@@ -353,7 +368,9 @@ const BASE_CATEGORIES: CategoryDef[] = [
     // деталь, ніж "Свічка запалювання" (бензинові двигуни), але теж
     // містить підрядок "свіч". Перевірено запитом до бази: 757 таких
     // товарів
-    excludeWords: ['розжар', 'накал'],
+    // Етап 4: "Лампа підсвічування" ("підсвіч" містить "свіч") — в "Освітлення";
+    // дроти й котушки — в "Система запалювання"
+    excludeWords: ['розжар', 'накал', ...stage4(['підсвіч', 'подсвет', 'подсвеч', 'дріт', 'дрот', 'провод', 'провід', 'котушк', 'катушк'])],
     itemName: 'Свічка запалювання',
   },
   {
@@ -2577,7 +2594,8 @@ const BASE_CATEGORIES: CategoryDef[] = [
     matchGroups: [['паливн', 'топливн', 'форсунк', 'бензонасос']],
     // "Форсунка склоомивача" — форсунка (сопло) омивача лобового скла,
     // а не паливна форсунка — інша деталь, що лиш збігається словом
-    excludeWords: ['склоомивач', 'стеклоомыват', 'омивача скла', 'омывателя стекла'],
+    // Етап 4: щітки та форсунки омивача/склоочисника — в "Склоочисники та омивачі"
+    excludeWords: ['склоомивач', 'стеклоомыват', 'омивача скла', 'омывателя стекла', ...stage4(['щітк', 'щетк', 'омивач', 'омыват', 'склоочис', 'стеклоочист'])],
   },
   {
     slug: 'systema-oholodzhennya',
@@ -2623,7 +2641,11 @@ const BASE_CATEGORIES: CategoryDef[] = [
     excludeWords: ['компресор', 'компрессор', 'кондиц', 'кондиціон', 'без коробк'],
     // Прокладки и уплотнительные кольца АКПП/КПП/CVT (вариатор) — и здесь, и в "Прокладки,
     // сальники та кільця двигуна" (решение владельца, этап 3)
-    altRules: [{ all: [['прокладк', 'прокладок', 'кільц', 'кольц'], ['кпп', 'cvt', 'варіатор', 'вариатор']], exclude: ['подушк', 'опор', 'кронштейн'] }],
+    altRules: [
+      { all: [['прокладк', 'прокладок', 'кільц', 'кольц'], ['кпп', 'cvt', 'варіатор', 'вариатор']], exclude: ['подушк', 'опор', 'кронштейн'] },
+      // Етап 4: троси КПП і зчеплення — і тут, і в "Троси"
+      ...(CATEGORIES_STAGE4_ACTIVE ? [{ startsWith: ['трос', 'тросик'], all: [['кпп', 'перемикан', 'переключ', 'кулис', 'куліс', 'селектор', 'зчеплен', 'сцеплен', 'коробк']] }] : []),
+    ],
   },
   {
     slug: 'kuzov-detali',
@@ -2663,10 +2685,10 @@ export const CATEGORIES_STAGE3_ACTIVE =
 
 // Нові категорії вставляються після insertAfter — так вони стоять поруч зі
 // спорідненими в сітці каталогу
-function withStage3(base: CategoryDef[]): CategoryDef[] {
-  if (!CATEGORIES_STAGE3_ACTIVE) return base;
+function withStages(base: CategoryDef[]): CategoryDef[] {
+  const added = [...(CATEGORIES_STAGE3_ACTIVE ? STAGE3_CATEGORIES : []), ...(CATEGORIES_STAGE4_ACTIVE ? STAGE4_CATEGORIES : [])];
   const result = [...base];
-  for (const { insertAfter, ...category } of STAGE3_CATEGORIES) {
+  for (const { insertAfter, ...category } of added) {
     // Кілька записів з одним insertAfter (підкатегорії датчиків) — у порядку списку
     let index = result.findIndex((c) => c.slug === insertAfter);
     while (index + 1 < result.length && result[index + 1].parentCategorySlug === insertAfter && category.parentCategorySlug === insertAfter) index++;
@@ -2675,13 +2697,14 @@ function withStage3(base: CategoryDef[]): CategoryDef[] {
   return result;
 }
 
-export const CATEGORIES: CategoryDef[] = withStage3(BASE_CATEGORIES);
+export const CATEGORIES: CategoryDef[] = withStages(BASE_CATEGORIES);
 
 // Порядок широких категорій для ОДНІЄЇ категорії товару (хлібні крихти,
 // блок категорій хабу моделі, H1): нові категорії етапу 3 — першими, бо
 // вони точніші за старі широкі ("Прокладка турбіни" — це "Турбіни", а не
 // "Прокладки"; "Кронштейн супорта" — "Гальмівна система", а не "Кріплення")
-const STAGE3_TOP_LEVEL = new Set(STAGE3_CATEGORIES.filter((c) => !c.parentCategorySlug).map((c) => c.slug));
+// Етап 4 — так само: "Трос КПП" — "Троси", "Лампа підсвічування" — "Освітлення"
+const STAGE3_TOP_LEVEL = new Set([...STAGE3_CATEGORIES, ...STAGE4_CATEGORIES].filter((c) => !c.parentCategorySlug).map((c) => c.slug));
 export const CATEGORY_PRIORITY_ORDER: CategoryDef[] = [
   ...CATEGORIES.filter((c) => STAGE3_TOP_LEVEL.has(c.slug)),
   ...CATEGORIES.filter((c) => !STAGE3_TOP_LEVEL.has(c.slug)),
@@ -2716,7 +2739,7 @@ function categoryRules(category: CategoryDef): CategoryRule[] {
 // JS-версія тієї ж перевірки, що й SQL у buildCategoryRuleClause (назва
 // порівнюється після foldLookalikes — як name_search у базі)
 export function categoryMatchesName(category: CategoryDef, name: string | null | undefined): boolean {
-  if (!name || nameStartsWithBoot(name)) return false;
+  if (!name || (nameStartsWithBoot(name) && !category.allowBoots)) return false;
   const folded = foldLookalikes(name);
   const withoutPrefix = folded.replace(NAME_PREFIX_JS, '');
   if (CATEGORIES_STAGE3_ACTIVE && !category.allowSensors && SENSOR_START_WORDS.some((w) => withoutPrefix.startsWith(foldLookalikes(w)))) {
@@ -2758,7 +2781,6 @@ export function nameStartsWithBoot(name: string | null | undefined): boolean {
 
 export function detectCategoryForProductName(name: string | null | undefined): CategoryDef | undefined {
   if (!name) return undefined;
-  if (nameStartsWithBoot(name)) return undefined;
   return CATEGORY_PRIORITY_ORDER.find((c) => !c.parentCategorySlug && categoryMatchesName(c, name));
 }
 
@@ -3024,9 +3046,11 @@ export function buildCategoryRuleClause(
   // двійники замінені кирилицею ("Свiчка" з латинською i -> "свічка").
   // Слова правил проходять ту саму заміну (foldLookalikes), тож латинські
   // слова правил ("pajero ii") збігаються з так само заміненою назвою
-  conditions.push(
-    "p.name_search !~* '^[[:space:]]*([A-Za-zА-Яа-яІіЇїЄєҐґ]?[0-9]+/)*[[:space:]]*(пыльник|пильник|пильовик)'"
-  );
+  if (!category.allowBoots) {
+    conditions.push(
+      "p.name_search !~* '^[[:space:]]*([A-Za-zА-Яа-яІіЇїЄєҐґ]?[0-9]+/)*[[:space:]]*(пыльник|пильник|пильовик)'"
+    );
+  }
   // Параметр → його номер у запиті
   const param = (value: unknown): string => {
     params.push(value);
