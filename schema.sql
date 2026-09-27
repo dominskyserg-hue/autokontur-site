@@ -2658,10 +2658,12 @@ $$ LANGUAGE plpgsql;
 -- админке) — поля группы обновляются В ТОЙ ЖЕ транзакции, одним запросом
 -- на всю пачку изменённых строк (триггер на оператор, а не на строку).
 -- Обновление самих полей группы снова вызывает триггер — pg_trigger_depth
--- обрывает повтор
+-- обрывает повтор. SET LOCAL app.skip_group_refresh = 'on' — отключить на
+-- время одной транзакции (массовые операции, которые сами в конце вызывают
+-- refresh_product_group_offers для затронутых групп)
 CREATE OR REPLACE FUNCTION products_refresh_group_offers() RETURNS trigger AS $$
 BEGIN
-  IF pg_trigger_depth() > 1 THEN
+  IF pg_trigger_depth() > 1 OR current_setting('app.skip_group_refresh', true) = 'on' THEN
     RETURN NULL;
   END IF;
   PERFORM refresh_product_group_offers(ARRAY(

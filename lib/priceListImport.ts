@@ -528,6 +528,9 @@ export async function saveProductsToDatabase(
 
   try {
     await client.query('BEGIN');
+    // Поля групп бренд+артикул (цена, наличие лучшего предложения — lib/productGroups.ts)
+    // обновляем ОДИН раз в конце импорта, а не триггером на каждую пачку в 500 строк
+    await client.query(`SET LOCAL app.skip_group_refresh = 'on'`);
 
     for (let i = 0; i < products.length; i += BATCH_SIZE) {
       const batch = products.slice(i, i + BATCH_SIZE);
@@ -535,6 +538,13 @@ export async function saveProductsToDatabase(
       addedCount += batchResult.addedCount;
       updatedCount += batchResult.updatedCount;
     }
+
+    // Та же транзакция: новая цена и наличие попадут в списки вместе с самим импортом
+    await client.query(
+      `SELECT refresh_product_group_offers(ARRAY(
+         SELECT DISTINCT group_primary_id FROM products WHERE supplier_id = $1 AND group_primary_id IS NOT NULL))`,
+      [supplierId]
+    );
 
     await client.query('COMMIT');
   } catch (error) {
@@ -634,7 +644,7 @@ export async function importPriceListForSupplier(
   const afterImport = async () => {
     // Группы бренд+артикул (lib/productGroups.ts) — ДО категорий: главная
     // страница группы получает категории всех двойников
-    await recomputeProductGroupsSafely(pool);
+    await recomputeProductGroupsSafely(pool, { supplierId });
     await recomputeProductCategoriesSafely(pool, { kind: 'supplier', supplierId });
     await refreshVehicleMakesForSupplier(pool, supplierId);
     await rebuildUkrainianCorpusSafely(pool);

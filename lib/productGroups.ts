@@ -113,7 +113,9 @@ export function resolveGroup(members: GroupMember[]): GroupResult {
 }
 
 // Все группы (2+ активных предложения с одним брендом и артикулом) — из базы
-export async function loadProductGroups(db: Pool | PoolClient): Promise<Map<string, GroupMember[]>> {
+// supplierId — только группы с артикулами этого поставщика (после импорта его
+// прайса: остальные группы не менялись). Группа целиком — со всеми поставщиками
+export async function loadProductGroups(db: Pool | PoolClient, supplierId?: string): Promise<Map<string, GroupMember[]>> {
   // Словарь украинских слов для проверки перевода названий (resolveGroup)
   await ensureUkrainianCorpusFresh(db as Pool);
   const result = await db.query(`
@@ -122,8 +124,9 @@ export async function loadProductGroups(db: Pool | PoolClient): Promise<Map<stri
       SELECT p.*, count(*) OVER (PARTITION BY upper(p.brand), p.article) AS n
       FROM products p
       WHERE p.is_active = true AND p.brand IS NOT NULL AND p.brand <> '' AND p.article <> ''
+        ${supplierId ? 'AND (upper(p.brand), p.article) IN (SELECT upper(brand), article FROM products WHERE supplier_id = $1)' : ''}
     ) t
-    WHERE n > 1`);
+    WHERE n > 1`, supplierId ? [supplierId] : []);
   const groups = new Map<string, GroupMember[]>();
   for (const row of result.rows) {
     if (!groups.has(row.key)) groups.set(row.key, []);
@@ -141,13 +144,20 @@ export async function loadProductGroups(db: Pool | PoolClient): Promise<Map<stri
   return groups;
 }
 
-// Пересчёт колонок групп для всего каталога. Пишет только изменившиеся строки
-export async function recomputeProductGroups(pool: Pool): Promise<{ groups: number; members: number; changed: number; ms: number }> {
+// Пересчёт колонок групп: всего каталога или (scope.supplierId — после импорта
+// прайса) только групп с артикулами этого поставщика. Пишет только изменившиеся строки
+export async function recomputeProductGroups(
+  pool: Pool,
+  scope: { supplierId?: string } = {}
+): Promise<{ groups: number; members: number; changed: number; ms: number }> {
   const started = Date.now();
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const groups = await loadProductGroups(client);
+    // Поля лучшего предложения пересчитаем ОДИН раз в конце (refresh ниже), а
+    // не триггером на каждое UPDATE этой функции
+    await client.query(`SET LOCAL app.skip_group_refresh = 'on'`);
+    const groups = await loadProductGroups(client, scope.supplierId);
 
     const ids: string[] = [];
     const primaryIds: string[] = [];
@@ -204,7 +214,9 @@ export async function recomputeProductGroups(pool: Pool): Promise<{ groups: numb
         group_best_price = NULL, group_best_cost = NULL, group_best_discount = NULL, group_best_stock = NULL,
         group_best_supplier_id = NULL, group_min_price = NULL, group_max_price = NULL, group_in_stock = NULL
       WHERE (p.group_primary_id IS NOT NULL OR p.is_group_primary = false)
-        AND NOT EXISTS (SELECT 1 FROM tmp_groups t WHERE t.id = p.id)`);
+        AND NOT EXISTS (SELECT 1 FROM tmp_groups t WHERE t.id = p.id)
+        ${scope.supplierId ? 'AND (upper(p.brand), p.article) IN (SELECT upper(brand), article FROM products WHERE supplier_id = $1)' : ''}`,
+      scope.supplierId ? [scope.supplierId] : []);
 
     // Готовые поля лучшего предложения (цена, наличие, мин./макс.) — для всех
     // главных страниц; дальше их поддерживает триггер при каждом изменении цены
@@ -221,9 +233,9 @@ export async function recomputeProductGroups(pool: Pool): Promise<{ groups: numb
 }
 
 // Для фоновых вызовов (после импорта, cron): ошибка не должна ронять импорт
-export async function recomputeProductGroupsSafely(pool: Pool): Promise<void> {
+export async function recomputeProductGroupsSafely(pool: Pool, scope: { supplierId?: string } = {}): Promise<void> {
   try {
-    const r = await recomputeProductGroups(pool);
+    const r = await recomputeProductGroups(pool, scope);
     console.log(`Группы бренд+артикул пересчитаны: групп ${r.groups}, товаров ${r.members}, изменено ${r.changed}, ${r.ms} мс`);
   } catch (error) {
     console.error('Ошибка пересчёта групп бренд+артикул:', error);
