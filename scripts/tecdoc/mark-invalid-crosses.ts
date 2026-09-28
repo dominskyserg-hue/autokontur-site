@@ -15,6 +15,11 @@
 // целиком (и true, и false), поэтому его можно запускать повторно —
 // например, после загрузки прайса с новыми брендами.
 //
+// После этапа B (scripts/tecdoc/exclude-cross-sources.ts) tecdoc_2016
+// исключён целиком: триггер trg_tecdoc_crosses_exclude_sources оставляет
+// такие строки is_valid = false с причиной source_excluded, что бы ни
+// посчитал этот скрипт.
+//
 // Запуск:
 //   node --env-file=.env.local --import tsx scripts/tecdoc/mark-invalid-crosses.ts
 // ============================================================
@@ -56,7 +61,7 @@ async function main() {
              FROM tecdoc_crosses tc
             WHERE tc.source = $1 AND tc.id >= $2 AND tc.id < $3
          )
-         UPDATE tecdoc_crosses t SET is_valid = v.ok
+         UPDATE tecdoc_crosses t SET is_valid = v.ok, invalid_reason = CASE WHEN v.ok THEN NULL ELSE 'brand_mismatch' END
            FROM verdict v
           WHERE t.id = v.id AND t.is_valid IS DISTINCT FROM v.ok`,
         [SOURCE, start, start + ID_STEP]

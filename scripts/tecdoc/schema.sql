@@ -125,6 +125,32 @@ ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT
 -- scripts/tecdoc/mark-invalid-crosses.ts (повторный запуск пересчитывает)
 ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS is_valid BOOLEAN NOT NULL DEFAULT true;
 
+-- Почему строка не используется (is_valid = false):
+--   source_excluded — источник исключён целиком: данные TecDoc
+--                     (tecdoc_2016, tecdoc_2018) и сторонние файлы
+--                     неизвестного происхождения (price_cardon, price_va);
+--   brand_mismatch  — ни одна сторона строки не совпала с товаром каталога
+--                     по бренду (scripts/tecdoc/mark-invalid-crosses.ts)
+ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS invalid_reason TEXT;
+
+-- Строки исключённых источников сразу пишутся помеченными — даже если
+-- кто-то снова запустит старый скрипт импорта (import-dump.ts,
+-- import-2018-fr-oe.ts, import-cardon-crosses.ts, import-va-crosses.ts)
+CREATE OR REPLACE FUNCTION tecdoc_crosses_exclude_sources() RETURNS trigger AS $$
+BEGIN
+  IF NEW.source IN ('tecdoc_2016', 'tecdoc_2018', 'price_cardon', 'price_va') THEN
+    NEW.is_valid := false;
+    NEW.invalid_reason := 'source_excluded';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_tecdoc_crosses_exclude_sources ON tecdoc_crosses;
+CREATE TRIGGER trg_tecdoc_crosses_exclude_sources
+  BEFORE INSERT OR UPDATE OF source, is_valid ON tecdoc_crosses
+  FOR EACH ROW EXECUTE FUNCTION tecdoc_crosses_exclude_sources();
+
 
 -- ------------------------------------------------------------
 -- Застосовність до автомобілів: "бренд+артикул" <-> модифікація авто
