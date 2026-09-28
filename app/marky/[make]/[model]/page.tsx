@@ -157,6 +157,10 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
     ...product,
     retailPrice: computeCustomerPrice(product.costPrice, product.retailPrice, customerPricingRule),
   }));
+  // "Mazda 6" у марки Mazda -> "6", чтобы не было "Mazda Mazda 6"
+  const maybeModelLabel = data.maybeModel.toLowerCase().startsWith(`${make.name.toLowerCase()} `)
+    ? data.maybeModel.slice(make.name.length + 1)
+    : data.maybeModel;
   const maybe = data.maybe.map((product) => ({
     ...product,
     retailPrice: computeCustomerPrice(product.costPrice, product.retailPrice, customerPricingRule),
@@ -270,7 +274,7 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
         {maybe.length > 0 && (
           <section className="mb-8 rounded-2xl p-5" style={{ background: TECH_SURFACE, border: `1px dashed ${TECH_BORDER}` }}>
             <h2 className="mb-1 text-lg font-semibold" style={{ fontFamily: TECH_DISPLAY_FONT, color: '#fff' }}>
-              Можуть підходити до {make.name} {data.maybeModel}
+              Можуть підходити до {make.name} {maybeModelLabel}
             </h2>
             <p className="mb-4 text-sm" style={{ color: TECH_MUTED }}>
               Уточніть сумісність у менеджера: для цих деталей не вказано покоління {hub.label}.
