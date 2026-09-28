@@ -14,6 +14,7 @@
 
 import { Pool } from 'pg';
 import { CATEGORIES, categoryMatchesName, type CategoryDef } from '@/lib/categories';
+import { narrowCategoryVehicles } from '@/lib/narrowCategoryVehicles';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -60,4 +61,38 @@ export function narrowRedirectTarget(category: CategoryDef): string {
     (c) => !c.tecdocVehicle && !c.modelGroup && !c.parentCategorySlug && categoryMatchesName(c, category.name)
   );
   return broad ? `/category/${broad.slug}` : '/category';
+}
+
+// Адрес ссылки на категорию без 301: тонкая узкая категория сразу ведёт
+// туда, куда отдала бы редирект
+export function categoryLinkTarget(category: CategoryDef, thin: Set<string>): string {
+  return thin.has(category.slug) ? narrowRedirectTarget(category) : `/category/${category.slug}`;
+}
+
+// Живая (не тонкая) узкая страница "деталь + модель" для машины из своих
+// данных — ссылка бейджа "Застосовується для" на странице товара. Совпадение
+// по марке и модели; поколение категории, если указано, должно совпасть
+export function findNarrowCategoryForOwnVehicle(
+  make: string,
+  model: string | null,
+  generation: string | null,
+  thin: Set<string>
+): CategoryDef | undefined {
+  if (!model) return undefined;
+  return CATEGORIES.find(
+    (c) =>
+      c.tecdocVehicle &&
+      !thin.has(c.slug) &&
+      narrowCategoryVehicles(c).some(
+        (v) => v.make === make && v.model === model && (v.generation === null || v.generation === generation)
+      )
+  );
+}
+
+// Категория для ссылки (хлебные крошки, "Категорія" на странице товара):
+// тонкая узкая — заменяется категорией назначения её 301
+export function linkableCategory(category: CategoryDef | undefined, thin: Set<string>): CategoryDef | undefined {
+  if (!category || !thin.has(category.slug)) return category;
+  const target = narrowRedirectTarget(category);
+  return target.startsWith('/category/') ? CATEGORIES.find((c) => c.slug === target.slice('/category/'.length)) : undefined;
 }

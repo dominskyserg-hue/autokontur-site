@@ -372,10 +372,8 @@ export default async function CategoryPage({
   // Узкая страница "деталь + модель", в которой после перехода на свою
   // применимость осталось меньше 5 деталей (lib/narrowCategoryStatus.ts) —
   // постоянный редирект на родительскую (или широкую) категорию, не 404
-  if (category.tecdocVehicle) {
-    const thin = await loadThinNarrowCategories();
-    if (thin.has(slug)) permanentRedirect(narrowRedirectTarget(category));
-  }
+  const thin = await loadThinNarrowCategories();
+  if (category.tecdocVehicle && thin.has(slug)) permanentRedirect(narrowRedirectTarget(category));
 
   // Хаби моделі для вузької сторінки (за modelGroup), лише видимі (>= 30 товарів)
   const visibleHubs = category.modelGroup ? await loadVisibleHubs() : [];
@@ -392,7 +390,8 @@ export default async function CategoryPage({
   // не впливають — вузькі сторінки їх і так не враховують)
   if (make && model) {
     const narrowPage = findNarrowPageForVehicle(slug, make.name, model);
-    if (narrowPage) {
+    // На тонкую узкую страницу не ведём — она сама отдала бы 301 назад
+    if (narrowPage && !thin.has(narrowPage.slug)) {
       permanentRedirect(`/category/${narrowPage.slug}`);
     }
   }
@@ -702,8 +701,8 @@ export default async function CategoryPage({
             конкретні моделі. marka=... тут не враховуємо навмисно —
             і modelGroup/parentCategorySlug стосуються лише "чистого"
             slug категорії, не фільтра по марці в query-рядку */}
-        {!make && <CategoryCrossLinks category={category} kind="model" />}
-        {!make && <CategoryCrossLinks category={category} kind="variants" />}
+        {!make && <CategoryCrossLinks category={category} kind="model" hidden={thin} />}
+        {!make && <CategoryCrossLinks category={category} kind="variants" hidden={thin} />}
 
         {/* ==================== ІНШІ КАТЕГОРІЇ (внутрішні посилання) ==================== */}
         <div className="pt-6" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
@@ -711,7 +710,7 @@ export default async function CategoryPage({
             Інші категорії
           </h2>
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.filter((c) => c.slug !== slug && !c.hideFromIndex).map((c) => (
+            {CATEGORIES.filter((c) => c.slug !== slug && !c.hideFromIndex && !thin.has(c.slug)).map((c) => (
               <Link
                 key={c.slug}
                 href={`/category/${c.slug}`}

@@ -24,10 +24,14 @@ import { TECH_BORDER, TECH_FAINT, TECH_MUTED } from '@/lib/techTheme';
 interface CategoryCrossLinksProps {
   category: CategoryDef;
   kind: 'model' | 'variants';
+  // Тонкие узкие категории (отдают 301, lib/narrowCategoryStatus.ts) — не показывать
+  hidden?: Set<string>;
 }
 
-export default function CategoryCrossLinks({ category, kind }: CategoryCrossLinksProps) {
-  const items = kind === 'model' ? getRelatedByModel(category) : getNarrowVariants(category.slug);
+export default function CategoryCrossLinks({ category, kind, hidden }: CategoryCrossLinksProps) {
+  const items = (kind === 'model' ? getRelatedByModel(category) : getNarrowVariants(category.slug)).filter(
+    (item) => !hidden?.has(item.slug)
+  );
   if (items.length === 0) return null;
 
   const title = kind === 'model' ? `Інші запчастини для ${category.modelLabel}` : 'Популярні моделі для цієї категорії';

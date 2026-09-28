@@ -12,6 +12,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { CATEGORIES } from '@/lib/categories';
+import { loadThinNarrowCategories } from '@/lib/narrowCategoryStatus';
 import { SITE_URL } from '@/lib/siteConfig';
 import { TECH_BG, TECH_SURFACE_2, TECH_BORDER, TECH_INK, TECH_MUTED, TECH_FAINT, TECH_DISPLAY_FONT, TECH_BODY_FONT } from '@/lib/techTheme';
 import SiteHeaderServer from '@/components/SiteHeaderServer';
@@ -24,7 +25,10 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE_URL}/category` },
 };
 
-export default function CategoryIndexPage() {
+export default async function CategoryIndexPage() {
+  // Тонкие узкие категории (меньше 5 деталей, отдают 301) в списках не
+  // показываем — их адрес назначения и так есть в списке
+  const thin = await loadThinNarrowCategories();
   return (
     <div className="min-h-screen" style={{ background: TECH_BG, color: TECH_INK, fontFamily: TECH_BODY_FONT }}>
       <SiteHeaderServer />
@@ -45,7 +49,7 @@ export default function CategoryIndexPage() {
         </h1>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {CATEGORIES.filter((c) => !c.hideFromIndex).map((c) => (
+          {CATEGORIES.filter((c) => !c.hideFromIndex && !thin.has(c.slug)).map((c) => (
             <Link
               key={c.slug}
               href={`/category/${c.slug}`}
@@ -69,13 +73,13 @@ export default function CategoryIndexPage() {
             посилання-"місток" для Google (щоб сторінку взагалі знайшли
             і проіндексували — sitemap.xml у проєкті ще немає) без
             захаращення основної навігації */}
-        {CATEGORIES.some((c) => c.hideFromIndex) && (
+        {CATEGORIES.some((c) => c.hideFromIndex && !thin.has(c.slug)) && (
           <div className="mt-10 pt-8" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
             <h2 className="mb-3 text-sm font-semibold" style={{ color: TECH_FAINT }}>
               Швидкий пошук за моделлю авто
             </h2>
             <div className="flex flex-wrap gap-2">
-              {CATEGORIES.filter((c) => c.hideFromIndex).map((c) => (
+              {CATEGORIES.filter((c) => c.hideFromIndex && !thin.has(c.slug)).map((c) => (
                 <Link
                   key={c.slug}
                   href={`/category/${c.slug}`}

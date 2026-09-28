@@ -17,6 +17,7 @@ import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { buildProductPath, buildProductSlug } from '@/lib/slug';
 import { CAR_MAKES, getCarMakeByDbValue } from '@/lib/carMakes';
+import { generationLabel, OTHER_GENERATION } from '@/lib/carModelDictionary';
 import { detectCategoryForProductName, detectCategoryForProductH1, getCategoryBySlug } from '@/lib/categories';
 import { cleanApplicability } from '@/lib/carModelTranslation';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
@@ -27,6 +28,7 @@ import { crossSideMatchesSql } from '@/lib/crossBrandMatch';
 import { ensureUkrainianCorpusFresh } from '@/lib/ukrainianCorpus';
 import { hubPath, MODEL_HUBS } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
+import { findNarrowCategoryForOwnVehicle, linkableCategory, loadThinNarrowCategories } from '@/lib/narrowCategoryStatus';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -829,6 +831,12 @@ export interface TecdocCompatibilityItem {
   // Хаб моделі (/marky/{марка}/{модель}, lib/modelHubs.ts), якщо цей запис
   // TecDoc входить у видимий хаб — бейдж веде туди, а не на сторінку марки
   hubPath: string | null;
+  // Марка известна только по бренду самого товара (source = brand, без
+  // модели) — это оригинальная запчасть этой марки, бейдж
+  // "Оригінальна запчастина {марка}", а не "підходить для"
+  originalBrand?: boolean;
+  // Живая узкая страница "деталь + модель" для этой машины (не тонкая, без 301)
+  narrowPath?: string | null;
 }
 
 const TECDOC_CROSSES_LIMIT = 30;
@@ -917,14 +925,15 @@ const loadOwnCompatibility = cache(async function loadOwnCompatibility(
   article: string
 ): Promise<TecdocCompatibilityItem[]> {
   const result = await pool.query(
-    `SELECT DISTINCT pvo.make, pvo.model, pvo.generation
+    `SELECT pvo.make, pvo.model, NULLIF(pvo.generation, '${OTHER_GENERATION}') AS generation, bool_and(pvo.source = 'brand') AS only_brand
        FROM product_vehicles_own pvo
        JOIN products p ON p.id = pvo.product_id AND p.is_active
-      WHERE p.article = $1 AND UPPER(COALESCE(p.brand, '')) = UPPER(COALESCE($2, ''))`,
+      WHERE p.article = $1 AND UPPER(COALESCE(p.brand, '')) = UPPER(COALESCE($2, ''))
+      GROUP BY 1, 2, 3`,
     [article, brand]
   );
 
-  const visibleHubs = await loadVisibleHubs();
+  const [visibleHubs, thin] = await Promise.all([loadVisibleHubs(), loadThinNarrowCategories()]);
   const withModel = new Set(result.rows.filter((r) => r.model).map((r) => r.make as string));
   const seen = new Set<string>();
   const items: TecdocCompatibilityItem[] = [];
@@ -938,7 +947,7 @@ const loadOwnCompatibility = cache(async function loadOwnCompatibility(
     const hub = row.generation ? MODEL_HUBS.find((h) => h.makeSlug === row.make && h.slug === row.generation) : undefined;
     const hubVisible = Boolean(hub && visibleHubs.includes(hub));
     // "Mazda 6" у марки Mazda -> "6"; у поколения — подпись хаба ("Camry XV30")
-    let model = hub ? hub.label : (row.model as string | null) ?? '';
+    let model = hub ? hub.label : generationLabel(row.generation) ?? (row.model as string | null) ?? '';
     if (model.toLowerCase().startsWith(`${makeName.toLowerCase()} `)) model = model.slice(makeName.length + 1);
     const key = `${row.make}|${model}`;
     if (seen.has(key)) continue;
@@ -953,6 +962,11 @@ const loadOwnCompatibility = cache(async function loadOwnCompatibility(
       engine: '',
       sourceNote: null,
       hubPath: hub && hubVisible ? hubPath(hub) : null,
+      narrowPath: (() => {
+        const narrow = findNarrowCategoryForOwnVehicle(row.make, row.model, row.generation, thin);
+        return narrow ? `/category/${narrow.slug}` : null;
+      })(),
+      originalBrand: !row.model && Boolean(row.only_brand),
     });
   }
   // Спершу марки з власною сторінкою /marky/[slug] (клікабельні)
@@ -1120,9 +1134,13 @@ export async function loadProductPageData(
   // іншого прайсу, товар щойно з'явився і ще не перерахований), — як
   // раніше, за словами в ОЧИЩЕНІЙ назві. Крихти (рішення власника):
   // Головна › Категорія › Бренд Артикул — без марки авто
-  const category =
+  // Тонкая узкая категория (отдаёт 301, lib/narrowCategoryStatus.ts) —
+  // в крошках и ссылках сразу её категория назначения
+  const category = linkableCategory(
     (await loadBreadcrumbCategories(pool, [product.id])).get(product.id) ??
-    detectCategoryForProductName(buildCleanProductName(product.name) ?? buildCleanProductName(product.fallbackName));
+      detectCategoryForProductName(buildCleanProductName(product.name) ?? buildCleanProductName(product.fallbackName)),
+    await loadThinNarrowCategories()
+  );
   const breadcrumbItems: BreadcrumbItem[] = [
     { name: 'Головна', url: SITE_URL },
     ...(category ? [{ name: category.name, url: `${SITE_URL}/category/${category.slug}` }] : []),

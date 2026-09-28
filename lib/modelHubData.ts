@@ -14,6 +14,7 @@ import { PRODUCT_GROUPS_ACTIVE } from '@/lib/productGroups';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { MODEL_HUBS, MIN_HUB_PRODUCTS, PRIORITY_CATEGORY_SLUGS, type ModelHubDef } from '@/lib/modelHubs';
 import { comparePopular, getRecentlySoldProductIds } from '@/lib/popularitySort';
+import { modelForGeneration } from '@/lib/carModelDictionary';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -62,7 +63,37 @@ export interface HubData {
   // Сітка: за порядком категорій (як блок категорій), усередині —
   // в наявності з фото -> в наявності без фото -> під замовлення
   products: HubProduct[];
+  // "Можуть підходити до {модель}": та же модель, поколение НЕ подтверждено
+  // (нет кода кузова, годы открыты или шире поколения). До MAYBE_LIMIT
+  // деталей, не входят в основной список и в total
+  maybe: HubProduct[];
+  maybeModel: string;
 }
+
+export const MAYBE_LIMIT = 24;
+
+// Детали той же модели без подтверждённого поколения ($1 марка, $2 модель,
+// $3 slug хаба): есть строка с generation IS NULL и нет строки с этим
+// поколением
+const HUB_MAYBE_SQL = `
+  WITH parts AS (
+    SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
+    FROM product_vehicles_own pvo
+    JOIN products p1 ON p1.id = pvo.product_id AND p1.is_active = true
+    WHERE pvo.make = $1 AND pvo.model = $2 AND pvo.generation IS NULL
+  ),
+  confirmed AS (
+    SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
+    FROM product_vehicles_own pvo
+    JOIN products p1 ON p1.id = pvo.product_id AND p1.is_active = true
+    WHERE pvo.make = $1 AND pvo.generation = $3
+  )
+  SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time, p.group_primary_id, p.is_refurbished
+  FROM parts
+  JOIN products p ON p.article = parts.article AND UPPER(COALESCE(p.brand, '')) = parts.brand AND p.is_active = true
+  JOIN suppliers s ON s.id = p.supplier_id
+  WHERE NOT EXISTS (SELECT 1 FROM confirmed c WHERE c.brand = parts.brand AND c.article = parts.article)
+`;
 
 // Этап C перехода с TecDoc: состав хаба — из своей применимости
 // (product_vehicles_own, lib/ownVehicles.ts): деталь попадает в хаб, если
@@ -92,12 +123,55 @@ function gridRank(product: HubProduct): number {
   return 3;
 }
 
+// Строки запроса -> товары; одна деталь (бренд + артикул) — одна карточка с
+// лучшей пропозицией (в наявності з фото -> в наявності -> з фото, далі дешевша)
+function rowsToOffers(rows: Array<Record<string, unknown>>): HubProduct[] {
+  return rows.map((row) => ({
+    id: row.id as string,
+    article: row.article as string,
+    brand: row.brand as string | null,
+    name: row.name as string | null,
+    costPrice: parseFloat(row.cost_price as string),
+    retailPrice: parseFloat(row.retail_price as string),
+    stock: row.stock as number,
+    imageUrl: row.image_url as string | null,
+    deliveryTime: row.delivery_time as string | null,
+    pageId: row.id as string,
+    offerCount: 1,
+    groupPrimaryId: row.group_primary_id as string | null,
+    isRefurbished: row.is_refurbished as boolean,
+  }));
+}
+
+function bestPerPart(offers: HubProduct[]): HubProduct[] {
+  const bestByPart = new Map<string, HubProduct>();
+  const offersByPart = new Map<string, number>();
+  for (const offer of offers) {
+    const key = `${(offer.brand ?? '').toUpperCase()}|${offer.article}`;
+    offersByPart.set(key, (offersByPart.get(key) ?? 0) + 1);
+    const current = bestByPart.get(key);
+    if (!current || gridRank(offer) < gridRank(current) || (gridRank(offer) === gridRank(current) && offer.retailPrice < current.retailPrice)) {
+      bestByPart.set(key, offer);
+    }
+  }
+  return [...bestByPart.entries()].map(([key, best]) => ({
+    ...best,
+    pageId: PRODUCT_GROUPS_ACTIVE ? best.groupPrimaryId ?? best.id : best.id,
+    offerCount: PRODUCT_GROUPS_ACTIVE ? offersByPart.get(key) ?? 1 : 1,
+  }));
+}
+
 export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): Promise<HubData> {
-  const [result, soldList] = await Promise.all([
+  const hubModel = modelForGeneration(hub.slug);
+  const [result, maybeResult, soldList] = await Promise.all([
     pool.query(HUB_PRODUCTS_SQL, [hub.makeSlug, hub.slug]),
+    hubModel ? pool.query(HUB_MAYBE_SQL, [hub.makeSlug, hubModel.model, hub.slug]) : Promise.resolve({ rows: [] }),
     getRecentlySoldProductIds(pool),
   ]);
   const soldIds = new Set(soldList);
+  const maybe = bestPerPart(rowsToOffers(maybeResult.rows))
+    .sort((a, b) => gridRank(a) - gridRank(b) || comparePopular(a, b, soldIds))
+    .slice(0, MAYBE_LIMIT);
   const offers: HubProduct[] = result.rows.map((row) => ({
     id: row.id,
     article: row.article,
@@ -176,7 +250,7 @@ export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): P
     .sort((a, b) => categoryRank(a) - categoryRank(b) || comparePopular(a, b, soldIds))
     .slice(0, HUB_GRID_SIZE);
 
-  return { total: products.length, categories, products: grid };
+  return { total: products.length, categories, products: grid, maybe, maybeModel: hubModel?.model ?? hub.label };
 });
 
 // Кількість товарів кожного хабу — для списку "Моделі {Марка}" і

@@ -28,7 +28,14 @@ export interface GenerationDef {
   // год начала выпуска детали должен попасть в [startFrom, startTo]
   startFrom: number;
   startTo: number;
+  // последний год выпуска поколения; по умолчанию startTo + 1. Годы товара
+  // "с–по" подтверждают поколение, только если целиком внутри
+  endYear?: number;
 }
+
+// Поколение модели определено как ДРУГОЕ (год начала вне всех поколений
+// словаря) — такой товар не "может подходить" к поколениям словаря
+export const OTHER_GENERATION = 'other';
 
 interface ModelDef {
   make: string; // slug марки (lib/carMakes.ts; для марок без своей страницы — свой slug)
@@ -159,7 +166,7 @@ const MODELS: ModelDef[] = [
   {
     make: 'mitsubishi', model: 'Pajero', pattern: 'pajero(?!\\s?sport)|паджеро(?!\\s?спорт)|montero|shogun',
     generations: [
-      { slug: 'pajero-2', codes: /pajero\s?(?:ii|2)(?![0-9])|pajero\s?classic|(?<![a-z0-9])v[234]\d[a-z]?(?![0-9])/i, startFrom: 1990, startTo: 1999 },
+      { slug: 'pajero-2', codes: /pajero\s?(?:ii|2)(?![0-9])|pajero\s?classic|(?<![a-z0-9])v[234]\d[a-z]?(?![0-9])/i, startFrom: 1990, startTo: 1999, endYear: 2006 },
     ],
   },
   { make: 'mitsubishi', model: 'Outlander', pattern: 'outlander|аутл[еэ]ндер' },
@@ -534,7 +541,10 @@ export interface DetectedModel {
 // Год начала выпуска сразу после названия модели: "06-11", "2006-2011",
 // "08.01-", "(03-09)", "Civic 4D 06-11". Перед годом не допускаются цифра,
 // точка, запятая и буква — чтобы не принять объём "1.6-2.0" или код за годы
-const YEAR_AFTER = /^.{0,25}?(?<![\d.,a-zа-яіїє])(\d{2}|\d{4})(?:\.\d{2})?\s*[-–—]/iu;
+// Необязательный месяц перед годом: "08.01-" = август 2001 (а не 2008).
+// Конец диапазона — 4 цифры или 2 цифры, за которыми нет цифры/точки
+// (иначе "06- 2.0" дало бы конец "2.")
+const YEAR_AFTER = /^.{0,25}?(?<![\d.,a-zа-яіїє])(?:\d{2}\.)?(\d{4}|\d{2})\s*[-–—]\s*(?:\d{2}\.)?(\d{4}|\d{2}(?![\d.]))?/iu;
 
 function toYear(token: string): number {
   const n = parseInt(token, 10);
@@ -542,14 +552,15 @@ function toYear(token: string): number {
   return n >= 50 ? 1900 + n : 2000 + n;
 }
 
-function startYearNear(text: string, matchEnd: number): number | null {
+// Годы детали сразу после названия модели: начало и (если указан) конец
+function yearsNear(text: string, matchEnd: number): { start: number; end: number | null } | null {
   const after = text.slice(matchEnd, matchEnd + 40);
   const m = after.match(YEAR_AFTER);
-  if (m) {
-    const y = toYear(m[1]);
-    if (y >= 1970 && y <= 2030) return y;
-  }
-  return null;
+  if (!m) return null;
+  const start = toYear(m[1]);
+  if (start < 1970 || start > 2030) return null;
+  const end = m[2] ? toYear(m[2]) : null;
+  return { start, end: end !== null && end >= start && end <= 2035 ? end : null };
 }
 
 // Все модели, упомянутые в тексте (в названии товара бывает несколько:
@@ -568,14 +579,23 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
       let generationSlug: string | null = null;
       let generationUnknown = false;
       if (m.generations) {
-        const start = startYearNear(text, match.index + match[0].length);
+        // Поколение ПОДТВЕРЖДЕНО: код кузова ("ACV30") или годы "с–по"
+        // целиком внутри лет поколения ("Camry 01-06"). Открытый диапазон
+        // ("06-") или диапазон шире поколения — поколение не подтверждено
+        // (generation = null, "может подходить"). Год начала вне всех
+        // поколений словаря — заведомо другое поколение (OTHER_GENERATION)
+        const years = yearsNear(text, match.index + match[0].length);
         const byCode = m.generations.find((g) => g.codes.test(text));
-        const byYear = start !== null ? m.generations.find((g) => start >= g.startFrom && start <= g.startTo) : undefined;
-        // Код кузова точнее года; год — только если кода нет
-        const generation = byCode ?? byYear;
-        // Модель без кода с годом вне всех поколений хабов — другое поколение
-        if (generation) generationSlug = generation.slug;
-        else generationUnknown = start === null;
+        const byStart = years ? m.generations.find((g) => years.start >= g.startFrom && years.start <= g.startTo) : undefined;
+        if (byCode) {
+          generationSlug = byCode.slug;
+        } else if (byStart && years && years.end !== null && years.end <= (byStart.endYear ?? byStart.startTo + 1)) {
+          generationSlug = byStart.slug;
+        } else if (years && !byStart) {
+          generationSlug = OTHER_GENERATION;
+        } else {
+          generationUnknown = true;
+        }
       }
       const key = `${m.make}|${m.model}|${generationSlug ?? ''}`;
       if (!found.has(key)) found.set(key, { make: m.make, model: m.model, generation: generationSlug, generationUnknown });
@@ -585,3 +605,10 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
   return [...found.values()];
 }
 
+
+// Марка и модель по slug поколения ("camry-xv30" -> Toyota Camry) — для
+// блока "Можуть підходити до {модель}" на хабе поколения
+export function modelForGeneration(slug: string): { make: string; model: string } | null {
+  const found = MODELS.find((m) => (m.generations ?? []).some((g) => g.slug === slug));
+  return found ? { make: found.make, model: found.model } : null;
+}

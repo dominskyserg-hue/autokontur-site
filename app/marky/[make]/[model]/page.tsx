@@ -19,7 +19,7 @@ import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { getCarMakeBySlug } from '@/lib/carMakes';
 import { getHub, getHubsForMake, hubPath, findNarrowCategoryForHub, MIN_HUB_PRODUCTS, type ModelHubDef } from '@/lib/modelHubs';
-import { loadHubData, loadVisibleHubs } from '@/lib/modelHubData';
+import { loadHubData, loadVisibleHubs, type HubProduct } from '@/lib/modelHubData';
 import { buildSeoProductName } from '@/lib/productDetail';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { getCustomerSessionPhone } from '@/lib/customerAuth';
@@ -29,6 +29,9 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
+import VinCheckTrigger from '@/components/VinCheckTrigger';
+import { loadThinNarrowCategories, narrowRedirectTarget } from '@/lib/narrowCategoryStatus';
+import { getCategoryBySlug } from '@/lib/categories';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import {
@@ -154,6 +157,10 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
     ...product,
     retailPrice: computeCustomerPrice(product.costPrice, product.retailPrice, customerPricingRule),
   }));
+  const maybe = data.maybe.map((product) => ({
+    ...product,
+    retailPrice: computeCustomerPrice(product.costPrice, product.retailPrice, customerPricingRule),
+  }));
 
   const otherHubs = getHubsForMake(makeSlug).filter(
     (other) => other.slug !== hub.slug && visibleHubs.some((visible) => visible.makeSlug === other.makeSlug && visible.slug === other.slug)
@@ -170,9 +177,14 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
   // Посилання категорії: вузька сторінка "модель + деталь", якщо є;
   // інакше категорія з фільтром марки й основного кузова (та сторінка
   // сама має noindex + canonical на чисту категорію, тож дубля немає)
+  // Тонкие узкие страницы (отдают 301, lib/narrowCategoryStatus.ts) не
+  // ссылаются: вместо них — адрес назначения или категория с фильтром
+  const thin = await loadThinNarrowCategories();
   const categoryHref = (broadSlug: string): string => {
+    const own = getCategoryBySlug(broadSlug);
+    if (own && thin.has(broadSlug)) return narrowRedirectTarget(own);
     const narrow = findNarrowCategoryForHub(hub, broadSlug);
-    if (narrow) return `/category/${narrow.slug}`;
+    if (narrow && !thin.has(narrow.slug)) return `/category/${narrow.slug}`;
     const query = new URLSearchParams({ marka: make.slug, model: hub.tecdocModels[0] });
     return `/category/${broadSlug}?${query.toString()}`;
   };
@@ -241,79 +253,36 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
           </h2>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {products.map((product) => (
-              <Link
-                key={product.id}
-                href={buildProductPath(product.pageId, product)}
-                prefetch={false}
-                className="flex items-start gap-3 rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
-                style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
-              >
-                <div
-                  className="flex aspect-square w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg"
-                  style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}
-                >
-                  {product.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={product.imageUrl} alt={buildSeoProductName(product)} loading="lazy" className="h-full w-full object-cover" />
-                  ) : (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TECH_FAINT} strokeWidth="1.5">
-                      <rect x="3" y="5" width="18" height="14" rx="2" />
-                      <circle cx="8.5" cy="10" r="1.5" />
-                      <path d="M21 16l-5-5-4 4-2-2-7 7" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="mb-1 flex items-center gap-1.5 text-xs">
-                    <span className="font-bold uppercase tracking-wide" style={{ color: TECH_ACCENT_BRIGHT }}>
-                      {product.brand || 'Без бренду'}
-                    </span>
-                    <span style={{ color: TECH_FAINT }}>·</span>
-                    <span style={{ fontFamily: TECH_MONO_FONT, color: TECH_MUTED }}>{product.article}</span>
-                  </div>
-                  <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
-                    {buildSeoProductName(product)}
-                  </div>
-                  {(product.stock > 0 || product.isRefurbished) && (
-                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                      {product.stock > 0 && <StockBadge stock={product.stock} />}
-                      {product.isRefurbished && <RefurbishedBadge />}
-                    </div>
-                  )}
-                  <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />
-                  <div className="flex items-center justify-between gap-2">
-                    <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
-                      {formatMoney(product.retailPrice)} грн
-                    </span>
-                    {/* Кнопка "Купити" (components/CardBuyButton.tsx): добавляет в корзину,
-                        не уводя со страницы; без наличия — серый "Під замовлення" */}
-                    <CardBuyButton
-                      product={{
-                        id: product.id,
-                        article: product.article,
-                        brand: product.brand,
-                        name: buildSeoProductName(product),
-                        retailPrice: product.retailPrice,
-                        stock: product.stock,
-                      }}
-                      listName={`Запчастини ${make.name} ${hub.label}`}
-                    />
-                  </div>
-                  {product.stock <= 0 && product.deliveryTime && (
-                    <div className="mt-1.5 text-xs" style={{ color: TECH_FAINT }}>
-                      Термін поставки: {product.deliveryTime}
-                    </div>
-                  )}
-                  {/* Кожен товар хабу підходить саме для цього покоління —
-                      за своєю применимостью (lib/modelHubData.ts) */}
-                  <div className="mt-2 text-xs font-medium" style={{ color: TECH_GOOD }}>
-                    ✓ Підходить для {title}
-                  </div>
-                </div>
-              </Link>
+              <HubProductCard key={product.id} product={product} title={title} listName={`Запчастини ${make.name} ${hub.label}`} confirmed />
             ))}
           </div>
         </section>
+
+        {/* ==================== МОЖУТЬ ПІДХОДИТИ ==================== */}
+        {/* Та же модель, но поколение своими данными не подтверждено (нет кода
+            кузова, годы открыты или шире поколения) — отдельно, с просьбой
+            уточнить у менеджера и кнопкой VIN-проверки (форма заявки
+            открывается с подставленной моделью) */}
+        {maybe.length > 0 && (
+          <section className="mb-8 rounded-2xl p-5" style={{ background: TECH_SURFACE, border: `1px dashed ${TECH_BORDER}` }}>
+            <h2 className="mb-1 text-lg font-semibold" style={{ fontFamily: TECH_DISPLAY_FONT, color: '#fff' }}>
+              Можуть підходити до {make.name} {data.maybeModel}
+            </h2>
+            <p className="mb-4 text-sm" style={{ color: TECH_MUTED }}>
+              Уточніть сумісність у менеджера: для цих деталей не вказано покоління {hub.label}.
+            </p>
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {maybe.map((product) => (
+                <HubProductCard key={product.id} product={product} title={title} listName={`Можуть підходити ${make.name} ${hub.label}`} confirmed={false} />
+              ))}
+            </div>
+            <VinCheckTrigger
+              variant="button"
+              label="Перевірити за VIN"
+              description={`Підбір запчастин для ${make.name} ${hub.label} (${yearsLabel(hub)}) — перевірити сумісність за VIN`}
+            />
+          </section>
+        )}
 
         {otherHubs.length > 0 && (
           <div className="pt-6" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
@@ -336,5 +305,97 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
         )}
       </div>
     </div>
+  );
+}
+
+// Карточка товара хаба (основной список и блок "Можуть підходити")
+function HubProductCard({
+  product,
+  title,
+  listName,
+  confirmed,
+}: {
+  product: HubProduct;
+  title: string;
+  listName: string;
+  confirmed: boolean;
+}) {
+  return (
+    <Link
+      href={buildProductPath(product.pageId, product)}
+      prefetch={false}
+      className="flex items-start gap-3 rounded-xl p-4 transition-colors hover:bg-[rgba(59,130,246,0.07)]"
+      style={{ background: TECH_SURFACE_2, border: `1px solid ${TECH_BORDER}` }}
+    >
+      <div
+        className="flex aspect-square w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg"
+        style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}
+      >
+        {product.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={product.imageUrl} alt={buildSeoProductName(product)} loading="lazy" className="h-full w-full object-cover" />
+        ) : (
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={TECH_FAINT} strokeWidth="1.5">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <circle cx="8.5" cy="10" r="1.5" />
+            <path d="M21 16l-5-5-4 4-2-2-7 7" strokeLinejoin="round" />
+          </svg>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-center gap-1.5 text-xs">
+          <span className="font-bold uppercase tracking-wide" style={{ color: TECH_ACCENT_BRIGHT }}>
+            {product.brand || 'Без бренду'}
+          </span>
+          <span style={{ color: TECH_FAINT }}>·</span>
+          <span style={{ fontFamily: TECH_MONO_FONT, color: TECH_MUTED }}>{product.article}</span>
+        </div>
+        <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
+          {buildSeoProductName(product)}
+        </div>
+        {(product.stock > 0 || product.isRefurbished) && (
+          <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+            {product.stock > 0 && <StockBadge stock={product.stock} />}
+            {product.isRefurbished && <RefurbishedBadge />}
+          </div>
+        )}
+        <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />
+        <div className="flex items-center justify-between gap-2">
+          <span style={{ fontFamily: TECH_DISPLAY_FONT, fontWeight: 600, fontSize: 18, color: '#fff' }}>
+            {formatMoney(product.retailPrice)} грн
+          </span>
+          {/* Кнопка "Купити" (components/CardBuyButton.tsx): добавляет в корзину,
+              не уводя со страницы; без наличия — серый "Під замовлення" */}
+          <CardBuyButton
+            product={{
+              id: product.id,
+              article: product.article,
+              brand: product.brand,
+              name: buildSeoProductName(product),
+              retailPrice: product.retailPrice,
+              stock: product.stock,
+            }}
+            listName={listName}
+          />
+        </div>
+        {product.stock <= 0 && product.deliveryTime && (
+          <div className="mt-1.5 text-xs" style={{ color: TECH_FAINT }}>
+            Термін поставки: {product.deliveryTime}
+          </div>
+        )}
+        {/* Основной список — поколение подтверждено своими данными (код кузова
+            или годы внутри поколения, lib/carModelDictionary.ts). Блок
+            "Можуть підходити" — только модель, поколение не подтверждено */}
+        {confirmed ? (
+          <div className="mt-2 text-xs font-medium" style={{ color: TECH_GOOD }}>
+            ✓ Підходить для {title}
+          </div>
+        ) : (
+          <div className="mt-2 text-xs font-medium" style={{ color: TECH_MUTED }}>
+            ? Уточніть сумісність з {title}
+          </div>
+        )}
+      </div>
+    </Link>
   );
 }

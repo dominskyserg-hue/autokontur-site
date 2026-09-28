@@ -25,6 +25,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageCircleQuestion, X, Check } from 'lucide-react';
 import { decodeVin } from '@/lib/vinDecode';
 import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
+import { VIN_REQUEST_EVENT } from '@/lib/vinRequestEvent';
 import {
   TECH_SURFACE_2,
   TECH_BORDER,
@@ -71,6 +72,22 @@ export default function VinRequestButton() {
   useEffect(() => {
     const timer = window.setTimeout(() => setButtonVisible(true), 25_000);
     return () => window.clearTimeout(timer);
+  }, []);
+
+  // Открыть форму из любого места страницы с уже подставленным текстом
+  // (ссылка "Перевірити сумісність за VIN" на странице товара, кнопка на
+  // хабе модели — components/VinCheckTrigger.tsx):
+  //   window.dispatchEvent(new CustomEvent(VIN_REQUEST_EVENT, { detail: { description } }))
+  useEffect(() => {
+    const onOpen = (event: Event) => {
+      const text = (event as CustomEvent<{ description?: string }>).detail?.description ?? '';
+      setDescription(text);
+      setError(null);
+      setSubmitted(false);
+      setOpen(true);
+    };
+    window.addEventListener(VIN_REQUEST_EVENT, onOpen);
+    return () => window.removeEventListener(VIN_REQUEST_EVENT, onOpen);
   }, []);
 
   const close = useCallback(() => {
