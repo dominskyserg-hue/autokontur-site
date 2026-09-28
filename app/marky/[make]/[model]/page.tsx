@@ -2,7 +2,7 @@
 // ХАБ МОДЕЛІ АВТО — /marky/[make]/[model], напр. /marky/toyota/camry-xv40
 //
 // Опис хабів — вручну в lib/modelHubs.ts (точні записи TecDoc, текст),
-// дані — lib/modelHubData.ts (лише TecDoc-сумісність). Сторінка:
+// дані — lib/modelHubData.ts (своя применимость, product_vehicles_own). Сторінка:
 //   - H1 "Запчастини {Марка} {Модель} ({роки})" + текст 2–3 речення
 //   - блок категорій цієї моделі з кількістю товарів (спершу пріоритетні:
 //     гальма, фільтри, підвіска...), посилання — на вузьку сторінку
@@ -304,8 +304,8 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
                       Термін поставки: {product.deliveryTime}
                     </div>
                   )}
-                  {/* Сумісність за TecDoc: кожен товар хабу підходить саме
-                      для цього покоління (lib/modelHubData.ts) */}
+                  {/* Кожен товар хабу підходить саме для цього покоління —
+                      за своєю применимостью (lib/modelHubData.ts) */}
                   <div className="mt-2 text-xs font-medium" style={{ color: TECH_GOOD }}>
                     ✓ Підходить для {title}
                   </div>

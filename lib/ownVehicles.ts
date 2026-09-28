@@ -77,7 +77,7 @@ export function computeOwnVehicles(product: ProductInput, oemBrands: string[]): 
   }
 
   const nameModels = detectCarModels(product.name);
-  for (const m of nameModels) add({ make: m.make, model: m.model, generation: m.hubSlug, source: 'name' });
+  for (const m of nameModels) add({ make: m.make, model: m.model, generation: m.generation, source: 'name' });
   // Марка в названии без распознанной модели ("Фільтр масляний Toyota")
   if (nameModels.length === 0) {
     const make = makeSlugFromText(product.name);
@@ -86,7 +86,7 @@ export function computeOwnVehicles(product: ProductInput, oemBrands: string[]): 
 
   const priceMake = makeSlugFromText(product.carMake);
   const priceModels = detectCarModels(`${product.carMake ?? ''} ${product.carModel ?? ''}`);
-  for (const m of priceModels) add({ make: m.make, model: m.model, generation: m.hubSlug, source: 'price' });
+  for (const m of priceModels) add({ make: m.make, model: m.model, generation: m.generation, source: 'price' });
   if (priceMake && !priceModels.some((m) => m.make === priceMake)) {
     add({ make: priceMake, model: null, generation: null, source: 'price' });
   }
@@ -135,35 +135,47 @@ const INSERT_CHUNK = 20_000;
 // Пересчёт: всех активных товаров или одного поставщика. Запись разницы —
 // в одной транзакции, читатели не видят промежуточного состояния.
 // Строки неактивных товаров при полном пересчёте удаляются (их нет в wanted)
+export interface OwnVehicleRowsBatch {
+  products: number;
+  ids: string[];
+  makes: string[];
+  models: (string | null)[];
+  generations: (string | null)[];
+  sources: string[];
+}
+
+// Расчёт строк своей применимости БЕЗ записи — для пересчёта и для замеров
+// "что будет после включения" (scripts/vehicle-coverage/*)
+export async function computeOwnVehicleRows(db: Pool | PoolClient, scope: { supplierId?: string } = {}): Promise<OwnVehicleRowsBatch> {
+  const products = await db.query(
+    `SELECT id, brand, name, car_make, car_model FROM products
+      WHERE is_active ${scope.supplierId ? 'AND supplier_id = $1' : ''}`,
+    scope.supplierId ? [scope.supplierId] : []
+  );
+  const oem = await loadOemBrands(db, scope.supplierId);
+
+  const batch: OwnVehicleRowsBatch = { products: products.rows.length, ids: [], makes: [], models: [], generations: [], sources: [] };
+  for (const r of products.rows) {
+    const rows = computeOwnVehicles(
+      { id: r.id, brand: r.brand, name: r.name, carMake: r.car_make, carModel: r.car_model },
+      oem.get(r.id) ?? []
+    );
+    for (const row of rows) {
+      batch.ids.push(r.id);
+      batch.makes.push(row.make);
+      batch.models.push(row.model);
+      batch.generations.push(row.generation);
+      batch.sources.push(row.source);
+    }
+  }
+  return batch;
+}
+
 export async function rebuildOwnVehicles(pool: Pool, scope: { supplierId?: string } = {}): Promise<{ products: number; rows: number; added: number; removed: number; ms: number }> {
   const started = Date.now();
   const client = await pool.connect();
   try {
-    const products = await client.query(
-      `SELECT id, brand, name, car_make, car_model FROM products
-        WHERE is_active ${scope.supplierId ? 'AND supplier_id = $1' : ''}`,
-      scope.supplierId ? [scope.supplierId] : []
-    );
-    const oem = await loadOemBrands(client, scope.supplierId);
-
-    const ids: string[] = [];
-    const makes: string[] = [];
-    const models: (string | null)[] = [];
-    const generations: (string | null)[] = [];
-    const sources: string[] = [];
-    for (const r of products.rows) {
-      const rows = computeOwnVehicles(
-        { id: r.id, brand: r.brand, name: r.name, carMake: r.car_make, carModel: r.car_model },
-        oem.get(r.id) ?? []
-      );
-      for (const row of rows) {
-        ids.push(r.id);
-        makes.push(row.make);
-        models.push(row.model);
-        generations.push(row.generation);
-        sources.push(row.source);
-      }
-    }
+    const { products: productCount, ids, makes, models, generations, sources } = await computeOwnVehicleRows(client, scope);
 
     // Пишем только разницу со старыми строками: за ночь меняется малая часть,
     // а полная перезапись 290 тыс. строк занимала ~20 с из лимита функции 60 с
@@ -198,7 +210,7 @@ export async function rebuildOwnVehicles(pool: Pool, scope: { supplierId?: strin
       );
     }
     await client.query('COMMIT');
-    return { products: products.rows.length, rows: ids.length, added: fresh.length, removed: staleIds.length, ms: Date.now() - started };
+    return { products: productCount, rows: ids.length, added: fresh.length, removed: staleIds.length, ms: Date.now() - started };
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     throw error;

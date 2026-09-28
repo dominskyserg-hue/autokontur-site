@@ -28,6 +28,7 @@ import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
 import { findHubsForNarrowCategory, hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
+import { loadThinNarrowCategories, narrowRedirectTarget } from '@/lib/narrowCategoryStatus';
 import CategoryVehicleFilter from '@/components/CategoryVehicleFilter';
 import SiteHeaderServer from '@/components/SiteHeaderServer';
 import { getCarMakeBySlug } from '@/lib/carMakes';
@@ -367,6 +368,14 @@ export default async function CategoryPage({
 
   const category = getCategoryBySlug(slug);
   if (!category) notFound();
+
+  // Узкая страница "деталь + модель", в которой после перехода на свою
+  // применимость осталось меньше 5 деталей (lib/narrowCategoryStatus.ts) —
+  // постоянный редирект на родительскую (или широкую) категорию, не 404
+  if (category.tecdocVehicle) {
+    const thin = await loadThinNarrowCategories();
+    if (thin.has(slug)) permanentRedirect(narrowRedirectTarget(category));
+  }
 
   // Хаби моделі для вузької сторінки (за modelGroup), лише видимі (>= 30 товарів)
   const visibleHubs = category.modelGroup ? await loadVisibleHubs() : [];

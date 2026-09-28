@@ -1,11 +1,9 @@
 // ============================================================
 // Дані для хабів моделей (lib/modelHubs.ts, app/marky/[make]/[model]).
 //
-// Товари хабу — лише з TecDoc-сумісності: товар потрапляє в хаб, якщо в
-// tecdoc_compatibility є рядок з його brand+article і одним із
-// tecdocModels хабу. tc.make порівнюємо без UPPER — у TecDoc марки
-// записані великими літерами ('TOYOTA'), і так спрацьовує індекс
-// idx_tecdoc_compat_vehicle (make, model)
+// Товари хабу — зі своєї применимости (product_vehicles_own): деталь
+// потрапляє в хаб, якщо для неї визначено це покоління (див.
+// HUB_PRODUCTS_SQL нижче). До этапа C — з TecDoc-сумісності
 // ============================================================
 
 import { cache } from 'react';
@@ -66,12 +64,23 @@ export interface HubData {
   products: HubProduct[];
 }
 
+// Этап C перехода с TecDoc: состав хаба — из своей применимости
+// (product_vehicles_own, lib/ownVehicles.ts): деталь попадает в хаб, если
+// у неё определено это поколение (generation = slug хаба) — по коду кузова
+// или году в названии/прайсе. Берутся все предложения этой детали (бренд +
+// артикул), даже если поколение распознано только у одного поставщика.
+// $1 — slug марки, $2 — slug хаба
 const HUB_PRODUCTS_SQL = `
+  WITH parts AS (
+    SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
+    FROM product_vehicles_own pvo
+    JOIN products p1 ON p1.id = pvo.product_id AND p1.is_active = true
+    WHERE pvo.make = $1 AND pvo.generation = $2
+  )
   SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time, p.group_primary_id, p.is_refurbished
-  FROM tecdoc_compatibility tc
-  JOIN products p ON p.brand = tc.brand AND p.article = tc.article AND p.is_active = true
+  FROM parts
+  JOIN products p ON p.article = parts.article AND UPPER(COALESCE(p.brand, '')) = parts.brand AND p.is_active = true
   JOIN suppliers s ON s.id = p.supplier_id
-  WHERE tc.make = $1 AND tc.model = ANY($2::text[])
 `;
 
 function gridRank(product: HubProduct): number {
@@ -85,7 +94,7 @@ function gridRank(product: HubProduct): number {
 
 export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): Promise<HubData> {
   const [result, soldList] = await Promise.all([
-    pool.query(HUB_PRODUCTS_SQL, [hub.tecdocMake, hub.tecdocModels]),
+    pool.query(HUB_PRODUCTS_SQL, [hub.makeSlug, hub.slug]),
     getRecentlySoldProductIds(pool),
   ]);
   const soldIds = new Set(soldList);
@@ -186,7 +195,7 @@ export const loadHubProductCounts = cache(async function loadHubProductCounts():
       // Унікальні запчастини (бренд + артикул) — так само, як на самій сторінці
       const result = await pool.query(
         `SELECT COUNT(DISTINCT (UPPER(COALESCE(t.brand, '')), t.article))::int AS n FROM (${HUB_PRODUCTS_SQL}) t`,
-        [hub.tecdocMake, hub.tecdocModels]
+        [hub.makeSlug, hub.slug]
       );
       counts.set(`${hub.makeSlug}/${hub.slug}`, result.rows[0]?.n ?? 0);
     })
