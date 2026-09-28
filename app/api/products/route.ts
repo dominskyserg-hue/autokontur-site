@@ -164,18 +164,25 @@ interface ProductResponse {
 // только админским экранам (там точный путь)
 const COUNT_CAP = 10000;
 
+// Подбор по авто: условие "свои поля OR своя применимость OR TecDoc"
+// планировщик оценивает с ошибкой в десятки раз (Toyota: оценка 237 тыс.,
+// на деле 21 тыс.) — пагинация показывала бы тысячи пустых страниц.
+// Точный подсчёт таких выборок ~0,4 с, ответ кэшируется на 5 минут
+const VEHICLE_COUNT_CAP = 100000;
+
 async function estimateTotalCount(
   db: Pool,
   whereSql: string,
-  filterValues: unknown[]
+  filterValues: unknown[],
+  cap: number = COUNT_CAP
 ): Promise<{ count: number; approximate: boolean }> {
   const base = `FROM products p JOIN suppliers s ON s.id = p.supplier_id ${whereSql}`;
-  const capped = await db.query(`SELECT count(*)::int AS c FROM (SELECT 1 ${base} LIMIT ${COUNT_CAP + 1}) t`, filterValues);
+  const capped = await db.query(`SELECT count(*)::int AS c FROM (SELECT 1 ${base} LIMIT ${cap + 1}) t`, filterValues);
   const exact = capped.rows[0].c as number;
-  if (exact <= COUNT_CAP) return { count: exact, approximate: false };
+  if (exact <= cap) return { count: exact, approximate: false };
   const plan = await db.query(`EXPLAIN (FORMAT JSON) SELECT 1 ${base}`, filterValues);
   const estimate = Math.round(plan.rows[0]['QUERY PLAN'][0].Plan['Plan Rows']);
-  return { count: Math.max(estimate, COUNT_CAP + 1), approximate: true };
+  return { count: Math.max(estimate, cap + 1), approximate: true };
 }
 
 // Кэш ответов в памяти (на инстанс) для АНОНИМНЫХ запросов — главная
@@ -409,7 +416,7 @@ export async function GET(request: NextRequest) {
       `,
         values
       ),
-      useApproxCount ? estimateTotalCount(pool, whereSql, filterValues) : Promise.resolve(null),
+      useApproxCount ? estimateTotalCount(pool, whereSql, filterValues, carMake || carModel || carYear || engineVolume ? VEHICLE_COUNT_CAP : COUNT_CAP) : Promise.resolve(null),
     ]);
 
     // Если строк не нашлось (например, пустая база или поиск ничего
