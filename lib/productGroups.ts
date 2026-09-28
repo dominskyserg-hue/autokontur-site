@@ -212,7 +212,7 @@ export async function recomputeProductGroups(
       UPDATE products p SET group_primary_id = NULL, is_group_primary = true, group_offer_count = 1,
         group_best_offer_id = NULL, group_image_url = NULL, group_display_name = NULL, group_other_names = NULL,
         group_best_price = NULL, group_best_cost = NULL, group_best_discount = NULL, group_best_stock = NULL,
-        group_best_supplier_id = NULL, group_min_price = NULL, group_max_price = NULL, group_in_stock = NULL
+        group_best_supplier_id = NULL, group_best_refurbished = NULL, group_min_price = NULL, group_max_price = NULL, group_in_stock = NULL
       WHERE (p.group_primary_id IS NOT NULL OR p.is_group_primary = false)
         AND NOT EXISTS (SELECT 1 FROM tmp_groups t WHERE t.id = p.id)
         ${scope.supplierId ? 'AND (upper(p.brand), p.article) IN (SELECT upper(brand), article FROM products WHERE supplier_id = $1)' : ''}`,
@@ -262,7 +262,8 @@ export function groupedListSql(): { join: string; where: string; image: string; 
       COALESCE(p.group_best_price, p.retail_price) AS retail_price,
       COALESCE(p.group_best_discount, p.discount_percent) AS discount_percent,
       COALESCE(p.group_best_stock, p.stock) AS stock,
-      COALESCE(p.group_best_supplier_id, p.supplier_id) AS supplier_id) b`,
+      COALESCE(p.group_best_supplier_id, p.supplier_id) AS supplier_id,
+      COALESCE(p.group_best_refurbished, p.is_refurbished) AS is_refurbished) b`,
     where: 'p.is_group_primary',
     image: 'COALESCE(p.image_url, p.group_image_url)',
     // Самое подробное название группы (то же, что в H1 главной)

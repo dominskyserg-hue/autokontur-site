@@ -29,6 +29,7 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
+import RefurbishedBadge from '@/components/RefurbishedBadge';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import {
   TECH_BG,
@@ -273,9 +274,10 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
                   <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
                     {buildSeoProductName(product)}
                   </div>
-                  {product.stock > 0 && (
-                    <div className="mb-1.5">
-                      <StockBadge stock={product.stock} />
+                  {(product.stock > 0 || product.isRefurbished) && (
+                    <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                      {product.stock > 0 && <StockBadge stock={product.stock} />}
+                      {product.isRefurbished && <RefurbishedBadge />}
                     </div>
                   )}
                   <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />

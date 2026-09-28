@@ -24,6 +24,7 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { findAnyNarrowPageForVehicle } from '@/lib/categories';
 import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
+import RefurbishedBadge from '@/components/RefurbishedBadge';
 import FavoriteButton from '@/components/FavoriteButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
@@ -248,6 +249,7 @@ export default function ProductDetailContent({
               {formatMoney(product.retailPrice)} <span style={{ fontSize: 16, color: FAINT, fontFamily: BODY_FONT }}>грн</span>
             </span>
             <StockBadge stock={product.stock} />
+            {product.isRefurbished && <RefurbishedBadge />}
           </div>
 
           {/* "Термін поставки" тут — це термін, за який постачальник
@@ -456,6 +458,7 @@ export default function ProductDetailContent({
               >
                 <span>Пропозиція {index + 2}</span>
                 <span className="flex items-center gap-3">
+                  {offer.isRefurbished && <RefurbishedBadge />}
                   <StockBadge stock={offer.stock} />
                   <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>{formatMoney(offer.retailPrice)} грн</span>
                 </span>

@@ -64,6 +64,7 @@ import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
 import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
 import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
+import RefurbishedBadge from '@/components/RefurbishedBadge';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -94,6 +95,8 @@ interface Product {
   // (ссылка), offerId — лучшее предложение (корзина), offerCount — сколько предложений
   offerId?: string;
   offerCount?: number;
+  // Восстановленная / б/у деталь — бейдж "Відновлена"
+  isRefurbished?: boolean;
 }
 
 // В корзину кладём лучшее предложение группы, а не главную страницу
@@ -2382,6 +2385,11 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                               >
                                 {product.name || 'Без назви'}
                               </Link>
+                              {product.isRefurbished && (
+                                <span className="shrink-0">
+                                  <RefurbishedBadge />
+                                </span>
+                              )}
                             </div>
 
                             <div>
@@ -2491,6 +2499,11 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
                             <p className="text-sm font-medium leading-snug" style={{ color: TECH_INK }}>
                               {product.name || 'Без назви'}
                             </p>
+                            {product.isRefurbished && (
+                              <div className="mt-1.5">
+                                <RefurbishedBadge />
+                              </div>
+                            )}
                           </Link>
 
                           <div className="mt-auto flex items-center justify-between gap-2">

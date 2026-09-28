@@ -2616,17 +2616,24 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS group_min_price NUMERIC(12, 2);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS group_max_price NUMERIC(12, 2);
 ALTER TABLE products ADD COLUMN IF NOT EXISTS group_in_stock BOOLEAN;
 
+-- Лучшее предложение — восстановленная деталь (бейдж "Відновлена" в
+-- списках). Сам признак товара — products.is_refurbished, раздел
+-- "ВОССТАНОВЛЕННЫЕ И Б/У ДЕТАЛИ" ниже; колонка объявлена здесь, потому что
+-- её читает функция сразу под этим комментарием
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_refurbished BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS group_best_refurbished BOOLEAN;
+
 -- Пересчёт этих полей для указанных главных страниц. Лучшее предложение:
 -- в наличии и дешевле всех (нет в наличии ни у кого — просто дешевле всех)
 CREATE OR REPLACE FUNCTION refresh_product_group_offers(primary_ids UUID[]) RETURNS void AS $$
 BEGIN
   WITH m AS (
-    SELECT q.group_primary_id AS pid, q.id, q.retail_price, q.cost_price, q.discount_percent, q.stock, q.supplier_id
+    SELECT q.group_primary_id AS pid, q.id, q.retail_price, q.cost_price, q.discount_percent, q.stock, q.supplier_id, q.is_refurbished
     FROM products q
     WHERE q.group_primary_id = ANY(primary_ids) AND q.is_active
   ),
   best AS (
-    SELECT DISTINCT ON (pid) pid, id, retail_price, cost_price, discount_percent, stock, supplier_id
+    SELECT DISTINCT ON (pid) pid, id, retail_price, cost_price, discount_percent, stock, supplier_id, is_refurbished
     FROM m ORDER BY pid, (stock > 0) DESC, retail_price, id
   ),
   agg AS (
@@ -2640,6 +2647,7 @@ BEGIN
     group_best_discount = best.discount_percent,
     group_best_stock = best.stock,
     group_best_supplier_id = best.supplier_id,
+    group_best_refurbished = best.is_refurbished,
     group_min_price = agg.mn,
     group_max_price = agg.mx,
     group_in_stock = agg.ins,
@@ -2649,6 +2657,7 @@ BEGIN
     p.group_best_offer_id IS DISTINCT FROM best.id OR p.group_best_price IS DISTINCT FROM best.retail_price
     OR p.group_best_cost IS DISTINCT FROM best.cost_price OR p.group_best_discount IS DISTINCT FROM best.discount_percent
     OR p.group_best_stock IS DISTINCT FROM best.stock OR p.group_best_supplier_id IS DISTINCT FROM best.supplier_id
+    OR p.group_best_refurbished IS DISTINCT FROM best.is_refurbished
     OR p.group_min_price IS DISTINCT FROM agg.mn OR p.group_max_price IS DISTINCT FROM agg.mx
     OR p.group_in_stock IS DISTINCT FROM agg.ins OR p.group_offer_count IS DISTINCT FROM agg.cnt);
 END;
@@ -2709,3 +2718,44 @@ CREATE TABLE IF NOT EXISTS price_import_timings (
   followup_finished_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS idx_price_import_timings_created ON price_import_timings (created_at DESC);
+
+
+-- ============================================================
+-- ВОССТАНОВЛЕННЫЕ И Б/У ДЕТАЛИ (бейдж "Відновлена")
+-- ============================================================
+-- Часть поставщиков продаёт не новые детали: реставрированные стартеры и
+-- генераторы (PG1, K1K: "реставрація"), восстановленные рейки AGR,
+-- MSG Rebuilding, б/у разборку ("Б.У", "б/у", "вживана"). Покупатель должен
+-- это видеть сразу, поэтому у товара есть признак is_refurbished, а сайт
+-- показывает бейдж "Відновлена" в списках и на странице товара.
+--
+-- Признак считается по названию и бренду (прайсы других пометок не дают).
+-- Слова-признаки проверены на выборках из базы. Исключения — слова, где
+-- тот же корень означает другое: теплообмінник ("обмін"), відновлювач
+-- пластику, набір для відновлення різьби, реставратор фар.
+--
+-- Колонки is_refurbished и group_best_refurbished объявлены выше, в
+-- разделе групп (их читает refresh_product_group_offers)
+CREATE OR REPLACE FUNCTION product_is_refurbished(p_name TEXT, p_brand TEXT) RETURNS BOOLEAN AS $$
+  SELECT regexp_replace(
+           coalesce(p_name, '') || ' ' || coalesce(p_brand, ''),
+           '(теплообм\S*|відновлюв\S*|восстановител\S*|відновлення\s+(\S+\s+)?різьб\S*|восстановлени\S*\s+(\S+\s+)?резьб\S*|реставратор\S*|restorer)',
+           ' ', 'gi')
+         ~* '(rebuild|\mreman|remanufactur|восстановл|відновл|реставр|вживан|\mused\M|exchange|обм[іе]нн|(под|під)\s+(сдач|здач)|(^|[^а-яіїєa-z0-9])б\s*[/.]\s*у([^а-яіїєa-z0-9]|$))'
+$$ LANGUAGE sql IMMUTABLE;
+
+-- Признак пересчитывается сам при любом импорте и правке названия/бренда
+CREATE OR REPLACE FUNCTION products_set_refurbished() RETURNS trigger AS $$
+BEGIN
+  NEW.is_refurbished := product_is_refurbished(NEW.name, NEW.brand);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_products_set_refurbished ON products;
+CREATE TRIGGER trg_products_set_refurbished
+  BEFORE INSERT OR UPDATE OF name, brand ON products
+  FOR EACH ROW EXECUTE FUNCTION products_set_refurbished();
+
+-- Заполнение для уже загруженных товаров — scripts/mark-refurbished.ts
+-- (пачками, затем пересчёт полей лучшего предложения групп)

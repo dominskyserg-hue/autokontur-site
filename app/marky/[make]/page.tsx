@@ -26,6 +26,7 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
+import RefurbishedBadge from '@/components/RefurbishedBadge';
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
@@ -89,6 +90,8 @@ interface MakeProduct {
   // offerId — лучшее предложение (цена, наличие, "Купити"), offerCount — сколько предложений
   offerId: string;
   offerCount: number;
+  // Лучшее предложение — восстановленная деталь (бейдж "Відновлена")
+  isRefurbished: boolean;
 }
 
 // Той самий вибір сортування, що й на app/category/[slug]/page.tsx
@@ -123,7 +126,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
     pool.query(
       `
       SELECT p.id, p.article, p.brand, ${g.name} AS name, b.id AS offer_id, ${g.offerCount} AS offer_count,
-             b.cost_price, b.retail_price, b.stock, ${g.image} AS image_url, s.delivery_time
+             b.cost_price, b.retail_price, b.stock, b.is_refurbished, ${g.image} AS image_url, s.delivery_time
       FROM products p
       ${g.join}
       JOIN suppliers s ON s.id = b.supplier_id
@@ -148,6 +151,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
     imageUrl: row.image_url,
     offerId: row.offer_id,
     offerCount: row.offer_count,
+    isRefurbished: row.is_refurbished,
   }));
 
   return { products, total: countResult.rows[0]?.total ?? 0 };
@@ -420,9 +424,10 @@ export default async function CarMakePage({
                     <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
                       {product.name || `Деталь для ${make.name}`}
                     </div>
-                    {product.stock > 0 && (
-                      <div className="mb-1.5">
-                        <StockBadge stock={product.stock} />
+                    {(product.stock > 0 || product.isRefurbished) && (
+                      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                        {product.stock > 0 && <StockBadge stock={product.stock} />}
+                        {product.isRefurbished && <RefurbishedBadge />}
                       </div>
                     )}
                     <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />

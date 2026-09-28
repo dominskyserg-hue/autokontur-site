@@ -149,6 +149,8 @@ interface ProductResponse {
   // лучшее предложение группы (кнопка "Купити") и сколько предложений всего
   offerId?: string;
   offerCount?: number;
+  // Лучшее предложение — восстановленная / б/у деталь (бейдж "Відновлена")
+  isRefurbished: boolean;
   updatedAt: string;
 }
 
@@ -437,6 +439,7 @@ export async function GET(request: NextRequest) {
         b.retail_price,
         b.discount_percent,
         b.stock,
+        b.is_refurbished,
         b.supplier_id,
         s.name AS supplier_name,
         s.delivery_time,
@@ -481,6 +484,7 @@ export async function GET(request: NextRequest) {
       retailPrice: computeCustomerPrice(parseFloat(row.cost_price), parseFloat(row.retail_price), customerPricingRule),
       discountPercent: parseFloat(row.discount_percent),
       stock: row.stock,
+      isRefurbished: row.is_refurbished,
       ...(isAdmin ? { supplierId: row.supplier_id, supplierName: row.supplier_name } : {}),
       deliveryTime: row.delivery_time,
       updatedAt: row.updated_at,

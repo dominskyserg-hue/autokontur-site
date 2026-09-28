@@ -32,6 +32,10 @@ export interface SchemaProduct {
   // реально є — вигадувати їх, коли даних нема, ми НЕ будемо
   imageUrl?: string | null;
   description?: string | null;
+  // Признак из базы (products.is_refurbished, бейдж "Відновлена") — точнее,
+  // чем проверка названия ниже: ловит и бренд (MSG Rebuilding, "Б.У"), и
+  // "Original Reman". Где его не передали — проверяется название
+  isRefurbished?: boolean;
   // Явний canonical URL товару — якщо переданий, використовується
   // ЗАМІСТЬ автоматичного пересчёту через buildProductPath(id, {brand,
   // name, article}). Потрібен сторінці ОДНОГО товару
@@ -54,6 +58,11 @@ export interface SchemaProduct {
 // позначаємо itemCondition — інакше Google Merchant може порахувати
 // це вводом покупця в оману й понизити довіру до всього фіда
 const REFURBISHED_PATTERN = /реставрац|відновлен|восстановлен|б\/у/i;
+
+function itemCondition(product: SchemaProduct): string {
+  const refurbished = product.isRefurbished ?? REFURBISHED_PATTERN.test(product.name || '');
+  return refurbished ? 'https://schema.org/RefurbishedCondition' : 'https://schema.org/NewCondition';
+}
 
 function productUrl(product: SchemaProduct): string {
   return product.url ?? `${SITE_URL}${buildProductPath(product.id, product)}`;
@@ -119,9 +128,7 @@ export function productJsonLd(product: SchemaProduct) {
           highPrice: Math.ceil(product.aggregateOffer.highPrice),
           offerCount: product.aggregateOffer.offerCount,
           availability: product.aggregateOffer.inStock ? 'https://schema.org/InStock' : 'https://schema.org/BackOrder',
-          itemCondition: REFURBISHED_PATTERN.test(product.name || '')
-            ? 'https://schema.org/RefurbishedCondition'
-            : 'https://schema.org/NewCondition',
+          itemCondition: itemCondition(product),
         }
       : {
       '@type': 'Offer',
@@ -134,9 +141,7 @@ export function productJsonLd(product: SchemaProduct) {
       // "невідповідність ціни"
       price: Math.ceil(product.retailPrice),
       availability: product.stock > 0 ? 'https://schema.org/InStock' : 'https://schema.org/BackOrder',
-      itemCondition: REFURBISHED_PATTERN.test(product.name || '')
-        ? 'https://schema.org/RefurbishedCondition'
-        : 'https://schema.org/NewCondition',
+      itemCondition: itemCondition(product),
       priceValidUntil: priceValidUntil(),
       hasMerchantReturnPolicy: RETURN_POLICY,
     },

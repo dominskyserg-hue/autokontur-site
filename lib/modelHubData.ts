@@ -49,6 +49,8 @@ export interface HubProduct {
   pageId: string;
   offerCount: number;
   groupPrimaryId: string | null;
+  // Восстановленная / б/у деталь (бейдж "Відновлена")
+  isRefurbished: boolean;
 }
 
 export interface HubCategoryCount {
@@ -65,7 +67,7 @@ export interface HubData {
 }
 
 const HUB_PRODUCTS_SQL = `
-  SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time, p.group_primary_id
+  SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time, p.group_primary_id, p.is_refurbished
   FROM tecdoc_compatibility tc
   JOIN products p ON p.brand = tc.brand AND p.article = tc.article AND p.is_active = true
   JOIN suppliers s ON s.id = p.supplier_id
@@ -100,6 +102,7 @@ export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): P
     pageId: row.id,
     offerCount: 1,
     groupPrimaryId: row.group_primary_id,
+    isRefurbished: row.is_refurbished,
   }));
 
   // Той самий товар (бренд + артикул) часто є в кількох постачальників —

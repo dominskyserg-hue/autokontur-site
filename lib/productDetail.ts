@@ -523,6 +523,8 @@ export interface ProductDetail {
   hasGroupOffers: boolean;
   // Самая низкая цена в группе (без персональных цен) — "Ціна від X грн" в описании
   groupMinPrice: number | null;
+  // Восстановленная / б/у деталь — бейдж "Відновлена" (products.is_refurbished)
+  isRefurbished: boolean;
 }
 
 // Одне ДОДАТКОВЕ фото галереї товару (не плутати з product.imageUrl —
@@ -545,6 +547,7 @@ export interface OtherOffer {
   id: string;
   retailPrice: number;
   stock: number;
+  isRefurbished: boolean;
 }
 
 export interface CrossRefItem {
@@ -592,7 +595,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
   await ensureUkrainianCorpusFresh(pool);
   const result = await pool.query(
     `
-    SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url,
+    SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, p.is_refurbished,
            p.meta_description, p.meta_description_override, p.car_make, p.car_model, p.updated_at,
            s.name AS supplier_name, s.delivery_time,
            p.is_group_primary, p.group_offer_count, p.group_display_name, p.group_other_names, p.group_min_price,
@@ -647,6 +650,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     supplierName: row.supplier_name,
     deliveryTime: row.delivery_time,
     updatedAt: row.updated_at,
+    isRefurbished: row.is_refurbished,
   };
 });
 
@@ -673,7 +677,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
 ): Promise<OtherOfferRaw[]> {
   const result = await pool.query(
     `
-    SELECT p2.id, p2.cost_price, p2.retail_price, p2.stock, s2.name AS supplier_name
+    SELECT p2.id, p2.cost_price, p2.retail_price, p2.stock, p2.is_refurbished, s2.name AS supplier_name
     FROM products p2
     JOIN suppliers s2 ON s2.id = p2.supplier_id
     WHERE p2.article = $1
@@ -691,6 +695,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
     costPrice: parseFloat(row.cost_price),
     retailPrice: parseFloat(row.retail_price),
     stock: row.stock,
+    isRefurbished: row.is_refurbished,
     supplierName: row.supplier_name,
   }));
 });
@@ -1068,11 +1073,13 @@ export async function loadProductPageData(
     alsoKnownAs: product.alsoKnownAs,
     hasGroupOffers: product.hasGroupOffers,
     groupMinPrice: product.groupMinPrice,
+    isRefurbished: product.isRefurbished,
   };
   const otherOffers: OtherOffer[] = rawOtherOffers.map((offer) => ({
     id: offer.id,
     retailPrice: computeCustomerPrice(offer.costPrice, offer.retailPrice, customerPricingRule),
     stock: offer.stock,
+    isRefurbished: offer.isRefurbished,
   }));
   const toPublicCrossRef = (item: CrossRefItemRaw): CrossRefItem => ({
     brand: item.brand,

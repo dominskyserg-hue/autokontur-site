@@ -41,6 +41,7 @@ import CardBuyButton from '@/components/CardBuyButton';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import OfferCountNote from '@/components/OfferCountNote';
+import RefurbishedBadge from '@/components/RefurbishedBadge';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -104,6 +105,8 @@ interface CategoryProduct {
   // кнопка "Купити"), offerCount — сколько предложений в группе
   offerId: string;
   offerCount: number;
+  // Лучшее предложение — восстановленная деталь (бейдж "Відновлена")
+  isRefurbished: boolean;
 }
 
 // cache() від React дедуплікує виклик У МЕЖАХ ОДНОГО HTTP-запиту —
@@ -186,7 +189,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
       `
       ${categoryCte}
       SELECT p.id, p.article, p.brand, ${g.name} AS name, b.id AS offer_id, ${g.offerCount} AS offer_count,
-             b.cost_price, b.retail_price, b.discount_percent, b.stock, ${g.image} AS image_url, s.delivery_time
+             b.cost_price, b.retail_price, b.discount_percent, b.stock, b.is_refurbished, ${g.image} AS image_url, s.delivery_time
       FROM cat
       JOIN products p ON p.id = cat.product_id
       ${g.join}
@@ -216,6 +219,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
     imageUrl: row.image_url,
     offerId: row.offer_id,
     offerCount: row.offer_count,
+    isRefurbished: row.is_refurbished,
   }));
 
   return { products, total: countResult.rows[0]?.total ?? 0 };
@@ -609,9 +613,10 @@ export default async function CategoryPage({
                     <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
                       {product.name || category.name}
                     </div>
-                    {product.stock > 0 && (
-                      <div className="mb-1.5">
-                        <StockBadge stock={product.stock} />
+                    {(product.stock > 0 || product.isRefurbished) && (
+                      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                        {product.stock > 0 && <StockBadge stock={product.stock} />}
+                        {product.isRefurbished && <RefurbishedBadge />}
                       </div>
                     )}
                     <OfferCountNote count={product.offerCount} fromPrice={formatMoney(product.retailPrice)} />
