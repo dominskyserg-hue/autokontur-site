@@ -1,32 +1,41 @@
 // ============================================================
-// Сопоставление строк tecdoc_crosses с товаром по БРЕНДУ + артикулу.
+// Проверка бренда для строк tecdoc_crosses (кроссы и OEM-номера).
 //
-// Раньше блок "Аналоги" на странице товара брал все строки с тем же
-// артикулом (article_a), не глядя на бренд. Короткие и "круглые" номера
-// встречаются у разных производителей, и товару доставались чужие
-// аналоги: наш CARGO 12345 получал кроссы детали ELSTOCK 12345.
+// Раньше кроссы брались по одному артикулу, без бренда. Короткие и
+// "круглые" номера встречаются у разных производителей, и товару
+// доставались чужие аналоги: наш CARGO 12345 получал кроссы детали
+// ELSTOCK 12345. Теперь сторона строки (бренд + артикул) "принадлежит"
+// товару, только если:
+//   1) бренд строки и бренд товара — один производитель. Бренд сводится
+//      к ключу группы (crossBrandGroup): нормализация (регистр, пробелы,
+//      точки, умлауты: "LEMFÖRDER" = "Lemforder"), разные написания
+//      одной компании и группы компаний (MANUFACTURER_GROUPS ниже) и
+//      "родня" брендов из lib/brandFamilies.ts (VAG <-> VW, MOBIS <-> KIA);
+//   2) или бренд строки неизвестен ('OEM/аналог' — номер из прайса без
+//      бренда), и при этом номер длинный (от 8 символов: случайное
+//      совпадение такого номера у разных деталей маловероятно) или товар
+//      оригинальный (бренд — автопроизводитель: номер без бренда в
+//      его строке и есть OEM-номер этого производителя).
 //
-// Теперь строка подходит, только если её бренд (brand_a) — это:
-//   1) тот же бренд после нормализации (регистр, пробелы, точки,
-//      умлауты: "LEMFÖRDER" = "Lemforder");
-//   2) тот же производитель в другом написании (SPELLING_GROUPS ниже —
-//      пары взяты из реальных несовпадений в базе);
-//   3) одобренная "родня" брендов из lib/brandFamilies.ts
-//      (VAG <-> VW, MOBIS <-> HYUNDAI...);
-//   4) для ОРИГИНАЛЬНЫХ запчастей (бренд — автопроизводитель) — ещё и
-//      номера из прайсов с неизвестным брендом ('OEM/аналог'): это
-//      OEM-номер, а его производитель и есть бренд нашего товара.
+// Используется в трёх местах одним и тем же SQL:
+//   - блок "Аналоги" на странице товара (lib/productDetail.ts);
+//   - поиск по номеру (lib/productSearch.ts);
+//   - разметка tecdoc_crosses.is_valid (scripts/tecdoc/mark-invalid-crosses.ts).
 //
-// Ключ бренда в JS (crossBrandKey) и в SQL (crossBrandKeySql) считается
+// Ключ в JS (crossBrandKey) и в SQL (crossBrandKeySql) считается
 // ОДИНАКОВО — иначе фильтр молча перестанет совпадать
 // ============================================================
 
 import { CAR_MAKES } from '@/lib/carMakes';
-import { sameFamilyKeys } from '@/lib/brandFamilies';
+import { ALLOWED_PAIRS } from '@/lib/brandFamilies';
 
 // Метка скриптов импорта из прайсов для номера без известного бренда
 // (scripts/tecdoc/import-*-crosses.ts, CROSS_BRAND_LABEL)
-const PRICE_LABEL = 'OEM/аналог';
+export const PRICE_LABEL = 'OEM/аналог';
+
+// Номер без бренда засчитывается, если он не короче этого (артикулы в
+// tecdoc_crosses уже очищены: без пробелов, точек, дефисов)
+export const UNBRANDED_MIN_LENGTH = 8;
 
 const UMLAUTS_FROM = 'ÄÖÜäöüÉÈéèß';
 const UMLAUTS_TO = 'AOUaoueEeeS';
@@ -39,49 +48,100 @@ export function crossBrandKey(brand: string | null | undefined): string {
   return value.replace(/[^A-Za-z0-9А-Яа-я]/g, '').toUpperCase();
 }
 
-// Тот же ключ в SQL для колонки column
-export function crossBrandKeySql(column: string): string {
-  return `upper(regexp_replace(translate(${column}, '${UMLAUTS_FROM}', '${UMLAUTS_TO}'), '[^A-Za-z0-9А-Яа-я]', '', 'g'))`;
+// Тот же ключ в SQL для выражения expr
+export function crossBrandKeySql(expr: string): string {
+  return `upper(regexp_replace(translate(${expr}, '${UMLAUTS_FROM}', '${UMLAUTS_TO}'), '[^A-Za-z0-9А-Яа-я]', '', 'g'))`;
 }
 
-// Один производитель — разные написания (ключи уже нормализованы)
-const SPELLING_GROUPS: string[][] = [
+// Один производитель под разными именами (ключи уже нормализованы).
+// Первый ключ в группе — её имя. Пары взяты из реальных несовпадений
+// бренда на одном артикуле в базе либо это известные группы компаний
+const MANUFACTURER_GROUPS: string[][] = [
+  // Разные написания одного бренда
   ['AUTOFREN', 'AUTOFRENSEINSA'],
   ['WAI', 'WAIGLOBAL'],
   ['CARGO', 'HCCARGO'],
-  ['VICTORREINZ', 'REINZ'],
-  ['MAHLE', 'MAHLEORIGINAL', 'KNECHT'],
-  ['FISCHER', 'FA1'],
+  ['ASPL', 'AS'],
   ['FEBI', 'FEBIBILSTEIN'],
-  ['TOYOTALEXUS', 'TOYOTA', 'LEXUS'],
-  ['HYUNDAIKIA', 'HYUNDAI', 'KIA', 'MOBIS'],
-  ['NISSANINFINITI', 'NISSAN', 'INFINITI'],
+  ['MANN', 'MANNFILTER'],
+  ['WIX', 'WIXFILTERS'],
+  ['VICTORREINZ', 'VICTREINZ', 'REINZ'],
+  ['RIKEN', 'RIK'],
+  ['GOETZE', 'GOETZEENGINE'],
+  ['PRESTOLITE', 'PRESTOLITEELECTRIC'],
+  ['NIPPONMOTORS', 'NIPPON'],
+  ['AVA', 'AVAQUALITYCOOLING'],
+  ['VALEO', 'VALEOPHC'],
+  ['HELLA', 'HELLAPAGID'],
+  ['FISCHER', 'FA1'],
+  // Группы компаний: одна нумерация деталей под несколькими марками
+  ['MAHLE', 'MAHLEORIGINAL', 'MAHLEFILTER', 'KNECHT', 'MAHLEKNECHT', 'KNECHTMAHLE'],
+  ['CONTINENTAL', 'CONTINENTALCTAM', 'CONTITECH'],
+  ['SCHAEFFLER', 'SCHAEFFLERGRUPPE', 'INA', 'LUK', 'FAG'],
+  ['ZF', 'ZFPARTS', 'LEMFORDER', 'SACHS', 'TRW', 'TRWAUTOMOTIVE'],
+  ['JAPANPARTS', 'ASHIKA'],
+  ['NTN', 'SNR', 'NTNSNR'],
+  // Оригинальные запчасти: одна нумерация у марок одного концерна
+  ['TOYOTA', 'TOYOTALEXUS', 'LEXUS'],
+  ['HYUNDAI', 'HYUNDAIKIA', 'KIA', 'MOBIS'],
+  ['NISSAN', 'NISSANINFINITI', 'INFINITI'],
+  ['HONDA', 'HONDAACURA', 'ACURA'],
+  ['MERCEDESBENZ', 'MERCEDES'],
+  ['PEUGEOTCITROEN', 'PEUGEOT', 'CITROEN'],
 ];
 
-// Бренды оригинальных запчастей: автопроизводители из lib/carMakes.ts
-// и оригинальные "подбренды" поставщиков
-const OEM_BRAND_KEYS = new Set<string>([
-  ...CAR_MAKES.flatMap((make) => make.dbValues.map(crossBrandKey)),
-  'VAG',
-  'MOBIS',
-  'TOYOTALEXUS',
-  'HYUNDAIKIA',
-  'NISSANINFINITI',
-  'GM',
-  'MOTORCRAFT',
-]);
-
-// Все ключи brand_a, которые считаются "тем же брендом", что и brand
-export function crossBrandKeys(brand: string | null | undefined): string[] {
-  const key = crossBrandKey(brand);
-  if (!key) return [];
-
-  const keys = new Set<string>([key]);
-  for (const group of SPELLING_GROUPS) {
-    if (group.includes(key)) group.forEach((k) => keys.add(k));
+// Ключ -> имя группы. Группы и пары "родни" объединяются транзитивно
+// (VW - VAG - AUDI -> одна группа)
+const GROUP_OF = new Map<string, string>();
+{
+  const parent = new Map<string, string>();
+  const find = (k: string): string => {
+    while (parent.has(k) && parent.get(k) !== k) k = parent.get(k)!;
+    return k;
+  };
+  const union = (a: string, b: string) => {
+    if (!parent.has(a)) parent.set(a, a);
+    if (!parent.has(b)) parent.set(b, b);
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(rb, ra);
+  };
+  for (const group of MANUFACTURER_GROUPS) group.forEach((k) => union(group[0], k));
+  for (const [a, b] of ALLOWED_PAIRS) union(crossBrandKey(a), crossBrandKey(b));
+  for (const k of parent.keys()) {
+    const root = find(k);
+    if (root !== k) GROUP_OF.set(k, root);
   }
-  for (const k of [...keys]) sameFamilyKeys(k).forEach((f) => keys.add(f));
+}
 
-  if ([...keys].some((k) => OEM_BRAND_KEYS.has(k))) keys.add(crossBrandKey(PRICE_LABEL));
-  return [...keys];
+export function crossBrandGroup(brand: string | null | undefined): string {
+  const key = crossBrandKey(brand);
+  return GROUP_OF.get(key) ?? key;
+}
+
+// Тот же ключ группы в SQL. Ключи содержат только [A-Z0-9А-Я], поэтому
+// их безопасно подставлять в текст запроса литералами
+export function crossBrandGroupSql(expr: string): string {
+  const whens = [...GROUP_OF].map(([k, g]) => `WHEN '${k}' THEN '${g}'`).join(' ');
+  return `(CASE ${crossBrandKeySql(expr)} ${whens} ELSE ${crossBrandKeySql(expr)} END)`;
+}
+
+// Группы оригинальных запчастей: автопроизводители из lib/carMakes.ts
+// и оригинальные "подбренды" поставщиков
+const OEM_GROUPS: string[] = [
+  ...new Set(
+    [...CAR_MAKES.flatMap((make) => make.dbValues), 'VAG', 'MOBIS', 'GM', 'MOTORCRAFT'].map(crossBrandGroup)
+  ),
+];
+
+// SQL-условие: сторона строки кросса (rowBrand, rowArticle) относится к
+// товару с брендом productBrand (правила 1 и 2 из шапки файла)
+export function crossSideMatchesSql(rowBrand: string, rowArticle: string, productBrand: string): string {
+  const productGroup = crossBrandGroupSql(productBrand);
+  const oemList = OEM_GROUPS.map((g) => `'${g}'`).join(', ');
+  return `(
+    ${crossBrandGroupSql(rowBrand)} = ${productGroup}
+    OR (${rowBrand} = '${PRICE_LABEL}'
+        AND (LENGTH(${rowArticle}) >= ${UNBRANDED_MIN_LENGTH} OR ${productGroup} IN (${oemList})))
+  )`;
 }

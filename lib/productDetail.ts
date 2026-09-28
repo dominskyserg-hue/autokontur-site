@@ -23,7 +23,7 @@ import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { loadBreadcrumbCategories } from '@/lib/productCategoryLookup';
 import { buildDisplayProductNameDetailed } from '@/lib/productNameTranslation';
 import { brandsAreSameFamily } from '@/lib/brandFamilies';
-import { crossBrandKeys, crossBrandKeySql } from '@/lib/crossBrandMatch';
+import { crossSideMatchesSql } from '@/lib/crossBrandMatch';
 import { ensureUkrainianCorpusFresh } from '@/lib/ukrainianCorpus';
 import { findHubForTecdocModel, hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
@@ -835,14 +835,15 @@ const TECDOC_COMPATIBILITY_LIMIT = 20;
 type TecdocCrossItemRaw = TecdocCrossItem & { costPrice: number | null };
 
 // brand — бренд самого товара: строки кроссов берутся только того же
-// производителя (lib/crossBrandMatch.ts), иначе совпадение одного
-// артикула у разных брендов давало чужие аналоги
+// производителя или длинные номера без бренда (lib/crossBrandMatch.ts),
+// иначе совпадение одного артикула у разных брендов давало чужие аналоги.
+// is_valid = false — строки, заранее помеченные как ложные
+// (scripts/tecdoc/mark-invalid-crosses.ts)
 const loadTecdocCrosses = cache(async function loadTecdocCrosses(
   article: string,
   brand: string | null
 ): Promise<TecdocCrossItemRaw[]> {
-  const brandKeys = crossBrandKeys(brand);
-  if (brandKeys.length === 0) return [];
+  if (!brand) return [];
 
   const result = await pool.query(
     `
@@ -864,7 +865,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(
       -- 1 у всій таблиці на момент імпорту) — жоден справжній
       -- OEM/крос-номер настільки коротким не буває
       WHERE article_a = $1 AND article_b <> $1 AND LENGTH(article_b) >= 3
-        AND ${crossBrandKeySql('brand_a')} = ANY($2::text[])
+        AND is_valid AND ${crossSideMatchesSql('brand_a', 'article_a', '$2::text')}
     ) tc
     LEFT JOIN LATERAL (
       SELECT id, brand, article, name, cost_price, retail_price, stock
@@ -878,7 +879,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(
     ORDER BY (p.id IS NOT NULL) DESC, tc.brand_b, tc.article_b
     LIMIT ${TECDOC_CROSSES_LIMIT}
     `,
-    [article, brandKeys]
+    [article, brand]
   );
 
   return result.rows.map((row) => ({

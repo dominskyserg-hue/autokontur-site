@@ -116,6 +116,15 @@ CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (artic
 -- Константный DEFAULT не переписывает таблицу — ALTER выполняется мгновенно
 ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'unknown';
 
+-- false — строка признана ложной и нигде не используется (сайт фильтрует
+-- AND is_valid). Строки не удаляются, чтобы решение можно было пересмотреть.
+-- Сейчас так помечены строки tecdoc_2016, у которых НИ ОДНА сторона
+-- (бренд + артикул) не относится к товару нашего каталога по правилу
+-- бренда из lib/crossBrandMatch.ts: старый импорт сопоставлял дамп с
+-- каталогом только по артикулу. Разметка —
+-- scripts/tecdoc/mark-invalid-crosses.ts (повторный запуск пересчитывает)
+ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS is_valid BOOLEAN NOT NULL DEFAULT true;
+
 
 -- ------------------------------------------------------------
 -- Застосовність до автомобілів: "бренд+артикул" <-> модифікація авто

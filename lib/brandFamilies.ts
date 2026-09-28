@@ -13,26 +13,14 @@ export function normalizeBrandKey(brand: string | null | undefined): string {
   return (brand ?? '').toUpperCase().replace(/[^A-Z0-9А-Я]/g, '');
 }
 
-const ALLOWED_PAIRS: ReadonlyArray<readonly [string, string]> = [
+// Экспортируется для lib/crossBrandMatch.ts — там пары объединяются в группы
+export const ALLOWED_PAIRS: ReadonlyArray<readonly [string, string]> = [
   ['HYUNDAI', 'MOBIS'], ['KIA', 'MOBIS'],
   ['VAG', 'VW'], ['VAG', 'VOLKSWAGEN'], ['VAG', 'AUDI'], ['VAG', 'SKODA'], ['VAG', 'SEAT'],
   ['GM', 'ACDELCO'], ['FORD', 'MOTORCRAFT'], ['TOYOTA', 'LEXUS'], ['NISSAN', 'INFINITI'],
 ];
 
 const PAIR_SET: ReadonlySet<string> = new Set(ALLOWED_PAIRS.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
-
-// Все ключи брендов той же "родины" (включая сам бренд) — для SQL-фильтра
-// "бренд строки входит в список" (lib/crossBrandMatch.ts)
-export function sameFamilyKeys(brand: string | null | undefined): string[] {
-  const key = normalizeBrandKey(brand);
-  if (!key) return [];
-  const keys = new Set([key]);
-  for (const [a, b] of ALLOWED_PAIRS) {
-    if (a === key) keys.add(b);
-    if (b === key) keys.add(a);
-  }
-  return [...keys];
-}
 
 export function brandsAreSameFamily(a: string | null | undefined, b: string | null | undefined): boolean {
   const keyA = normalizeBrandKey(a);

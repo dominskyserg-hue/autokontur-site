@@ -16,6 +16,7 @@ import type { Pool } from 'pg';
 import { loadSynonymDictionary, expandSearchQuery, buildSynonymWhereClause } from './searchSynonyms';
 import { detectCategoryInText, buildCategoryWhereClause } from './categories';
 import { extractCarReference } from './searchCarText';
+import { crossSideMatchesSql } from './crossBrandMatch';
 
 // Та сама функція, що й у app/api/suppliers/parse-excel/route.ts —
 // нею чистяться артикули ПЕРЕД збереженням у базу, тому пошуковий
@@ -69,10 +70,15 @@ export async function buildTextSearchClause(
        FROM cross_reference_members mine
        JOIN cross_reference_members other ON other.group_id = mine.group_id
        WHERE mine.product_id IS NOT NULL AND other.part_number ILIKE ${articlePlaceholder}`,
+    // Номер покупателя может совпасть с любым кроссом, но товар
+    // показывается, только если кросс "принадлежит" этому товару: бренд
+    // строки — тот же производитель или это длинный номер без бренда
+    // (то же правило, что в блоке "Аналоги", lib/crossBrandMatch.ts)
     `SELECT p.id
        FROM tecdoc_crosses tc
        JOIN products p ON p.article = tc.article_b
-       WHERE tc.article_a = ${exactArticlePlaceholder}`,
+       WHERE tc.article_a = ${exactArticlePlaceholder} AND tc.is_valid
+         AND ${crossSideMatchesSql('tc.brand_b', 'tc.article_b', 'p.brand')}`,
   ];
 
   const dictionary = await loadSynonymDictionary(pool);
