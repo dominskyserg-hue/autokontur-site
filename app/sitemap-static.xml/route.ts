@@ -9,6 +9,7 @@
 // ============================================================
 
 import { CATEGORIES } from '@/lib/categories';
+import { loadThinNarrowCategories } from '@/lib/narrowCategoryStatus';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
@@ -46,7 +47,10 @@ export async function GET() {
   // без товару, її сторінка сама позначиться noindex (див.
   // generateMetadata у відповідних page.tsx) — присутність у sitemap
   // цьому не заважає, Google просто не проіндексує таку сторінку
-  const categoryPages: SitemapUrlEntry[] = CATEGORIES.map((c) => ({
+  // Узкие страницы "деталь + модель" с менее чем 5 деталями отдают 301 на
+  // родительскую (lib/narrowCategoryStatus.ts) — в sitemap их нет
+  const thinNarrow = await loadThinNarrowCategories();
+  const categoryPages: SitemapUrlEntry[] = CATEGORIES.filter((c) => !thinNarrow.has(c.slug)).map((c) => ({
     loc: `${SITE_URL}/category/${c.slug}`,
     lastmod: today,
     changefreq: 'daily',

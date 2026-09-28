@@ -241,7 +241,7 @@ log(`### Выборка 30 случайных (для проверки точн�
 log(`| # | Товар | car_model | Распознано |`);
 log(`|---:|---|---|---|`);
 sample.forEach((p, i) => {
-  const models = own.get(p.id)!.models.map((m) => `${MAKE_NAME.get(m.make) ?? m.make} ${m.model}${m.hubSlug ? ` [${m.hubSlug}]` : ''}`);
+  const models = own.get(p.id)!.models.map((m) => `${MAKE_NAME.get(m.make) ?? m.make} ${m.model}${m.generation ? ` [${m.generation}]` : ''}`);
   log(`| ${i + 1} | ${p.brand ?? ''} ${p.article} — ${(p.name ?? '').replace(/\|/g, '/').slice(0, 90)} | ${(p.carModel ?? '').replace(/\|/g, '/').slice(0, 30)} | ${[...new Set(models)].join('; ')} |`);
 });
 log('');
@@ -266,7 +266,7 @@ for (const hub of MODEL_HUBS) {
   for (const p of products) {
     const models = own.get(p.id)?.models ?? [];
     const key = partKey(p.brand, p.article);
-    if (models.some((m) => m.hubSlug === hub.slug)) {
+    if (models.some((m) => m.generation === hub.slug)) {
       const prev = ownParts.get(key);
       if (!prev || (p.stock > 0 && prev.stock <= 0)) ownParts.set(key, p);
     } else if (models.some((m) => m.make === hub.makeSlug && m.generationUnknown && hubModelOf(hub) === m.model)) {

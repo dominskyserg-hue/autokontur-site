@@ -299,9 +299,12 @@ interface StorefrontHomeProps {
   // вимога) — щоб компонент не падав, якщо колись викликатиметься без
   // серверних даних
   initialSettings?: InitialSiteSettings | null;
+  // Узкие категории, отдающие 301 (lib/narrowCategoryStatus.ts) — в списке
+  // "Популярні категорії" не показываются
+  hiddenCategorySlugs?: string[];
 }
 
-export default function StorefrontHome({ initialSettings }: StorefrontHomeProps = {}) {
+export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = [] }: StorefrontHomeProps = {}) {
   // ---- магазин, контакты и объявления (настраиваются в админке /admin/settings) ----
   const [shopName, setShopName] = useState(initialSettings?.shopName || DEFAULT_SHOP_NAME);
   const [phone, setPhone] = useState(initialSettings?.phone || DEFAULT_PHONE);
@@ -2846,7 +2849,7 @@ export default function StorefrontHome({ initialSettings }: StorefrontHomeProps 
               Популярні категорії
             </h2>
             <div className="flex flex-wrap gap-2.5">
-              {CATEGORIES.filter((c) => !c.hideFromIndex).map((c) => (
+              {CATEGORIES.filter((c) => !c.hideFromIndex && !hiddenCategorySlugs.includes(c.slug)).map((c) => (
                 <Link
                   key={c.slug}
                   href={`/category/${c.slug}`}

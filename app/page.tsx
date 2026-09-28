@@ -3,6 +3,7 @@
 import type { Metadata } from 'next';
 import { Pool } from 'pg';
 import StorefrontHome from '@/components/StorefrontHome';
+import { loadThinNarrowCategories } from '@/lib/narrowCategoryStatus';
 import { FAQ_ITEMS } from '@/lib/faq';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildOrganizationJsonLd, buildWebSiteJsonLd, jsonLdScript } from '@/lib/structuredData';
@@ -115,6 +116,8 @@ function FaqStructuredData() {
 
 export default async function Home() {
   const initialSettings = await getInitialSiteSettings();
+  // Тонкие узкие категории (отдают 301) — не показывать в "Популярні категорії"
+  const thinCategorySlugs = [...(await loadThinNarrowCategories())];
 
   return (
     <>
@@ -132,7 +135,7 @@ export default async function Home() {
         // eslint-disable-next-line react/no-danger
         dangerouslySetInnerHTML={{ __html: jsonLdScript(buildWebSiteJsonLd()) }}
       />
-      <StorefrontHome initialSettings={initialSettings} />
+      <StorefrontHome initialSettings={initialSettings} hiddenCategorySlugs={thinCategorySlugs} />
     </>
   );
 }

@@ -21,6 +21,7 @@
 // використати як стартові правила автоматичного розпізнавання.
 // ============================================================
 
+import { narrowCategoryVehicles } from './narrowCategoryVehicles';
 import { foldLookalikes } from '@/lib/latinLookalikes';
 import { STAGE3_CATEGORIES } from '@/lib/categoriesStage3';
 import { STAGE4_CATEGORIES } from '@/lib/categoriesStage4';
@@ -3020,12 +3021,11 @@ export function getToCategories(): CategoryDef[] {
 // сторінка ще й приєднує JOIN suppliers за delivery_time)
 //
 // Якщо в категорії задано tecdocVehicle — додається ЩЕ ОДНА умова
-// (через AND): товар має бути присутній у tecdoc_compatibility для
-// вказаних make+models (зіставлення по бренду+артикулу). Це і є
-// "підбір моделі через TecDoc" з коментаря біля поля tecdocVehicle
-// вище — на відміну від matchGroups (підрядок у назві), тут модель
-// авто визначається зі structured-довідника, а не з тексту назви
-// товару. params після цього — вже не суто string[][], а суміш
+// (через AND). С этапа C перехода с TecDoc это своя применимость:
+// у товара (или другого предложения той же детали — бренд + артикул) в
+// product_vehicles_own должна быть марка + модель (+ поколение, если оно
+// указано) из lib/narrowCategoryVehicles.ts. Категория без такого
+// соответствия товаров не получает. params після цього — вже не суто string[][], а суміш
 // (string[] для ILIKE ANY, string і string[] для самого tecdocVehicle),
 // тому тип params розширено до unknown[]; кожен виклик, що далі робить
 // ...params у pool.query(...), як і раніше, просто розкладає їх по
@@ -3085,18 +3085,24 @@ export function buildCategoryRuleClause(
   conditions.push(ruleSql.length === 1 ? ruleSql[0] : `(${ruleSql.join(' OR ')})`);
 
   if (category.tecdocVehicle) {
-    const makeParamIdx = startParamIndex + params.length;
-    params.push(category.tecdocVehicle.make);
-    const modelsParamIdx = startParamIndex + params.length;
-    params.push(category.tecdocVehicle.models);
-
-    conditions.push(`
+    const vehicles = narrowCategoryVehicles(category);
+    if (vehicles.length === 0) {
+      conditions.push('false');
+    } else {
+      const makes = param(vehicles.map((item) => item.make));
+      const models = param(vehicles.map((item) => item.model));
+      const generations = param(vehicles.map((item) => item.generation));
+      conditions.push(`
       EXISTS (
-        SELECT 1 FROM tecdoc_compatibility tc
-        WHERE UPPER(translate(tc.brand, 'ÄÖÜäöüÉÈéè', 'AOUaoueEee')) = UPPER(p.brand) AND tc.article = p.article
-          AND tc.make = $${makeParamIdx} AND tc.model = ANY($${modelsParamIdx}::text[])
+        SELECT 1
+        FROM products q
+        JOIN product_vehicles_own pvo ON pvo.product_id = q.id
+        JOIN unnest(${makes}::text[], ${models}::text[], ${generations}::text[]) AS nv(make, model, generation)
+          ON pvo.make = nv.make AND pvo.model = nv.model AND (nv.generation IS NULL OR pvo.generation = nv.generation)
+        WHERE q.article = p.article AND UPPER(COALESCE(q.brand, '')) = UPPER(COALESCE(p.brand, '')) AND q.is_active
       )
     `);
+    }
   }
 
   return { clause: conditions.join(' AND '), params };

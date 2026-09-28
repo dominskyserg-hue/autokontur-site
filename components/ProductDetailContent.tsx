@@ -21,7 +21,6 @@ import { TELEGRAM_BOT_USERNAME } from '@/lib/telegramNotify';
 import { buildProductPath } from '@/lib/slug';
 import { buildFaqJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
-import { findAnyNarrowPageForVehicle } from '@/lib/categories';
 import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
@@ -31,6 +30,7 @@ import ProductViewTracker from '@/components/ProductViewTracker';
 import ProductGallery, { type GalleryPhoto } from '@/components/ProductGallery';
 import { getCategoryIcon } from '@/lib/categoryIcons';
 import Breadcrumbs from '@/components/Breadcrumbs';
+import VinCheckTrigger from '@/components/VinCheckTrigger';
 
 export const BG = '#0B0F17';
 export const PANEL_SOFT = '#1B2436';
@@ -528,11 +528,15 @@ export default function ProductDetailContent({
         </section>
       )}
 
-      {/* ==================== ЗАСТОСОВНІСТЬ ДО АВТО (TecDoc) ==================== */}
+      {/* ==================== ЗАСТОСОВУЄТЬСЯ ДЛЯ ==================== */}
+      {/* Своя применимость (product_vehicles_own, lib/productDetail.ts,
+          loadOwnCompatibility): марка, модель, поколение — без годов и
+          двигателей. Под бейджами — ссылка на VIN-проверку: форма заявки
+          открывается с уже подставленной деталью */}
       {tecdocCompatibility.length > 0 && (
         <section className="mb-10">
           <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
-            Запчастина підходить для авто
+            Застосовується для
           </h2>
           <div className="flex flex-wrap gap-2">
             {tecdocCompatibility.map((item, index) => (
@@ -542,6 +546,11 @@ export default function ProductDetailContent({
               />
             ))}
           </div>
+          <VinCheckTrigger
+            label="Перевірити сумісність за VIN"
+            description={`Перевірити сумісність: ${[product.brand, product.article].filter(Boolean).join(' ')} — ${displayName}
+${canonicalUrl}`}
+          />
         </section>
       )}
 
@@ -794,7 +803,11 @@ function cleanModelDisplay(model: string): string {
 function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
   const yearRange = formatYearRange(item.yearFrom, item.yearTo);
   const modelDisplay = item.model ? cleanModelDisplay(item.model) : '';
-  const label = `Запчастини для ${item.make}${modelDisplay ? ' ' + modelDisplay : ''}`;
+  // Оригинальная запчасть марки (известна только по бренду товара) —
+  // "Оригінальна запчастина Toyota", иначе "Toyota Camry XV30"
+  const label = item.originalBrand
+    ? `Оригінальна запчастина ${item.make}`
+    : `${item.make}${modelDisplay ? ' ' + modelDisplay : ''}`;
   // Дужки-примітка: рік і об'єм двигуна разом, напр. "(1997–2003, 1.6)"
   const note = [yearRange, item.engine ? `${item.engine} л` : ''].filter(Boolean).join(', ');
 
@@ -828,8 +841,9 @@ function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
   // текст без посилання
   // Пріоритет: хаб моделі (усі запчастини цього покоління, lib/modelHubs.ts)
   // -> вузька сторінка "модель + деталь" -> сторінка марки
-  const narrowPage = item.model ? findAnyNarrowPageForVehicle(item.makeRaw, item.model) : undefined;
-  const href = item.hubPath ?? (narrowPage ? `/category/${narrowPage.slug}` : item.makeSlug ? `/marky/${item.makeSlug}` : null);
+  // Узкая страница — по своим данным и только живая (не отдающая 301),
+  // см. loadOwnCompatibility в lib/productDetail.ts
+  const href = item.hubPath ?? item.narrowPath ?? (item.makeSlug ? `/marky/${item.makeSlug}` : null);
 
   return href ? (
     <Link

@@ -16,7 +16,8 @@ import { cache } from 'react';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { Pool } from 'pg';
 import { buildProductPath, buildProductSlug } from '@/lib/slug';
-import { getCarMakeByDbValue } from '@/lib/carMakes';
+import { CAR_MAKES, getCarMakeByDbValue } from '@/lib/carMakes';
+import { generationLabel, OTHER_GENERATION } from '@/lib/carModelDictionary';
 import { detectCategoryForProductName, detectCategoryForProductH1, getCategoryBySlug } from '@/lib/categories';
 import { cleanApplicability } from '@/lib/carModelTranslation';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
@@ -25,8 +26,9 @@ import { buildDisplayProductNameDetailed } from '@/lib/productNameTranslation';
 import { brandsAreSameFamily } from '@/lib/brandFamilies';
 import { crossSideMatchesSql } from '@/lib/crossBrandMatch';
 import { ensureUkrainianCorpusFresh } from '@/lib/ukrainianCorpus';
-import { findHubForTecdocModel, hubPath } from '@/lib/modelHubs';
+import { hubPath, MODEL_HUBS } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
+import { findNarrowCategoryForOwnVehicle, linkableCategory, loadThinNarrowCategories } from '@/lib/narrowCategoryStatus';
 import { SITE_URL } from '@/lib/siteConfig';
 import type { BreadcrumbItem } from '@/lib/structuredData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -790,7 +792,9 @@ export interface TecdocCrossItem {
   stock: number | null;
 }
 
-// Застосовність до авто з таблиці tecdoc_compatibility. makeSlug —
+// Застосовність до авто. С этапа C перехода с TecDoc строится из своих
+// данных (product_vehicles_own, loadOwnCompatibility ниже): годы и двигатель
+// тогда пустые. Поля названы по-старому (TecDoc) — формат тот же. makeSlug —
 // null, якщо для цієї марки немає власної сторінки /marky/[slug]
 // (курований список, lib/carMakes.ts) — тоді рядок теж просто текст,
 // без посилання в нікуди
@@ -827,6 +831,12 @@ export interface TecdocCompatibilityItem {
   // Хаб моделі (/marky/{марка}/{модель}, lib/modelHubs.ts), якщо цей запис
   // TecDoc входить у видимий хаб — бейдж веде туди, а не на сторінку марки
   hubPath: string | null;
+  // Марка известна только по бренду самого товара (source = brand, без
+  // модели) — это оригинальная запчасть этой марки, бейдж
+  // "Оригінальна запчастина {марка}", а не "підходить для"
+  originalBrand?: boolean;
+  // Живая узкая страница "деталь + модель" для этой машины (не тонкая, без 301)
+  narrowPath?: string | null;
 }
 
 const TECDOC_CROSSES_LIMIT = 30;
@@ -904,53 +914,63 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(
   }));
 });
 
-const loadTecdocCompatibility = cache(async function loadTecdocCompatibility(
+// Своя применимость (product_vehicles_own, lib/ownVehicles.ts) в том же
+// виде, что и строки TecDoc выше — блок "Запчастина підходить для авто"
+// рисуется тем же бейджем. Годов и двигателей в своих данных нет — поля
+// пустые, бейдж их просто не показывает. Берутся строки всех предложений
+// этой детали (бренд + артикул): у одного поставщика модель есть в
+// названии, у другого — нет. Модель с известным поколением ведёт на хаб
+const loadOwnCompatibility = cache(async function loadOwnCompatibility(
+  brand: string | null,
   article: string
 ): Promise<TecdocCompatibilityItem[]> {
   const result = await pool.query(
-    `
-    SELECT DISTINCT make, model, year_from, year_to, engine, source_note
-    FROM tecdoc_compatibility
-    WHERE article = $1
-    ORDER BY make, year_from
-    -- Ліміт вище за TECDOC_COMPATIBILITY_LIMIT: тепер, коли model
-    -- теж бере участь у DISTINCT (кожен кузов/покоління — окремий
-    -- рядок, а не один на марку+роки), у деталей з дуже широкою
-    -- застосовністю перші рядки за алфавітом можуть цілком зайняти
-    -- рідкісні марки — запас потрібен, щоб після сортування нижче
-    -- (спершу марки з власною сторінкою) не загубились популярні
-    LIMIT 300
-    `,
-    [article]
+    `SELECT pvo.make, pvo.model, NULLIF(pvo.generation, '${OTHER_GENERATION}') AS generation, bool_and(pvo.source = 'brand') AS only_brand
+       FROM product_vehicles_own pvo
+       JOIN products p ON p.id = pvo.product_id AND p.is_active
+      WHERE p.article = $1 AND UPPER(COALESCE(p.brand, '')) = UPPER(COALESCE($2, ''))
+      GROUP BY 1, 2, 3`,
+    [article, brand]
   );
 
-  const visibleHubs = await loadVisibleHubs();
-  const items: TecdocCompatibilityItem[] = result.rows.map((row) => {
-    const carMake = getCarMakeByDbValue(row.make);
-    const hub = row.model ? findHubForTecdocModel(row.make, row.model) : undefined;
+  const [visibleHubs, thin] = await Promise.all([loadVisibleHubs(), loadThinNarrowCategories()]);
+  const withModel = new Set(result.rows.filter((r) => r.model).map((r) => r.make as string));
+  const seen = new Set<string>();
+  const items: TecdocCompatibilityItem[] = [];
+  // Сначала — с поколением, потом — с моделью, потом — только марка
+  const rows = [...result.rows].sort((a, b) => Number(Boolean(b.generation)) - Number(Boolean(a.generation)) || Number(Boolean(b.model)) - Number(Boolean(a.model)));
+  for (const row of rows) {
+    // Голая марка не нужна, если у этой марки уже есть строка с моделью
+    if (!row.model && withModel.has(row.make)) continue;
+    const curated = CAR_MAKES.find((m) => m.slug === row.make);
+    const makeName = curated?.name ?? (row.make as string).replace(/(^|[-\s])\p{L}/gu, (c: string) => c.toUpperCase());
+    const hub = row.generation ? MODEL_HUBS.find((h) => h.makeSlug === row.make && h.slug === row.generation) : undefined;
     const hubVisible = Boolean(hub && visibleHubs.includes(hub));
-    return {
-      // Показуємо власну (гарно відформатовану) назву марки, якщо вона
-      // є в курованому списку lib/carMakes.ts (напр. "MERCEDES-BENZ" з
-      // TecDoc -> "Mercedes-Benz") — інакше сирий текст із TecDoc як є
-      make: carMake?.name || row.make,
-      makeRaw: row.make,
-      makeSlug: carMake?.slug || null,
-      model: row.model || '',
-      yearFrom: row.year_from,
-      yearTo: row.year_to,
-      engine: row.engine || '',
-      sourceNote: row.source_note || null,
+    // "Mazda 6" у марки Mazda -> "6"; у поколения — подпись хаба ("Camry XV30")
+    let model = hub ? hub.label : generationLabel(row.generation) ?? (row.model as string | null) ?? '';
+    if (model.toLowerCase().startsWith(`${makeName.toLowerCase()} `)) model = model.slice(makeName.length + 1);
+    const key = `${row.make}|${model}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({
+      make: makeName,
+      makeRaw: curated?.dbValues[0] ?? (row.make as string).toUpperCase(),
+      makeSlug: curated?.slug ?? null,
+      model,
+      yearFrom: null,
+      yearTo: null,
+      engine: '',
+      sourceNote: null,
       hubPath: hub && hubVisible ? hubPath(hub) : null,
-    };
-  });
-
-  // Спершу марки з власною сторінкою /marky/[slug] (клікабельні) —
-  // потім решта. Стабільність порядку всередині кожної групи не
-  // критична (ORDER BY make, year_from у запиті вище вже дав розумний
-  // базовий порядок)
+      narrowPath: (() => {
+        const narrow = findNarrowCategoryForOwnVehicle(row.make, row.model, row.generation, thin);
+        return narrow ? `/category/${narrow.slug}` : null;
+      })(),
+      originalBrand: !row.model && Boolean(row.only_brand),
+    });
+  }
+  // Спершу марки з власною сторінкою /marky/[slug] (клікабельні)
   items.sort((a, b) => Number(b.makeSlug !== null) - Number(a.makeSlug !== null));
-
   return items.slice(0, TECDOC_COMPATIBILITY_LIMIT);
 });
 
@@ -1028,7 +1048,8 @@ export async function loadProductPageData(
       loadOtherOffers(product),
       loadCrossReferences(product),
       loadTecdocCrosses(product.article, product.brand),
-      loadTecdocCompatibility(product.article),
+      // Этап C перехода с TecDoc: блок строится из своих данных
+      loadOwnCompatibility(product.brand, product.article),
       // Запит на пару виконуємо ЛИШЕ якщо оверрайд її взагалі задає —
       // для решти товарів (без seoOverride.pairPart) зайвий SQL-запит
       // на кожен показ сторінки не потрібен
@@ -1113,9 +1134,13 @@ export async function loadProductPageData(
   // іншого прайсу, товар щойно з'явився і ще не перерахований), — як
   // раніше, за словами в ОЧИЩЕНІЙ назві. Крихти (рішення власника):
   // Головна › Категорія › Бренд Артикул — без марки авто
-  const category =
+  // Тонкая узкая категория (отдаёт 301, lib/narrowCategoryStatus.ts) —
+  // в крошках и ссылках сразу её категория назначения
+  const category = linkableCategory(
     (await loadBreadcrumbCategories(pool, [product.id])).get(product.id) ??
-    detectCategoryForProductName(buildCleanProductName(product.name) ?? buildCleanProductName(product.fallbackName));
+      detectCategoryForProductName(buildCleanProductName(product.name) ?? buildCleanProductName(product.fallbackName)),
+    await loadThinNarrowCategories()
+  );
   const breadcrumbItems: BreadcrumbItem[] = [
     { name: 'Головна', url: SITE_URL },
     ...(category ? [{ name: category.name, url: `${SITE_URL}/category/${category.slug}` }] : []),

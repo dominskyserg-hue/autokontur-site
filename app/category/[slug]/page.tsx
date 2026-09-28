@@ -28,6 +28,7 @@ import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import CategoryCrossLinks from '@/components/CategoryCrossLinks';
 import { findHubsForNarrowCategory, hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
+import { loadThinNarrowCategories, narrowRedirectTarget } from '@/lib/narrowCategoryStatus';
 import CategoryVehicleFilter from '@/components/CategoryVehicleFilter';
 import SiteHeaderServer from '@/components/SiteHeaderServer';
 import { getCarMakeBySlug } from '@/lib/carMakes';
@@ -368,6 +369,12 @@ export default async function CategoryPage({
   const category = getCategoryBySlug(slug);
   if (!category) notFound();
 
+  // Узкая страница "деталь + модель", в которой после перехода на свою
+  // применимость осталось меньше 5 деталей (lib/narrowCategoryStatus.ts) —
+  // постоянный редирект на родительскую (или широкую) категорию, не 404
+  const thin = await loadThinNarrowCategories();
+  if (category.tecdocVehicle && thin.has(slug)) permanentRedirect(narrowRedirectTarget(category));
+
   // Хаби моделі для вузької сторінки (за modelGroup), лише видимі (>= 30 товарів)
   const visibleHubs = category.modelGroup ? await loadVisibleHubs() : [];
   const modelHubs = findHubsForNarrowCategory(category).filter((hub) => visibleHubs.includes(hub));
@@ -383,7 +390,8 @@ export default async function CategoryPage({
   // не впливають — вузькі сторінки їх і так не враховують)
   if (make && model) {
     const narrowPage = findNarrowPageForVehicle(slug, make.name, model);
-    if (narrowPage) {
+    // На тонкую узкую страницу не ведём — она сама отдала бы 301 назад
+    if (narrowPage && !thin.has(narrowPage.slug)) {
       permanentRedirect(`/category/${narrowPage.slug}`);
     }
   }
@@ -693,8 +701,8 @@ export default async function CategoryPage({
             конкретні моделі. marka=... тут не враховуємо навмисно —
             і modelGroup/parentCategorySlug стосуються лише "чистого"
             slug категорії, не фільтра по марці в query-рядку */}
-        {!make && <CategoryCrossLinks category={category} kind="model" />}
-        {!make && <CategoryCrossLinks category={category} kind="variants" />}
+        {!make && <CategoryCrossLinks category={category} kind="model" hidden={thin} />}
+        {!make && <CategoryCrossLinks category={category} kind="variants" hidden={thin} />}
 
         {/* ==================== ІНШІ КАТЕГОРІЇ (внутрішні посилання) ==================== */}
         <div className="pt-6" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
@@ -702,7 +710,7 @@ export default async function CategoryPage({
             Інші категорії
           </h2>
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.filter((c) => c.slug !== slug && !c.hideFromIndex).map((c) => (
+            {CATEGORIES.filter((c) => c.slug !== slug && !c.hideFromIndex && !thin.has(c.slug)).map((c) => (
               <Link
                 key={c.slug}
                 href={`/category/${c.slug}`}

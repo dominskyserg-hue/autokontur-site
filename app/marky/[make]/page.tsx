@@ -16,6 +16,8 @@ import { notFound } from 'next/navigation';
 import { Pool } from 'pg';
 import { CAR_MAKES, getCarMakeBySlug, buildMakeWhereClause } from '@/lib/carMakes';
 import { getModelLandingsForMake } from '@/lib/categories';
+import { CATEGORIES } from '@/lib/categories';
+import { loadThinNarrowCategories } from '@/lib/narrowCategoryStatus';
 import { hubPath } from '@/lib/modelHubs';
 import { loadVisibleHubs } from '@/lib/modelHubData';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
@@ -251,12 +253,21 @@ export default async function CarMakePage({
   // лише видимі (>= 30 товарів); далі моделі, для яких хабу ще немає, —
   // як раніше, на першу вузьку сторінку "модель + деталь"
   const hubs = (await loadVisibleHubs()).filter((hub) => hub.makeSlug === slug);
+  const thin = await loadThinNarrowCategories();
   const coveredGroups = new Set(hubs.flatMap((hub) => hub.modelGroups));
   const modelLinks = [
     ...hubs.map((hub) => ({ key: `hub-${hub.slug}`, href: hubPath(hub), label: `${make.name} ${hub.label}` })),
     ...getModelLandingsForMake(make.dbValues)
       .filter((landing) => !coveredGroups.has(landing.modelGroup))
-      .map((landing) => ({ key: landing.modelGroup, href: `/category/${landing.slug}`, label: landing.modelLabel })),
+      .flatMap((landing) => {
+        // Посадочная страница модели ушла в 301 (меньше 5 деталей,
+        // lib/narrowCategoryStatus.ts) — берём другую живую страницу этой
+        // модели, а если живых нет — модель не показываем
+        const slugLive = !thin.has(landing.slug)
+          ? landing.slug
+          : CATEGORIES.find((c) => c.modelGroup === landing.modelGroup && !thin.has(c.slug))?.slug;
+        return slugLive ? [{ key: landing.modelGroup, href: `/category/${slugLive}`, label: landing.modelLabel }] : [];
+      }),
   ];
 
   // Порядок ТОЧНО повторює видиму <nav> нижче — Google звіряє одне з
