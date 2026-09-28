@@ -13,6 +13,7 @@
 import type { Pool } from 'pg';
 import { recomputeProductCategories } from '@/lib/categoryAssignment';
 import { refreshVehicleMakesForSupplier } from '@/lib/vehicleMakeIndex';
+import { rebuildOwnVehiclesSafely } from '@/lib/ownVehicles';
 import { rebuildUkrainianCorpusSafely } from '@/lib/corpusBuilder';
 import { SITE_URL } from '@/lib/siteConfig';
 import { alertIfSlowImport, updateImportTiming } from '@/lib/importTimings';
@@ -28,6 +29,8 @@ export async function runImportFollowup(pool: Pool, supplierId: string, timingId
     times.categories_ms = Date.now() - t;
     t = Date.now();
     await refreshVehicleMakesForSupplier(pool, supplierId);
+    // Своя применимость (марка/модель без TecDoc) — товары этого поставщика
+    await rebuildOwnVehiclesSafely(pool, { supplierId });
     times.vehicle_makes_ms = Date.now() - t;
     t = Date.now();
     await rebuildUkrainianCorpusSafely(pool);

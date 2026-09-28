@@ -25,6 +25,7 @@
 // ============================================================
 
 import { resolveMakeDbValues } from './carMakes';
+import { ownMakeSlugs } from './ownVehicles';
 
 export interface VehicleFilterParams {
   make?: string;
@@ -92,8 +93,27 @@ export function buildVehicleWhereClause(
   }
   const tecdocWhereSql = tecdocParts.length > 0 ? `AND ${tecdocParts.join(' AND ')}` : '';
 
+  // Своя применимость (product_vehicles_own, lib/ownVehicles.ts): марка и
+  // модель из бренда, названия, OEM-номеров и прайса. Годов и двигателей в
+  // своих данных нет, поэтому при выбранном годе/двигателе эта ветка не
+  // участвует — иначе фильтр пропускал бы детали для других поколений.
+  // Модель из фильтра (запись TecDoc, напр. "CAMRY Stufenheck (...)")
+  // сравнивается по вхождению своей модели ("Camry")
+  let ownVehiclesSql = '';
+  if (make && !year && !engine) {
+    const ownVehicleParts = [`pvo.make = ANY($${push(ownMakeSlugs(makeDbValues))}::text[])`];
+    if (model) {
+      ownVehicleParts.push(`pvo.model IS NOT NULL AND position(upper(pvo.model) in upper($${push(model)})) > 0`);
+    }
+    ownVehiclesSql = `
+    OR EXISTS (
+      SELECT 1 FROM product_vehicles_own pvo
+      WHERE pvo.product_id = p.id AND ${ownVehicleParts.join(' AND ')}
+    )`;
+  }
+
   const clause = `(
-    (${ownMatchSql})
+    (${ownMatchSql})${ownVehiclesSql}
     OR EXISTS (
       SELECT 1 FROM tecdoc_compatibility tc
       WHERE UPPER(translate(tc.brand, 'ÄÖÜäöüÉÈéè', 'AOUaoueEee')) = UPPER(p.brand) AND tc.article = p.article

@@ -2759,3 +2759,32 @@ CREATE TRIGGER trg_products_set_refurbished
 
 -- Заполнение для уже загруженных товаров — scripts/mark-refurbished.ts
 -- (пачками, затем пересчёт полей лучшего предложения групп)
+
+
+-- ============================================================
+-- СВОЯ ПРИМЕНИМОСТЬ: МАРКА И МОДЕЛЬ ИЗ СОБСТВЕННЫХ ДАННЫХ
+-- ============================================================
+-- Замена применимости TecDoc. Считается кодом lib/ownVehicles.ts по
+-- бренду товара, названию, OEM-номерам в кроссах наших поставщиков и
+-- полям car_make/car_model прайса. Одна строка = товар + марка
+-- (+ модель, + поколение) + источник:
+--   brand — бренд товара — автопроизводитель;
+--   name  — марка/модель в названии;
+--   oem   — OEM-номер автопроизводителя в кроссах / ручных группах;
+--   price — car_make / car_model из прайса.
+-- make — slug марки (lib/carMakes.ts), model — название из
+-- lib/carModelDictionary.ts, generation — slug хаба модели, если
+-- поколение удалось определить.
+-- Пересчёт: после импорта прайса (товары поставщика), ночью полностью
+-- (/api/cron/rebuild-own-vehicles), вручную: npm run own-vehicles:rebuild
+CREATE TABLE IF NOT EXISTS product_vehicles_own (
+  id BIGSERIAL PRIMARY KEY,
+  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  make TEXT NOT NULL,
+  model TEXT,
+  generation TEXT,
+  source TEXT NOT NULL CHECK (source IN ('brand', 'name', 'oem', 'price'))
+);
+CREATE INDEX IF NOT EXISTS idx_pvo_product ON product_vehicles_own (product_id);
+CREATE INDEX IF NOT EXISTS idx_pvo_make ON product_vehicles_own (make);
+CREATE INDEX IF NOT EXISTS idx_pvo_generation ON product_vehicles_own (generation) WHERE generation IS NOT NULL;

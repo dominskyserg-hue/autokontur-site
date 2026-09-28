@@ -132,14 +132,30 @@ export interface DetectedCarMake {
 // (є лише в базі, без власної сторінки) — для пошуку різниці немає.
 // Повертає марку з НАЙДОВШИМ співпадінням кореня — так "ленд ровер"
 // (два слова) переважає над випадковим коротким збігом
+// Все марки с корнями для поиска (куровані + лише пошукові) — один раз
+const ALL_DETECTABLE_MAKES: SearchOnlyCarMake[] = [
+  ...CAR_MAKES.map((m) => ({ dbValues: m.dbValues, cyrillicStems: [...m.cyrillicStems, m.name.toLowerCase()] })),
+  ...SEARCH_ONLY_CAR_MAKES,
+];
+
+// Быстрый предварительный фильтр: то же условие "слово начинается с корня",
+// но одним выражением на все марки. Большинство текстов (названия товаров
+// при пересчёте lib/ownVehicles.ts) марки не содержит — для них перебор
+// всех корней не нужен
+const ANY_MAKE_STEM = new RegExp(
+  `(?:^|\\s)(?:${[...new Set(ALL_DETECTABLE_MAKES.flatMap((m) => [...m.cyrillicStems, ...m.dbValues.map((v) => v.toLowerCase())]))]
+    .map((stem) => stem.trim())
+    .filter(Boolean)
+    .map((stem) => stem.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('|')})`
+);
+
 export function detectCarMakeInText(text: string): DetectedCarMake | null {
   const normalized = ` ${text.toLowerCase().replace(/\s+/g, ' ').trim()} `;
   if (normalized.trim().length === 0) return null;
+  if (!ANY_MAKE_STEM.test(normalized)) return null;
 
-  const allMakes: SearchOnlyCarMake[] = [
-    ...CAR_MAKES.map((m) => ({ dbValues: m.dbValues, cyrillicStems: [...m.cyrillicStems, m.name.toLowerCase()] })),
-    ...SEARCH_ONLY_CAR_MAKES,
-  ];
+  const allMakes = ALL_DETECTABLE_MAKES;
 
   let best: DetectedCarMake | null = null;
   let bestStemLength = 0;

@@ -54,7 +54,7 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { processBatch, type ProductToProcess } from '@/lib/productImagePipeline';
-import { resolveMakeDbValues } from '@/lib/carMakes';
+import { buildVehicleWhereClause } from '@/lib/vehicleFilter';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { CUSTOMER_SESSION_COOKIE, getCustomerSessionPhoneFromRequest } from '@/lib/customerAuth';
 import { buildTextSearchClause } from '@/lib/productSearch';
@@ -281,9 +281,10 @@ export async function GET(request: NextRequest) {
 
     // "Підбір за автомобілем" — точное совпадение (без учёта регистра),
     // каждый параметр применяется независимо от остальных, если передан.
-    // carMake/carModel/carYear/engineVolume проверяются ДВУМЯ способами
+    // carMake/carModel/carYear/engineVolume проверяются ТРЕМЯ способами
     // разом (через OR): (1) собственные поля товара p.car_make/car_model/
-    // car_year/engine_volume — как и раньше, и (2) EXISTS по
+    // car_year/engine_volume, (2) своя применимость product_vehicles_own
+    // (марка/модель без годов, lib/ownVehicles.ts) и (3) EXISTS по
     // tecdoc_compatibility для ТОГО ЖЕ товара (join по brand+article — на
     // это есть индекс idx_tecdoc_compat_part, см. schema.sql) — так товар
     // находится по подбору авто, даже если поставщик не заполнил
@@ -295,64 +296,19 @@ export async function GET(request: NextRequest) {
     // могли бы совпасть по одному источнику, а объём двигателя — по
     // совсем другой, не связанной модификации того же товара
     if (carMake || carModel || carYear || engineVolume) {
-      // carMake, обраний покупцем у випадаючому списку (див.
-      // app/api/products/car-options/route.ts), — це або курована назва
-      // марки ("Volkswagen"), або сире значення з products.car_make.
-      // Одна й та сама марка може бути записана по-різному в
-      // products.car_make ("VW") і tecdoc_compatibility.make
-      // ("VOLKSWAGEN") — resolveMakeDbValues() повертає ВСІ варіанти
-      // написання одразу, щоб порівняння через ANY(...) знаходило
-      // товар незалежно від того, яким текстом записана марка
-      const makeDbValues = carMake ? resolveMakeDbValues(carMake) : [];
-
-      const ownParts: string[] = [];
-      if (carMake) {
-        values.push(makeDbValues);
-        ownParts.push(`UPPER(p.car_make) = ANY($${values.length}::text[])`);
+      // Та же функция, что у фильтра на странице категории (lib/vehicleFilter.ts):
+      // свои поля товара ИЛИ своя применимость (product_vehicles_own) ИЛИ
+      // TecDoc. carMake — курована назва марки ("Volkswagen") або сире значення
+      // з products.car_make; resolveMakeDbValues() внутри учитывает все
+      // варианты написания
+      const vehicleClause = buildVehicleWhereClause(
+        { make: carMake ?? undefined, model: carModel ?? undefined, year: carYear ?? undefined, engine: engineVolume ?? undefined },
+        values.length + 1
+      );
+      if (vehicleClause) {
+        values.push(...vehicleClause.params);
+        conditions.push(vehicleClause.clause);
       }
-      if (carModel) {
-        values.push(carModel);
-        ownParts.push(`p.car_model ILIKE $${values.length}`);
-      }
-      if (carYear) {
-        values.push(carYear);
-        ownParts.push(`p.car_year ILIKE $${values.length}`);
-      }
-      if (engineVolume) {
-        values.push(engineVolume);
-        ownParts.push(`p.engine_volume ILIKE $${values.length}`);
-      }
-      const ownMatchSql = ownParts.length > 0 ? ownParts.join(' AND ') : 'FALSE';
-
-      const tecdocParts: string[] = [];
-      if (carMake) {
-        values.push(makeDbValues);
-        tecdocParts.push(`UPPER(tc.make) = ANY($${values.length}::text[])`);
-      }
-      if (carModel) {
-        values.push(carModel);
-        tecdocParts.push(`tc.model = $${values.length}`);
-      }
-      if (carYear) {
-        values.push(carYear);
-        tecdocParts.push(
-          `$${values.length}::int BETWEEN COALESCE(tc.year_from, 1900) AND COALESCE(tc.year_to, 2100)`
-        );
-      }
-      if (engineVolume) {
-        values.push(engineVolume);
-        tecdocParts.push(`tc.engine ILIKE $${values.length}`);
-      }
-      const tecdocWhereSql = tecdocParts.length > 0 ? `AND ${tecdocParts.join(' AND ')}` : '';
-
-      conditions.push(`(
-        (${ownMatchSql})
-        OR EXISTS (
-          SELECT 1 FROM tecdoc_compatibility tc
-          WHERE UPPER(translate(tc.brand, 'ÄÖÜäöüÉÈéè', 'AOUaoueEee')) = UPPER(p.brand) AND tc.article = p.article
-          ${tecdocWhereSql}
-        )
-      )`);
     }
 
     // featured: "фото насамперед, в наявності, найсвіжіші". Раніше це був

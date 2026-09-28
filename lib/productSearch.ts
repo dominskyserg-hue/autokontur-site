@@ -17,6 +17,7 @@ import { loadSynonymDictionary, expandSearchQuery, buildSynonymWhereClause } fro
 import { detectCategoryInText, buildCategoryWhereClause } from './categories';
 import { extractCarReference } from './searchCarText';
 import { crossSideMatchesSql } from './crossBrandMatch';
+import { ownMakeSlugs } from './ownVehicles';
 
 // Та сама функція, що й у app/api/suppliers/parse-excel/route.ts —
 // нею чистяться артикули ПЕРЕД збереженням у базу, тому пошуковий
@@ -123,6 +124,20 @@ export async function buildTextSearchClause(
       }
 
       const categoryPart = categoryClauseSql ? `${categoryClauseSql} AND ` : '';
+      // Своя применимость (product_vehicles_own, lib/ownVehicles.ts) — марка
+      // из бренда, названия, OEM-номеров и прайса. Годов в своих данных нет,
+      // поэтому при годе в запросе эта ветка не участвует (иначе "колодки
+      // toyota 2005" находили бы детали для любых годов)
+      if (!carRef.year) {
+        values.push(ownMakeSlugs(carRef.makeDbValues));
+        const ownMakePlaceholder = `$${startParamIndex + values.length - 1}`;
+        branches.push(
+          categoryPart
+            ? `SELECT p.id FROM product_vehicles_own pvo JOIN products p ON p.id = pvo.product_id
+                 WHERE ${categoryPart}pvo.make = ANY(${ownMakePlaceholder}::text[])`
+            : `SELECT pvo.product_id AS id FROM product_vehicles_own pvo WHERE pvo.make = ANY(${ownMakePlaceholder}::text[])`
+        );
+      }
       branches.push(`SELECT p.id FROM products p WHERE ${categoryPart}${ownParts.join(' AND ')}`);
       // Без категорії товари не потрібні — лише id з product_vehicle_makes
       branches.push(
