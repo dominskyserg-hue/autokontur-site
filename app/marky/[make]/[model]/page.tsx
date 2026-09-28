@@ -31,7 +31,7 @@ import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
 import VinCheckTrigger from '@/components/VinCheckTrigger';
 import { loadThinNarrowCategories, narrowRedirectTarget } from '@/lib/narrowCategoryStatus';
-import { getCategoryBySlug } from '@/lib/categories';
+import { findNarrowPageForVehicle, getCategoryBySlug } from '@/lib/categories';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import {
@@ -185,6 +185,10 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
     if (own && thin.has(broadSlug)) return narrowRedirectTarget(own);
     const narrow = findNarrowCategoryForHub(hub, broadSlug);
     if (narrow && !thin.has(narrow.slug)) return `/category/${narrow.slug}`;
+    // Категория с фильтром марки/модели сама перенаправляет на узкую
+    // страницу этой модели (app/category/[slug]/page.tsx) — ведём туда сразу
+    const viaFilter = findNarrowPageForVehicle(broadSlug, make.name, hub.tecdocModels[0]);
+    if (viaFilter && !thin.has(viaFilter.slug)) return `/category/${viaFilter.slug}`;
     const query = new URLSearchParams({ marka: make.slug, model: hub.tecdocModels[0] });
     return `/category/${broadSlug}?${query.toString()}`;
   };

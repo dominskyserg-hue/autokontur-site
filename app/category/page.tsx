@@ -25,6 +25,11 @@ export const metadata: Metadata = {
   alternates: { canonical: `${SITE_URL}/category` },
 };
 
+// Список тонких узких категорий (lib/narrowCategoryStatus.ts) меняется после
+// каждого пересчёта категорий — страница пересобирается раз в 10 минут, иначе
+// в ней остались бы ссылки на категории, ушедшие в 301
+export const revalidate = 600;
+
 export default async function CategoryIndexPage() {
   // Тонкие узкие категории (меньше 5 деталей, отдают 301) в списках не
   // показываем — их адрес назначения и так есть в списке
