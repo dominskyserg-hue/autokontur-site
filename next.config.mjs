@@ -14,9 +14,14 @@ const nextConfig = {
   // /feeds/dsa-pages.csv — фид страниц для DSA Google Ads (lib/dsaPageFeed.ts).
   // Файл ~10 МБ больше лимита ответа функции Vercel (4,5 МБ), поэтому лежит в
   // Vercel Blob, а Vercel проксирует адрес туда (внешний rewrite, без функции).
-  // Хост хранилища — из токена vercel_blob_rw_<storeId>_<секрет>
+  // Хост хранилища — из токена vercel_blob_rw_<storeId>_<секрет> (локально)
+  // или из bazaa_STORE_ID = store_<storeId> (на Vercel хранилище подключено
+  // с префиксом "bazaa_", стандартного BLOB_READ_WRITE_TOKEN там нет)
   async rewrites() {
-    const blobStoreId = (process.env.BLOB_READ_WRITE_TOKEN ?? '').split('_')[3]?.toLowerCase();
+    const blobStoreId = (
+      (process.env.BLOB_READ_WRITE_TOKEN ?? '').split('_')[3] ||
+      (process.env.bazaa_STORE_ID ?? '').replace(/^store_/, '')
+    ).toLowerCase();
     return [
       { source: '/sitemap-products-:chunk(\\d+).xml', destination: '/sitemap-products/:chunk' },
       ...(blobStoreId

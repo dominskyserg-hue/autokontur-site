@@ -30,6 +30,13 @@ import { SITE_URL } from './siteConfig';
 // Имя файла в Blob — постоянное (перезаписывается), на него ведёт rewrite
 export const DSA_FEED_BLOB_PATH = 'feeds/dsa-pages.csv';
 
+// Токен хранилища: локально — BLOB_READ_WRITE_TOKEN (.env.local), на Vercel
+// это же хранилище (store_khIb8AmQctsKdmXz) подключено с префиксом "bazaa_"
+// — стандартной переменной там нет. Тот же выбор в next.config.mjs (rewrite)
+function blobToken(): string | undefined {
+  return process.env.BLOB_READ_WRITE_TOKEN || process.env.bazaa_READ_WRITE_TOKEN || undefined;
+}
+
 // Бренд (normalizeBrandKey: верхний регистр, без пробелов и знаков) → label.
 // В базе один бренд записан по-разному ("HYUNDAI / KIA", "Hyundai", "KIA"),
 // поэтому здесь все встречающиеся варианты. MOBIS — оригинал Hyundai/Kia,
@@ -154,6 +161,7 @@ export async function rebuildDsaFeed(pool: Pool): Promise<DsaFeedStats & { url: 
       contentType: 'text/csv; charset=utf-8',
       addRandomSuffix: false,
       allowOverwrite: true,
+      token: blobToken(),
       // Файл меняется раз в сутки — CDN держит копию не дольше часа
       cacheControlMaxAge: 3600,
     });
