@@ -15,6 +15,7 @@ import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { MODEL_HUBS, MIN_HUB_PRODUCTS, PRIORITY_CATEGORY_SLUGS, type ModelHubDef } from '@/lib/modelHubs';
 import { comparePopular, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import { modelForGeneration } from '@/lib/carModelDictionary';
+import { isEmptyPartName } from '@/lib/emptyPartName';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -72,9 +73,13 @@ export interface HubData {
 
 export const MAYBE_LIMIT = 24;
 
-// Детали той же модели без подтверждённого поколения ($1 марка, $2 модель,
-// $3 slug хаба): есть строка с generation IS NULL и нет строки с этим
-// поколением
+// Детали той же модели, у которых поколение ПРОСТО НЕ УКАЗАНО ($1 марка,
+// $2 модель): есть строка с generation IS NULL и нет ни одной строки этой
+// модели с каким-либо поколением — ни с этим (тогда деталь в основном
+// списке), ни с другим или противоречащим (OTHER_GENERATION: годы не внутри
+// поколения, чужой код кузова). Противоречие у любого предложения детали
+// (бренд + артикул) исключает её целиком. $3 не используется — оставлен для
+// единообразия параметров с HUB_PRODUCTS_SQL
 const HUB_MAYBE_SQL = `
   WITH parts AS (
     SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
@@ -86,7 +91,7 @@ const HUB_MAYBE_SQL = `
     SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
     FROM product_vehicles_own pvo
     JOIN products p1 ON p1.id = pvo.product_id AND p1.is_active = true
-    WHERE pvo.make = $1 AND pvo.generation = $3
+    WHERE pvo.make = $1 AND pvo.model = $2 AND pvo.generation IS NOT NULL AND $3::text IS NOT NULL
   )
   SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time, p.group_primary_id, p.is_refurbished
   FROM parts
@@ -125,8 +130,12 @@ function gridRank(product: HubProduct): number {
 
 // Строки запроса -> товары; одна деталь (бренд + артикул) — одна карточка с
 // лучшей пропозицией (в наявності з фото -> в наявності -> з фото, далі дешевша)
+// Предложения с "пустым" названием ("Деталь двигуна TEIKIN 46343100",
+// lib/emptyPartName.ts) в хаб не попадают: по ним не понять, что это за деталь
 function rowsToOffers(rows: Array<Record<string, unknown>>): HubProduct[] {
-  return rows.map((row) => ({
+  return rows
+    .filter((row) => !isEmptyPartName(row.name as string | null, row.brand as string | null, row.article as string))
+    .map((row) => ({
     id: row.id as string,
     article: row.article as string,
     brand: row.brand as string | null,
@@ -172,21 +181,7 @@ export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): P
   const maybe = bestPerPart(rowsToOffers(maybeResult.rows))
     .sort((a, b) => gridRank(a) - gridRank(b) || comparePopular(a, b, soldIds))
     .slice(0, MAYBE_LIMIT);
-  const offers: HubProduct[] = result.rows.map((row) => ({
-    id: row.id,
-    article: row.article,
-    brand: row.brand,
-    name: row.name,
-    costPrice: parseFloat(row.cost_price),
-    retailPrice: parseFloat(row.retail_price),
-    stock: row.stock,
-    imageUrl: row.image_url,
-    deliveryTime: row.delivery_time,
-    pageId: row.id,
-    offerCount: 1,
-    groupPrimaryId: row.group_primary_id,
-    isRefurbished: row.is_refurbished,
-  }));
+  const offers: HubProduct[] = rowsToOffers(result.rows);
 
   // Той самий товар (бренд + артикул) часто є в кількох постачальників —
   // на хабі це ОДНА запчастина: лишаємо найкращу пропозицію (в наявності з
@@ -267,11 +262,14 @@ export const loadHubProductCounts = cache(async function loadHubProductCounts():
   await Promise.all(
     MODEL_HUBS.map(async (hub) => {
       // Унікальні запчастини (бренд + артикул) — так само, як на самій сторінці
-      const result = await pool.query(
-        `SELECT COUNT(DISTINCT (UPPER(COALESCE(t.brand, '')), t.article))::int AS n FROM (${HUB_PRODUCTS_SQL}) t`,
-        [hub.makeSlug, hub.slug]
+      // Уникальные детали без "пустых" названий — так же, как на самой странице
+      const result = await pool.query(`SELECT DISTINCT t.brand, t.article, t.name FROM (${HUB_PRODUCTS_SQL}) t`, [hub.makeSlug, hub.slug]);
+      const parts = new Set(
+        result.rows
+          .filter((row) => !isEmptyPartName(row.name, row.brand, row.article))
+          .map((row) => `${(row.brand ?? '').toUpperCase()}|${row.article}`)
       );
-      counts.set(`${hub.makeSlug}/${hub.slug}`, result.rows[0]?.n ?? 0);
+      counts.set(`${hub.makeSlug}/${hub.slug}`, parts.size);
     })
   );
   countsCache = { expires: Date.now() + COUNTS_TTL_MS, counts };

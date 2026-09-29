@@ -33,8 +33,9 @@ export interface GenerationDef {
   endYear?: number;
 }
 
-// Поколение модели определено как ДРУГОЕ (год начала вне всех поколений
-// словаря) — такой товар не "может подходить" к поколениям словаря
+// Поколение модели не совпадает ни с одним поколением словаря или
+// противоречит им (годы не внутри поколения, код кузова другого поколения) —
+// такой товар не "может подходить" к поколениям словаря
 export const OTHER_GENERATION = 'other';
 
 interface ModelDef {
@@ -43,6 +44,10 @@ interface ModelDef {
   pattern: string; // регулярное выражение (без границ слова — они добавляются)
   ctx?: string; // обязательное слово марки рядом (для коротких названий)
   generations?: GenerationDef[];
+  // Коды кузова/поколений этой модели, которых НЕТ среди generations
+  // (Mazda 6 GH/GL, Camry XV50...). Их упоминание — противоречие: деталь
+  // не "может подходить" к поколениям словаря
+  otherCodes?: RegExp;
 }
 
 const L = '[a-zа-яіїєґё0-9]';
@@ -61,6 +66,7 @@ const MODELS: ModelDef[] = [
   // ---------- Toyota ----------
   {
     make: 'toyota', model: 'Camry', pattern: 'camry|камр[иі]',
+    otherCodes: /(?:xv|acv|mcv|sxv|vcv|asv|avv|axvh?)[1257]\d|(?<![a-z0-9])v[12457]0(?![0-9])/i,
     generations: [
       { slug: 'camry-xv30', codes: /(?:xv|acv|mcv)3\d/i, startFrom: 2000, startTo: 2005 },
       { slug: 'camry-xv40', codes: /(?:xv|acv|gsv|ahv)4\d/i, startFrom: 2005, startTo: 2010 },
@@ -68,6 +74,7 @@ const MODELS: ModelDef[] = [
   },
   {
     make: 'toyota', model: 'Corolla', pattern: 'corolla|корол+а|altis|runx',
+    otherCodes: /(?<![a-z0-9])e1[01478]\d?(?![0-9])|(?<![a-z0-9])e21\d?(?![0-9])|(?:zre|nre)1[78]\d|(?:ae|ee|ce)11\d/i,
     generations: [
       { slug: 'corolla-e120', codes: /(?:zze|nze|cde|zde|nde)12\d|(?<![a-z0-9])e12\d?(?![0-9])/i, startFrom: 2000, startTo: 2006 },
       { slug: 'corolla-e150', codes: /(?:zre|zze|nre|nde|ade)15\d|(?<![a-z0-9])e15\d?(?![0-9])/i, startFrom: 2005, startTo: 2012 },
@@ -114,6 +121,7 @@ const MODELS: ModelDef[] = [
   // ---------- Nissan ----------
   {
     make: 'nissan', model: 'Qashqai', pattern: 'qashqai|кашка[йи]|dualis',
+    otherCodes: /j12/i,
     generations: [
       { slug: 'qashqai-j10', codes: /j?j10/i, startFrom: 2006, startTo: 2012 },
       { slug: 'qashqai-j11', label: 'Qashqai J11', codes: /j11/i, startFrom: 2013, startTo: 2020 },
@@ -121,6 +129,7 @@ const MODELS: ModelDef[] = [
   },
   {
     make: 'nissan', model: 'X-Trail', pattern: 'x-?\\s?trail|х-?\\s?трейл|ікс-?\\s?трейл|икс-?\\s?трейл',
+    otherCodes: /(?<![a-z0-9])t3[023](?![0-9])/i,
     generations: [{ slug: 'x-trail-t31', codes: /t31/i, startFrom: 2006, startTo: 2013 }],
   },
   { make: 'nissan', model: 'Almera', pattern: 'almera|альмера' },
@@ -165,6 +174,7 @@ const MODELS: ModelDef[] = [
   { make: 'mitsubishi', model: 'Pajero Sport', pattern: 'pajero\\s?sport|паджеро\\s?спорт' },
   {
     make: 'mitsubishi', model: 'Pajero', pattern: 'pajero(?!\\s?sport)|паджеро(?!\\s?спорт)|montero|shogun',
+    otherCodes: /(?<![a-z0-9])v[6-9]\d[a-z]?(?![0-9])|pajero\s?(?:iii|3|iv|4)(?![0-9a-z])/i,
     generations: [
       { slug: 'pajero-2', codes: /pajero\s?(?:ii|2)(?![0-9])|pajero\s?classic|(?<![a-z0-9])v[234]\d[a-z]?(?![0-9])/i, startFrom: 1990, startTo: 1999, endYear: 2006 },
     ],
@@ -186,10 +196,12 @@ const MODELS: ModelDef[] = [
   // ---------- Honda ----------
   {
     make: 'honda', model: 'Accord', pattern: 'accord|аккорд',
+    otherCodes: /(?<![a-z0-9])(?:cg|cf|cu|cw|cr|cv|ch)\d(?![0-9])|accord\s?(?:vi|6|viii|8|ix|9)(?![0-9a-z])/i,
     generations: [{ slug: 'accord-7', codes: /accord\s?(?:vii|7)(?![0-9])|(?<![a-z0-9])(?:cl[79]|cm[1-3]|cn[12])(?![0-9])/i, startFrom: 2002, startTo: 2007 }],
   },
   {
     make: 'honda', model: 'Civic', pattern: 'civic|с[иі]в[иі]к',
+    otherCodes: /(?<![a-z0-9])(?:eg|ek|ej|eu|ep|es|em|fb|fc|fg)\d(?![0-9])|civic\s?(?:vii|7|ix|9|x|10)(?![0-9a-z])/i,
     generations: [{ slug: 'civic-8', codes: /civic\s?(?:viii|8)(?![0-9])|(?<![a-z0-9])(?:fd[1-9]|fn[1-4]|fk[1-3])(?![0-9])/i, startFrom: 2004, startTo: 2010 }],
   },
   { make: 'honda', model: 'CR-V', pattern: 'cr-?\\s?v|срв' },
@@ -201,14 +213,17 @@ const MODELS: ModelDef[] = [
   // ---------- Mazda ----------
   {
     make: 'mazda', model: 'Mazda 6', pattern: '(?:mazda|мазда)\\s?6(?![0-9])|atenza|атенза',
+    otherCodes: /(?<![a-z0-9])(?:gh|gj|gl)(?![a-z0-9])/i,
     generations: [{ slug: '6-gg', codes: /(?<![a-z0-9])(?:gg|gy)(?![a-z0-9])/i, startFrom: 2001, startTo: 2007 }],
   },
   {
     make: 'mazda', model: 'Mazda 3', pattern: '(?:mazda|мазда)\\s?3(?![0-9])|axela|аксела',
+    otherCodes: /(?<![a-z0-9])(?:bl|bm|bn|bp)(?![a-z0-9])/i,
     generations: [{ slug: '3-bk', codes: /(?<![a-z0-9])bk(?![a-z0-9])/i, startFrom: 2002, startTo: 2008 }],
   },
   {
     make: 'mazda', model: 'CX-5', pattern: 'cx-?\\s?5',
+    otherCodes: /(?<![a-z0-9])kf(?![a-z0-9])/i,
     generations: [{ slug: 'cx-5-ke', codes: /(?<![a-z0-9])ke(?![a-z0-9])/i, startFrom: 2010, startTo: 2016 }],
   },
   { make: 'mazda', model: 'CX-7', pattern: 'cx-?\\s?7' },
@@ -580,10 +595,9 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
       let generationUnknown = false;
       if (m.generations) {
         // Поколение ПОДТВЕРЖДЕНО: код кузова ("ACV30") или годы "с–по"
-        // целиком внутри лет поколения ("Camry 01-06"). Открытый диапазон
-        // ("06-") или диапазон шире поколения — поколение не подтверждено
-        // (generation = null, "может подходить"). Год начала вне всех
-        // поколений словаря — заведомо другое поколение (OTHER_GENERATION)
+        // целиком внутри лет поколения ("Camry 01-06"). Любые другие годы или
+        // код поколения не из словаря — противоречие (OTHER_GENERATION).
+        // generation = null — только когда поколение просто не указано
         const years = yearsNear(text, match.index + match[0].length);
         const byCode = m.generations.find((g) => g.codes.test(text));
         const byStart = years ? m.generations.find((g) => years.start >= g.startFrom && years.start <= g.startTo) : undefined;
@@ -591,9 +605,13 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
           generationSlug = byCode.slug;
         } else if (byStart && years && years.end !== null && years.end <= (byStart.endYear ?? byStart.startTo + 1)) {
           generationSlug = byStart.slug;
-        } else if (years && !byStart) {
+        } else if (years || m.otherCodes?.test(text)) {
+          // Годы есть, но не лежат целиком внутри поколения ("07-" или
+          // "08.07-07.13" у Mazda 6 GG), либо код поколения не из словаря
+          // (GH, XV50) — противоречие, не "может подходить"
           generationSlug = OTHER_GENERATION;
         } else {
+          // Поколение просто не указано — ни годов, ни кода кузова
           generationUnknown = true;
         }
       }
@@ -611,4 +629,15 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
 export function modelForGeneration(slug: string): { make: string; model: string } | null {
   const found = MODELS.find((m) => (m.generations ?? []).some((g) => g.slug === slug));
   return found ? { make: found.make, model: found.model } : null;
+}
+
+// Поколения марок makes, в годы выпуска которых попадает year — для поиска
+// с годом ("колодки toyota 2005"): своя применимость знает поколение, а
+// значит и его годы (startFrom … endYear)
+export function generationsCoveringYear(makes: string[], year: number): string[] {
+  return MODELS.filter((m) => makes.includes(m.make)).flatMap((m) =>
+    (m.generations ?? [])
+      .filter((g) => year >= g.startFrom && year <= (g.endYear ?? g.startTo + 1))
+      .map((g) => g.slug)
+  );
 }

@@ -78,7 +78,10 @@ const MANUFACTURER_GROUPS: string[][] = [
   ['MAHLE', 'MAHLEORIGINAL', 'MAHLEFILTER', 'KNECHT', 'MAHLEKNECHT', 'KNECHTMAHLE'],
   ['CONTINENTAL', 'CONTINENTALCTAM', 'CONTITECH'],
   ['SCHAEFFLER', 'SCHAEFFLERGRUPPE', 'INA', 'LUK', 'FAG'],
-  ['ZF', 'ZFPARTS', 'LEMFORDER', 'SACHS', 'TRW', 'TRWAUTOMOTIVE'],
+  ['ZF', 'ZFPARTS', 'LEMFORDER', 'SACHS'],
+  // TRW — отдельно от группы ZF: у марок разная нумерация деталей, пара
+  // давала только ложные совпадения (решение владельца)
+  ['TRW', 'TRWAUTOMOTIVE'],
   ['JAPANPARTS', 'ASHIKA'],
   ['NTN', 'SNR', 'NTNSNR'],
   // Оригинальные запчасти: одна нумерация у марок одного концерна
