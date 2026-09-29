@@ -13,6 +13,7 @@
 
 import { NextResponse } from 'next/server';
 import { put } from '@vercel/blob';
+import { blobToken } from '@/lib/blobToken';
 import { resolveDocumentData } from '@/lib/documents/requestValidation';
 import { renderDocumentHtml } from '@/lib/documents/renderDocumentHtml';
 import { renderHtmlToPdf } from '@/lib/documents/renderPdf';
@@ -44,6 +45,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       // пути должен именно перезаписаться, а не упасть с ошибкой
       // "файл уже существует"
       allowOverwrite: true,
+      // Токен хранилища (на Vercel — с префиксом bazaa_), см. lib/blobToken.ts
+      token: blobToken(),
     });
 
     await saveDocumentFileUrl(id, resolved.data.docType, blob.url);

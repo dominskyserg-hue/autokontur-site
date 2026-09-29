@@ -22,6 +22,7 @@
 
 import type { Pool } from 'pg';
 import { put } from '@vercel/blob';
+import { blobToken } from './blobToken';
 import { normalizeBrandKey } from './brandFamilies';
 import { isEmptyPartName } from './emptyPartName';
 import { buildProductPath } from './slug';
@@ -29,13 +30,6 @@ import { SITE_URL } from './siteConfig';
 
 // Имя файла в Blob — постоянное (перезаписывается), на него ведёт rewrite
 export const DSA_FEED_BLOB_PATH = 'feeds/dsa-pages.csv';
-
-// Токен хранилища: локально — BLOB_READ_WRITE_TOKEN (.env.local), на Vercel
-// это же хранилище (store_khIb8AmQctsKdmXz) подключено с префиксом "bazaa_"
-// — стандартной переменной там нет. Тот же выбор в next.config.mjs (rewrite)
-function blobToken(): string | undefined {
-  return process.env.BLOB_READ_WRITE_TOKEN || process.env.bazaa_READ_WRITE_TOKEN || undefined;
-}
 
 // Бренд (normalizeBrandKey: верхний регистр, без пробелов и знаков) → label.
 // В базе один бренд записан по-разному ("HYUNDAI / KIA", "Hyundai", "KIA"),

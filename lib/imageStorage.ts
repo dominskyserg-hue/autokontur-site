@@ -17,13 +17,15 @@
 // сховище, безкоштовний ліміт є на будь-якому тарифі Vercel) — а в
 // базі лишається тільки коротке посилання на файл.
 //
-// Потрібен секрет BLOB_READ_WRITE_TOKEN: Vercel Dashboard → проєкт →
-// Storage → Create Database → Blob → прив'язати до проєкту. Vercel
-// сам додасть цей токен у змінні середовища проєкту (Production).
-// Для локальної розробки — скопіювати те саме значення в .env.local
+// Потрібен токен сховища: локально — BLOB_READ_WRITE_TOKEN у .env.local,
+// на Vercel сховище підключене з префіксом "bazaa_" (змінна
+// bazaa_READ_WRITE_TOKEN). Яку саме взяти — вирішує blobToken()
+// у lib/blobToken.ts; без явного token функція put() шукала лише
+// BLOB_READ_WRITE_TOKEN і на проді жодне фото не зберігалось
 // ============================================================
 
 import { put } from '@vercel/blob';
+import { blobToken } from './blobToken';
 
 export async function saveImage(webpBuffer: Buffer): Promise<string> {
   // Ім'я файлу — випадковий UUID, а не артикул товару: той самий
@@ -39,6 +41,7 @@ export async function saveImage(webpBuffer: Buffer): Promise<string> {
     // тому можна кешувати на CDN хоч на рік, зайвих запитів по нього
     // все одно не буде
     cacheControlMaxAge: 31536000,
+    token: blobToken(),
   });
 
   return blob.url;
@@ -56,6 +59,7 @@ export async function saveCompanyAsset(webpBuffer: Buffer, kind: 'logo' | 'stamp
     access: 'public',
     contentType: 'image/webp',
     cacheControlMaxAge: 31536000,
+    token: blobToken(),
   });
 
   return blob.url;
