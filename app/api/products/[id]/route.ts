@@ -22,10 +22,10 @@
 // значение из адреса (/api/products/ЗДЕСЬ) попадает в params.id
 // ============================================================
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { convertToWebp } from '@/lib/imageProcessing';
-import { saveImage } from '@/lib/imageStorage';
+import { deleteReplacedImages, saveImage } from '@/lib/imageStorage';
 import { requireAdmin } from '@/lib/adminAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
@@ -175,8 +175,11 @@ export async function PATCH(
     // фото" означает записать НАСТОЯЩИЙ NULL, а COALESCE(NULL, ...)
     // в этом случае просто оставил бы старое фото нетронутым. $6 —
     // явный флаг "поле imageUrl вообще передавали в этом запросе"
+    // old — строка ДО изменения (CTE видит снимок до UPDATE): нужна, чтобы
+    // понять, заменяем ли фото из Bing (см. ниже)
     const result = await pool.query(
       `
+      WITH old AS (SELECT image_url, image_source FROM products WHERE id = $1)
       UPDATE products
       SET
         retail_price = COALESCE($2, retail_price),
@@ -187,7 +190,8 @@ export async function PATCH(
         image_source = CASE WHEN $6::boolean THEN $8 ELSE image_source END,
         updated_at = now()
       WHERE id = $1
-      RETURNING id, article, brand, name, cost_price, retail_price, stock, supplier_id, meta_description, image_url, updated_at
+      RETURNING id, article, brand, name, cost_price, retail_price, stock, supplier_id, meta_description, image_url, updated_at,
+        (SELECT image_url FROM old) AS old_image_url, (SELECT image_source FROM old) AS old_image_source
       `,
       [
         id,
@@ -208,6 +212,16 @@ export async function PATCH(
     }
 
     const row = result.rows[0];
+
+    // Ручное фото главнее фото из Bing (правило владельца): главная страница
+    // группы, показывавшая старое Bing-фото, сразу получает новое, а старый
+    // файл удаляется из Blob после ответа. Если фото просто убрали (NULL) —
+    // Bing-файл НЕ удаляем
+    if (hasImageUrl && resolvedImageUrl && row.old_image_source === 'bing' && row.old_image_url && row.old_image_url !== resolvedImageUrl) {
+      const oldUrl: string = row.old_image_url;
+      await pool.query(`UPDATE products SET group_image_url = $2 WHERE group_image_url = $1`, [oldUrl, resolvedImageUrl]);
+      after(() => deleteReplacedImages(pool, [oldUrl]));
+    }
 
     return NextResponse.json({
       success: true,

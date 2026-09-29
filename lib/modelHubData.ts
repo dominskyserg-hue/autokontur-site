@@ -16,6 +16,7 @@ import { MODEL_HUBS, MIN_HUB_PRODUCTS, PRIORITY_CATEGORY_SLUGS, type ModelHubDef
 import { comparePopular, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import { modelForGeneration } from '@/lib/carModelDictionary';
 import { isEmptyPartName } from '@/lib/emptyPartName';
+import { publicImageUrl } from '@/lib/imageUrl';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -158,7 +159,7 @@ function rowsToOffers(rows: Array<Record<string, unknown>>): HubProduct[] {
     costPrice: parseFloat(row.cost_price as string),
     retailPrice: parseFloat(row.retail_price as string),
     stock: row.stock as number,
-    imageUrl: row.image_url as string | null,
+    imageUrl: publicImageUrl(row.image_url as string | null),
     deliveryTime: row.delivery_time as string | null,
     pageId: row.id as string,
     offerCount: 1,

@@ -43,6 +43,7 @@ import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularity
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import OfferCountNote from '@/components/OfferCountNote';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
+import { publicImageUrl } from '@/lib/imageUrl';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -217,7 +218,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
     discountPercent: parseFloat(row.discount_percent),
     stock: row.stock,
     deliveryTime: row.delivery_time,
-    imageUrl: row.image_url,
+    imageUrl: publicImageUrl(row.image_url),
     offerId: row.offer_id,
     offerCount: row.offer_count,
     isRefurbished: row.is_refurbished,

@@ -20,12 +20,72 @@
 // Потрібен токен сховища: локально — BLOB_READ_WRITE_TOKEN у .env.local,
 // на Vercel сховище підключене з префіксом "bazaa_" (змінна
 // bazaa_READ_WRITE_TOKEN). Яку саме взяти — вирішує blobToken()
-// у lib/blobToken.ts; без явного token функція put() шукала лише
-// BLOB_READ_WRITE_TOKEN і на проді жодне фото не зберігалось
+// у lib/blobToken.ts. До 29.09.2026 на проді put() без token входив
+// через OIDC у ІНШЕ сховище (BLOB_STORE_ID = store_DQzIbjxtWtDr5TOu) —
+// старі фото Bing лежать там, нові — у сховищі bazaa_
 // ============================================================
 
-import { put } from '@vercel/blob';
+import type { Pool } from 'pg';
+import { del, put } from '@vercel/blob';
 import { blobToken } from './blobToken';
+
+// ------------------------------------------------------------
+// УДАЛЕНИЕ ЗАМЕНЁННЫХ ФОТО ИЗ BLOB
+// ------------------------------------------------------------
+// Правило владельца (29.09.2026): фото от поставщика или загруженное вручную
+// всегда главнее фото из Bing — новое заменяет Bing-фото, а старый файл
+// удаляется из Blob. Сами Bing-фото без замены НЕ удаляем.
+//
+// Фото лежат в двух хранилищах (см. выше). Файл своего хранилища удаляем
+// токеном blobToken(); файл другого подключённого хранилища — через OIDC
+// с явным storeId (работает только на Vercel; локально — ошибка в лог)
+
+// storeId из хоста "<storeid>.public.blob.vercel-storage.com" — в хосте он в
+// нижнем регистре, а API нужен настоящий ("store_DQzIbjxtWtDr5TOu"), поэтому
+// сверяем с id подключённых хранилищ из переменных окружения
+function blobAuthForUrl(url: string): { token: string } | { storeId: string } | null {
+  const match = url.match(/^https:\/\/([a-z0-9]+)\.public\.blob\.vercel-storage\.com\//);
+  if (!match) return null;
+  const hostId = match[1];
+  const token = blobToken();
+  if (token && token.split('_')[3]?.toLowerCase() === hostId) return { token };
+  const storeIds = [process.env.BLOB_STORE_ID, process.env.bazaa_STORE_ID, process.env.blod2_STORE_ID];
+  const storeId = storeIds.find((id) => id && id.replace(/^store_/, '').toLowerCase() === hostId);
+  return storeId ? { storeId } : null;
+}
+
+// Удалить из Blob файлы заменённых фото — только если на файл больше не
+// ссылается ни один товар (главное фото, фото группы, галерея). Ошибки
+// только в лог: сбой удаления не должен ломать импорт прайса или сохранение
+// товара. Возвращает, сколько файлов удалено
+export async function deleteReplacedImages(pool: Pool, urls: string[]): Promise<number> {
+  const unique = [...new Set(urls.filter((url) => blobAuthForUrl(url) !== null))];
+  if (unique.length === 0) return 0;
+  let deleted = 0;
+  try {
+    const stillUsed = await pool.query<{ url: string }>(
+      `SELECT image_url AS url FROM products WHERE image_url = ANY($1::text[])
+       UNION SELECT group_image_url FROM products WHERE group_image_url = ANY($1::text[])
+       UNION SELECT image_url FROM product_images WHERE image_url = ANY($1::text[])`,
+      [unique]
+    );
+    const used = new Set(stillUsed.rows.map((row) => row.url));
+    for (const url of unique) {
+      if (used.has(url)) continue;
+      const auth = blobAuthForUrl(url);
+      try {
+        await del(url, auth ?? undefined);
+        deleted++;
+      } catch (error) {
+        console.error(`Не удалось удалить заменённое фото из Blob (${url}):`, error);
+      }
+    }
+  } catch (error) {
+    console.error('Ошибка при удалении заменённых фото из Blob:', error);
+  }
+  if (deleted > 0) console.log(`Удалено заменённых фото Bing из Blob: ${deleted}`);
+  return deleted;
+}
 
 export async function saveImage(webpBuffer: Buffer): Promise<string> {
   // Ім'я файлу — випадковий UUID, а не артикул товару: той самий

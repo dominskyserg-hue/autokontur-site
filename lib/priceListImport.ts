@@ -21,6 +21,7 @@ import { Pool, PoolClient } from 'pg';
 import { after } from 'next/server';
 import { recomputeProductGroupsSafely } from '@/lib/productGroups';
 import { startImportFollowup } from '@/lib/importFollowup';
+import { deleteReplacedImages } from '@/lib/imageStorage';
 import { alertIfSlowImport, createImportTiming, updateImportTiming, type ImportSource } from '@/lib/importTimings';
 import { getCategoryBySlug, productMatchesCategory } from '@/lib/categories';
 
@@ -317,7 +318,10 @@ export function parseExcelBuffer(
     // приводить их к числу здесь не нужно и даже вредно
     const carYear = String(rawCarYear ?? '').trim();
     const engineVolume = String(rawEngineVolume ?? '').trim();
-    const imageUrl = String(rawImage ?? '').trim();
+    // Только настоящая ссылка http(s)://: иначе в фото попадал текст вроде
+    // заголовка колонки "Фото" (строка шапки, разобранная как данные)
+    const rawImageText = String(rawImage ?? '').trim();
+    const imageUrl = /^https?:\/\/\S+$/i.test(rawImageText) ? rawImageText : '';
     const priceInSupplierCurrency = parseCellNumber(rawPrice);
     // products.stock — колонка INTEGER (остаток считается целыми
     // штуками детали), а в реальных прайсах в колонке остатка
@@ -416,6 +420,9 @@ const BATCH_SIZE = 500;
 export interface UpsertResult {
   addedCount: number;
   updatedCount: number;
+  // Ссылки на Bing-фото, которые этот импорт заменил фото из прайса —
+  // их файлы удаляются из Blob после пересчёта групп (deleteReplacedImages)
+  replacedBingUrls: string[];
 }
 
 async function upsertBatch(
@@ -503,6 +510,17 @@ async function upsertBatch(
     RETURNING (xmax = 0) AS inserted
   `;
 
+  // Фото из прайса главнее фото из Bing (правило владельца): запоминаем
+  // Bing-ссылки товаров, которым в этой пачке пришло фото, — ДО записи
+  const withImage = batch.filter((product) => product.imageUrl).map((product) => product.article);
+  const replaced = withImage.length
+    ? await client.query<{ image_url: string }>(
+        `SELECT image_url FROM products
+         WHERE supplier_id = $1 AND article = ANY($2::text[]) AND image_source = 'bing' AND image_url IS NOT NULL`,
+        [supplierId, withImage]
+      )
+    : { rows: [] };
+
   const result = await client.query(query, values);
 
   let addedCount = 0;
@@ -515,7 +533,7 @@ async function upsertBatch(
     }
   }
 
-  return { addedCount, updatedCount };
+  return { addedCount, updatedCount, replacedBingUrls: replaced.rows.map((row) => row.image_url) };
 }
 
 export async function saveProductsToDatabase(
@@ -527,6 +545,7 @@ export async function saveProductsToDatabase(
 
   let addedCount = 0;
   let updatedCount = 0;
+  const replacedBingUrls: string[] = [];
 
   try {
     await client.query('BEGIN');
@@ -539,6 +558,7 @@ export async function saveProductsToDatabase(
       const batchResult = await upsertBatch(client, supplierId, batch);
       addedCount += batchResult.addedCount;
       updatedCount += batchResult.updatedCount;
+      replacedBingUrls.push(...batchResult.replacedBingUrls);
     }
 
     // Та же транзакция: новая цена и наличие попадут в списки вместе с самим импортом
@@ -556,7 +576,7 @@ export async function saveProductsToDatabase(
     client.release();
   }
 
-  return { addedCount, updatedCount };
+  return { addedCount, updatedCount, replacedBingUrls };
 }
 
 // ------------------------------------------------------------
@@ -626,7 +646,7 @@ export async function importPriceListForSupplier(
   mapping: MappingSettings,
   buffer: Buffer,
   source: ImportSource = 'upload'
-): Promise<UpsertResult & { productsFound: number }> {
+): Promise<Omit<UpsertResult, 'replacedBingUrls'> & { productsFound: number }> {
   const started = Date.now();
   const exchangeRate = await getExchangeRateForCurrency(pool, supplierCurrency);
   const markupRules = await getActiveMarkupRules(pool, supplierId);
@@ -639,7 +659,7 @@ export async function importPriceListForSupplier(
   const uniqueProducts = deduplicateByArticle(allProducts);
   const parseMs = Date.now() - started;
   const saveStarted = Date.now();
-  const { addedCount, updatedCount } = await saveProductsToDatabase(pool, supplierId, uniqueProducts);
+  const { addedCount, updatedCount, replacedBingUrls } = await saveProductsToDatabase(pool, supplierId, uniqueProducts);
   const saveMs = Date.now() - saveStarted;
   const timingId = await createImportTiming(pool, supplierId, source, {
     rows_count: uniqueProducts.length,
@@ -665,6 +685,8 @@ export async function importPriceListForSupplier(
     const groupsStarted = Date.now();
     await recomputeProductGroupsSafely(pool, { supplierId });
     const groupsMs = Date.now() - groupsStarted;
+    // После пересчёта групп на заменённые Bing-фото уже не ссылается и фото группы
+    await deleteReplacedImages(pool, replacedBingUrls);
     const importTotalMs = Date.now() - started;
     console.log(
       `Импорт прайса (${source}, ${uniqueProducts.length} строк): разбор ${parseMs} мс, запись ${saveMs} мс, группы ${groupsMs} мс, всего ${importTotalMs} мс`

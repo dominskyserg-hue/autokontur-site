@@ -32,6 +32,7 @@ import RefurbishedBadge from '@/components/RefurbishedBadge';
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
+import { publicImageUrl } from '@/lib/imageUrl';
 import {
   TECH_BG,
   TECH_SURFACE,
@@ -150,7 +151,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
     retailPrice: computeCustomerPrice(parseFloat(row.cost_price), parseFloat(row.retail_price), customerPricingRule),
     stock: row.stock,
     deliveryTime: row.delivery_time,
-    imageUrl: row.image_url,
+    imageUrl: publicImageUrl(row.image_url),
     offerId: row.offer_id,
     offerCount: row.offer_count,
     isRefurbished: row.is_refurbished,

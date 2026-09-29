@@ -35,6 +35,7 @@ import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPric
 import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import { getSeoOverride, type SeoOverride, type SeoOverrideFaqItem } from '@/data/seo-overrides';
 import { PRODUCT_GROUPS_ACTIVE } from '@/lib/productGroups';
+import { publicImageUrl } from '@/lib/imageUrl';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -644,7 +645,7 @@ export const loadProduct = cache(async function loadProduct(id: string): Promise
     costPrice: parseFloat(row.cost_price),
     retailPrice: parseFloat(row.retail_price),
     stock: row.stock,
-    imageUrl: row.image_url,
+    imageUrl: publicImageUrl(row.image_url),
     metaDescription: row.meta_description,
     metaDescriptionOverride: Boolean(row.meta_description_override),
     carMake: row.car_make,
@@ -666,7 +667,7 @@ const loadProductImages = cache(async function loadProductImages(productId: stri
 
   return result.rows.map((row) => ({
     id: row.id,
-    url: row.image_url,
+    url: publicImageUrl(row.image_url) as string,
     label: row.label,
   }));
 });
@@ -1236,7 +1237,7 @@ const loadSimilarProducts = cache(async function loadSimilarProducts(
       article: row.article,
       brand: row.brand,
       name: row.name,
-      imageUrl: row.image_url,
+      imageUrl: publicImageUrl(row.image_url),
       stock: row.stock,
       costPrice: parseFloat(row.cost_price),
       retailPrice: parseFloat(row.retail_price),

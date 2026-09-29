@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
+import { publicImageUrl } from '@/lib/imageUrl';
 
 export const runtime = 'nodejs';
 
@@ -65,7 +66,7 @@ export async function GET(request: NextRequest) {
 
     const images: Record<string, string | null> = {};
     for (const row of result.rows) {
-      images[row.id] = row.image_url;
+      images[row.id] = publicImageUrl(row.image_url);
     }
 
     return NextResponse.json({ success: true, images });

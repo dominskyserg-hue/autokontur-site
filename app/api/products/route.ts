@@ -61,6 +61,7 @@ import { buildTextSearchClause } from '@/lib/productSearch';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import { isAdminRequest } from '@/lib/adminSession';
+import { publicImageUrl } from '@/lib/imageUrl';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -438,7 +439,7 @@ export async function GET(request: NextRequest) {
       carYear: row.car_year,
       engineVolume: row.engine_volume,
       metaDescription: row.meta_description,
-      imageUrl: row.image_url,
+      imageUrl: publicImageUrl(row.image_url),
       // cost_price/retail_price — колонки NUMERIC, драйвер pg
       // возвращает такие значения строкой (чтобы не терять точность
       // при преобразовании в float), поэтому явно переводим в число.

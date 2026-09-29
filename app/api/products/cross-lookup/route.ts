@@ -37,6 +37,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isAdminRequest } from '@/lib/adminSession';
 import { Pool } from 'pg';
+import { publicImageUrl } from '@/lib/imageUrl';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -97,7 +98,7 @@ function mapProductRow(row: Record<string, unknown>): ProductSummary {
     article: row.article as string,
     brand: row.brand as string | null,
     name: row.name as string | null,
-    imageUrl: row.image_url as string | null,
+    imageUrl: publicImageUrl(row.image_url as string | null),
     retailPrice: parseFloat(row.retail_price as string),
     stock: row.stock as number,
     supplierId: row.supplier_id as string,

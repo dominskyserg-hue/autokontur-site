@@ -23,6 +23,7 @@ import { Pool } from 'pg';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { getCustomerPricingRule, computeCustomerPrice } from '@/lib/customerPricing';
 import { requireCustomer } from '@/lib/customerAuth';
+import { publicImageUrl } from '@/lib/imageUrl';
 
 export const runtime = 'nodejs';
 
@@ -104,7 +105,7 @@ export async function GET(request: NextRequest) {
       article: row.article,
       brand: row.brand,
       name: row.name,
-      imageUrl: row.image_url,
+      imageUrl: publicImageUrl(row.image_url),
       retailPrice: computeCustomerPrice(parseFloat(row.cost_price), parseFloat(row.retail_price), pricingRule),
       stock: row.stock,
       createdAt: row.created_at,

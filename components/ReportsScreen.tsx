@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import AdminLayout from './AdminLayout';
+import PhotoSourcesPanel from './PhotoSourcesPanel';
 
 interface ReportsData {
   period: { from: string; to: string };
@@ -334,6 +335,9 @@ export default function ReportsScreen() {
           )}
         </>
       )}
+
+      {/* Фото товаров по источникам — не зависит от периода и вкладок */}
+      <PhotoSourcesPanel />
     </AdminLayout>
   );
 }
