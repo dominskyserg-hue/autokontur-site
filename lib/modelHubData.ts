@@ -73,25 +73,30 @@ export interface HubData {
 
 export const MAYBE_LIMIT = 24;
 
-// Детали той же модели, у которых поколение ПРОСТО НЕ УКАЗАНО ($1 марка,
-// $2 модель): есть строка с generation IS NULL и нет ни одной строки этой
-// модели с каким-либо поколением — ни с этим (тогда деталь в основном
-// списке), ни с другим или противоречащим (OTHER_GENERATION: годы не внутри
-// поколения, чужой код кузова). Противоречие у любого предложения детали
-// (бренд + артикул) исключает её целиком. $3 не используется — оставлен для
-// единообразия параметров с HUB_PRODUCTS_SQL
-const HUB_MAYBE_SQL = `
+// Детали той же модели ($1 марка, $2 модель, $3 slug хаба), которые "могут
+// подходить": поколение не указано (generation IS NULL) или код двигателя
+// общий для нескольких поколений и среди них это (generation = maybe:<slug>).
+// Противоречие у любого предложения детали (бренд + артикул) исключает её
+// целиком: подтверждённое или другое поколение (OTHER_GENERATION: годы не
+// внутри поколения, чужой код кузова или двигателя)
+export const HUB_MAYBE_SQL = `
   WITH parts AS (
     SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
     FROM product_vehicles_own pvo
     JOIN products p1 ON p1.id = pvo.product_id AND p1.is_active = true
-    WHERE pvo.make = $1 AND pvo.model = $2 AND pvo.generation IS NULL
+    WHERE pvo.make = $1 AND pvo.model = $2 AND (pvo.generation IS NULL OR pvo.generation = 'maybe:' || $3)
   ),
   confirmed AS (
+    -- Предложение противоречит "может подходить к этому хабу": у него есть
+    -- явное поколение этой модели (подтверждённое — оно в основном списке,
+    -- или другое/противоречащее) либо пометки maybe:, но не maybe:<этот хаб>
     SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
     FROM product_vehicles_own pvo
     JOIN products p1 ON p1.id = pvo.product_id AND p1.is_active = true
-    WHERE pvo.make = $1 AND pvo.model = $2 AND pvo.generation IS NOT NULL AND $3::text IS NOT NULL
+    WHERE pvo.make = $1 AND pvo.model = $2
+    GROUP BY p1.id, UPPER(COALESCE(p1.brand, '')), p1.article
+    HAVING bool_or(pvo.generation IS NOT NULL AND pvo.generation NOT LIKE 'maybe:%')
+        OR (bool_or(pvo.generation LIKE 'maybe:%') AND NOT bool_or(pvo.generation = 'maybe:' || $3))
   )
   SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time, p.group_primary_id, p.is_refurbished
   FROM parts
@@ -106,17 +111,27 @@ const HUB_MAYBE_SQL = `
 // или году в названии/прайсе. Берутся все предложения этой детали (бренд +
 // артикул), даже если поколение распознано только у одного поставщика.
 // $1 — slug марки, $2 — slug хаба
-const HUB_PRODUCTS_SQL = `
+export const HUB_PRODUCTS_SQL = `
   WITH parts AS (
     SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
     FROM product_vehicles_own pvo
     JOIN products p1 ON p1.id = pvo.product_id AND p1.is_active = true
     WHERE pvo.make = $1 AND pvo.generation = $2
+  ),
+  -- Противоречие у любого предложения детали (другое поколение этой модели:
+  -- чужой код двигателя, кузова, годы вне поколения) — деталь не показываем.
+  -- $3 — модель хаба в словаре (lib/carModelDictionary.ts, modelForGeneration)
+  conflicting AS (
+    SELECT DISTINCT UPPER(COALESCE(p1.brand, '')) AS brand, p1.article
+    FROM product_vehicles_own pvo
+    JOIN products p1 ON p1.id = pvo.product_id AND p1.is_active = true
+    WHERE pvo.make = $1 AND pvo.model = $3 AND pvo.generation = 'other'
   )
   SELECT DISTINCT p.id, p.article, p.brand, p.name, p.cost_price, p.retail_price, p.stock, p.image_url, s.delivery_time, p.group_primary_id, p.is_refurbished
   FROM parts
   JOIN products p ON p.article = parts.article AND UPPER(COALESCE(p.brand, '')) = parts.brand AND p.is_active = true
   JOIN suppliers s ON s.id = p.supplier_id
+  WHERE NOT EXISTS (SELECT 1 FROM conflicting c WHERE c.brand = parts.brand AND c.article = parts.article)
 `;
 
 function gridRank(product: HubProduct): number {
@@ -173,7 +188,7 @@ function bestPerPart(offers: HubProduct[]): HubProduct[] {
 export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): Promise<HubData> {
   const hubModel = modelForGeneration(hub.slug);
   const [result, maybeResult, soldList] = await Promise.all([
-    pool.query(HUB_PRODUCTS_SQL, [hub.makeSlug, hub.slug]),
+    pool.query(HUB_PRODUCTS_SQL, [hub.makeSlug, hub.slug, hubModel?.model ?? '']),
     hubModel ? pool.query(HUB_MAYBE_SQL, [hub.makeSlug, hubModel.model, hub.slug]) : Promise.resolve({ rows: [] }),
     getRecentlySoldProductIds(pool),
   ]);
@@ -263,7 +278,7 @@ export const loadHubProductCounts = cache(async function loadHubProductCounts():
     MODEL_HUBS.map(async (hub) => {
       // Унікальні запчастини (бренд + артикул) — так само, як на самій сторінці
       // Уникальные детали без "пустых" названий — так же, как на самой странице
-      const result = await pool.query(`SELECT DISTINCT t.brand, t.article, t.name FROM (${HUB_PRODUCTS_SQL}) t`, [hub.makeSlug, hub.slug]);
+      const result = await pool.query(`SELECT DISTINCT t.brand, t.article, t.name FROM (${HUB_PRODUCTS_SQL}) t`, [hub.makeSlug, hub.slug, modelForGeneration(hub.slug)?.model ?? '']);
       const parts = new Set(
         result.rows
           .filter((row) => !isEmptyPartName(row.name, row.brand, row.article))

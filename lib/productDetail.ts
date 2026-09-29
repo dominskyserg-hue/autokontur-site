@@ -925,7 +925,7 @@ const loadOwnCompatibility = cache(async function loadOwnCompatibility(
   article: string
 ): Promise<TecdocCompatibilityItem[]> {
   const result = await pool.query(
-    `SELECT pvo.make, pvo.model, NULLIF(pvo.generation, '${OTHER_GENERATION}') AS generation, bool_and(pvo.source = 'brand') AS only_brand
+    `SELECT pvo.make, pvo.model, CASE WHEN pvo.generation = '${OTHER_GENERATION}' OR pvo.generation LIKE 'maybe:%' THEN NULL ELSE pvo.generation END AS generation, bool_and(pvo.source = 'brand') AS only_brand
        FROM product_vehicles_own pvo
        JOIN products p ON p.id = pvo.product_id AND p.is_active
       WHERE p.article = $1 AND UPPER(COALESCE(p.brand, '')) = UPPER(COALESCE($2, ''))

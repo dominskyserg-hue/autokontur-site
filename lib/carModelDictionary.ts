@@ -25,6 +25,11 @@ export interface GenerationDef {
   label?: string;
   // код кузова или явная пометка поколения в тексте
   codes: RegExp;
+  // Коды двигателей, стоявших на поколении (только у поколений хабов).
+  // "1AZ*" — семейство (1AZ, 1AZ-FE, 1AZ-FSE), "LF-VE" — точный код;
+  // дефис/пробел внутри кода необязателен. Двигатель не из списка —
+  // противоречие; двигатель только этого поколения модели — подтверждение
+  engines?: string[];
   // год начала выпуска детали должен попасть в [startFrom, startTo]
   startFrom: number;
   startTo: number;
@@ -32,6 +37,10 @@ export interface GenerationDef {
   // "с–по" подтверждают поколение, только если целиком внутри
   endYear?: number;
 }
+
+// Префикс "может подходить только к поколению X" (по коду двигателя,
+// общего для нескольких поколений): generation = 'maybe:camry-xv30'
+export const MAYBE_PREFIX = 'maybe:';
 
 // Поколение модели не совпадает ни с одним поколением словаря или
 // противоречит им (годы не внутри поколения, код кузова другого поколения) —
@@ -48,6 +57,10 @@ interface ModelDef {
   // (Mazda 6 GH/GL, Camry XV50...). Их упоминание — противоречие: деталь
   // не "может подходить" к поколениям словаря
   otherCodes?: RegExp;
+  // Двигатели поколений этой модели, которых нет среди generations (Camry
+  // XV20/XV50/XV70...) — чтобы понять, стоял ли двигатель только на одном
+  // поколении
+  otherEngines?: string[];
 }
 
 const L = '[a-zа-яіїєґё0-9]';
@@ -66,18 +79,20 @@ const MODELS: ModelDef[] = [
   // ---------- Toyota ----------
   {
     make: 'toyota', model: 'Camry', pattern: 'camry|камр[иі]',
+    otherEngines: ['2AR*', '2GR*', '3S*', '5S*', '6AR*', 'A25A*', '1MZ*'],
     otherCodes: /(?:xv|acv|mcv|sxv|vcv|asv|avv|axvh?)[1257]\d|(?<![a-z0-9])v[12457]0(?![0-9])/i,
     generations: [
-      { slug: 'camry-xv30', codes: /(?:xv|acv|mcv)3\d/i, startFrom: 2000, startTo: 2005 },
-      { slug: 'camry-xv40', codes: /(?:xv|acv|gsv|ahv)4\d/i, startFrom: 2005, startTo: 2010 },
+      { slug: 'camry-xv30', engines: ['1AZ*', '2AZ*', '1MZ*', '3MZ*'], codes: /(?:xv|acv|mcv)3\d/i, startFrom: 2000, startTo: 2005 },
+      { slug: 'camry-xv40', engines: ['2AZ*', '2GR*'], codes: /(?:xv|acv|gsv|ahv)4\d/i, startFrom: 2005, startTo: 2010 },
     ],
   },
   {
     make: 'toyota', model: 'Corolla', pattern: 'corolla|корол+а|altis|runx',
+    otherEngines: ['1ND*', '1NR*', '1WZ*', '1ZR*', '2C*', '2ZR*', '3C*', '3ZZ*', '4A*', '4E*', '4ZZ*', '5A*', '7A*', '8NR*'],
     otherCodes: /(?<![a-z0-9])e1[01478]\d?(?![0-9])|(?<![a-z0-9])e21\d?(?![0-9])|(?:zre|nre)1[78]\d|(?:ae|ee|ce)11\d/i,
     generations: [
-      { slug: 'corolla-e120', codes: /(?:zze|nze|cde|zde|nde)12\d|(?<![a-z0-9])e12\d?(?![0-9])/i, startFrom: 2000, startTo: 2006 },
-      { slug: 'corolla-e150', codes: /(?:zre|zze|nre|nde|ade)15\d|(?<![a-z0-9])e15\d?(?![0-9])/i, startFrom: 2005, startTo: 2012 },
+      { slug: 'corolla-e120', engines: ['1ZZ*', '2ZZ*', '3ZZ*', '4ZZ*', '1CD*', '1ND*'], codes: /(?:zze|nze|cde|zde|nde)12\d|(?<![a-z0-9])e12\d?(?![0-9])/i, startFrom: 2000, startTo: 2006 },
+      { slug: 'corolla-e150', engines: ['1ZR*', '2ZR*', '3ZR*', '4ZZ*', '1ND*', '1AD*', '2AD*'], codes: /(?:zre|zze|nre|nde|ade)15\d|(?<![a-z0-9])e15\d?(?![0-9])/i, startFrom: 2005, startTo: 2012 },
     ],
   },
   { make: 'toyota', model: 'Avensis', pattern: 'avensis|авенс[иі]с' },
@@ -121,16 +136,18 @@ const MODELS: ModelDef[] = [
   // ---------- Nissan ----------
   {
     make: 'nissan', model: 'Qashqai', pattern: 'qashqai|кашка[йи]|dualis',
+    otherEngines: ['H5FT', 'HR16DE', 'HRA2DDT', 'K9K*', 'MR16DDT', 'MR20DD', 'R9M*'],
     otherCodes: /j12/i,
     generations: [
-      { slug: 'qashqai-j10', codes: /j?j10/i, startFrom: 2006, startTo: 2012 },
+      { slug: 'qashqai-j10', engines: ['MR20DE', 'HR16DE', 'K9K*', 'M9R*', 'R9M*'], codes: /j?j10/i, startFrom: 2006, startTo: 2012 },
       { slug: 'qashqai-j11', label: 'Qashqai J11', codes: /j11/i, startFrom: 2013, startTo: 2020 },
     ],
   },
   {
     make: 'nissan', model: 'X-Trail', pattern: 'x-?\\s?trail|х-?\\s?трейл|ікс-?\\s?трейл|икс-?\\s?трейл',
+    otherEngines: ['MR20DD', 'QR20DE', 'QR25DE', 'R9M*', 'YD22*'],
     otherCodes: /(?<![a-z0-9])t3[023](?![0-9])/i,
-    generations: [{ slug: 'x-trail-t31', codes: /t31/i, startFrom: 2006, startTo: 2013 }],
+    generations: [{ slug: 'x-trail-t31', engines: ['QR25DE', 'MR20DE', 'M9R*'], codes: /t31/i, startFrom: 2006, startTo: 2013 }],
   },
   { make: 'nissan', model: 'Almera', pattern: 'almera|альмера' },
   { make: 'nissan', model: 'Primera', pattern: 'primera|пр[иі]мера' },
@@ -174,9 +191,10 @@ const MODELS: ModelDef[] = [
   { make: 'mitsubishi', model: 'Pajero Sport', pattern: 'pajero\\s?sport|паджеро\\s?спорт' },
   {
     make: 'mitsubishi', model: 'Pajero', pattern: 'pajero(?!\\s?sport)|паджеро(?!\\s?спорт)|montero|shogun',
+    otherEngines: ['4M41*', '6G72*', '6G74*', '6G75*'],
     otherCodes: /(?<![a-z0-9])v[6-9]\d[a-z]?(?![0-9])|pajero\s?(?:iii|3|iv|4)(?![0-9a-z])/i,
     generations: [
-      { slug: 'pajero-2', codes: /pajero\s?(?:ii|2)(?![0-9])|pajero\s?classic|(?<![a-z0-9])v[234]\d[a-z]?(?![0-9])/i, startFrom: 1990, startTo: 1999, endYear: 2006 },
+      { slug: 'pajero-2', engines: ['4G54*', '4G64*', '6G72*', '6G74*', '4D56*', '4M40*'], codes: /pajero\s?(?:ii|2)(?![0-9])|pajero\s?classic|(?<![a-z0-9])v[234]\d[a-z]?(?![0-9])/i, startFrom: 1990, startTo: 1999, endYear: 2006 },
     ],
   },
   { make: 'mitsubishi', model: 'Outlander', pattern: 'outlander|аутл[еэ]ндер' },
@@ -196,13 +214,15 @@ const MODELS: ModelDef[] = [
   // ---------- Honda ----------
   {
     make: 'honda', model: 'Accord', pattern: 'accord|аккорд',
+    otherEngines: ['F18B*', 'F20B*', 'F23A*', 'H22A*', 'K24Z*', 'N22B*', 'R20A*'],
     otherCodes: /(?<![a-z0-9])(?:cg|cf|cu|cw|cr|cv|ch)\d(?![0-9])|accord\s?(?:vi|6|viii|8|ix|9)(?![0-9a-z])/i,
-    generations: [{ slug: 'accord-7', codes: /accord\s?(?:vii|7)(?![0-9])|(?<![a-z0-9])(?:cl[79]|cm[1-3]|cn[12])(?![0-9])/i, startFrom: 2002, startTo: 2007 }],
+    generations: [{ slug: 'accord-7', engines: ['K20A*', 'K24A*', 'N22A*'], codes: /accord\s?(?:vii|7)(?![0-9])|(?<![a-z0-9])(?:cl[79]|cm[1-3]|cn[12])(?![0-9])/i, startFrom: 2002, startTo: 2007 }],
   },
   {
     make: 'honda', model: 'Civic', pattern: 'civic|с[иі]в[иі]к',
+    otherEngines: ['D14*', 'D15*', 'D16*', 'D17A*', 'K20A*', 'L15*', 'N16A*', 'R18Z*'],
     otherCodes: /(?<![a-z0-9])(?:eg|ek|ej|eu|ep|es|em|fb|fc|fg)\d(?![0-9])|civic\s?(?:vii|7|ix|9|x|10)(?![0-9a-z])/i,
-    generations: [{ slug: 'civic-8', codes: /civic\s?(?:viii|8)(?![0-9])|(?<![a-z0-9])(?:fd[1-9]|fn[1-4]|fk[1-3])(?![0-9])/i, startFrom: 2004, startTo: 2010 }],
+    generations: [{ slug: 'civic-8', engines: ['R18A*', 'L13A*', 'K20Z*', 'N22A*', 'LDA*'], codes: /civic\s?(?:viii|8)(?![0-9])|(?<![a-z0-9])(?:fd[1-9]|fn[1-4]|fk[1-3])(?![0-9])/i, startFrom: 2004, startTo: 2010 }],
   },
   { make: 'honda', model: 'CR-V', pattern: 'cr-?\\s?v|срв' },
   { make: 'honda', model: 'Jazz', pattern: 'jazz|джаз' },
@@ -213,18 +233,21 @@ const MODELS: ModelDef[] = [
   // ---------- Mazda ----------
   {
     make: 'mazda', model: 'Mazda 6', pattern: '(?:mazda|мазда)\\s?6(?![0-9])|atenza|атенза',
+    otherEngines: ['L5-VE', 'L8-DE', 'LF-DE', 'LF-VD', 'PE-VPS', 'PY-VPS', 'R2AA', 'RF7J', 'SH-VPTS'],
     otherCodes: /(?<![a-z0-9])(?:gh|gj|gl)(?![a-z0-9])/i,
-    generations: [{ slug: '6-gg', codes: /(?<![a-z0-9])(?:gg|gy)(?![a-z0-9])/i, startFrom: 2001, startTo: 2007 }],
+    generations: [{ slug: '6-gg', engines: ['L8-DE', 'LF-DE', 'LF-VE', 'L3-VE', 'RF5C', 'RF7J'], codes: /(?<![a-z0-9])(?:gg|gy)(?![a-z0-9])/i, startFrom: 2001, startTo: 2007 }],
   },
   {
     make: 'mazda', model: 'Mazda 3', pattern: '(?:mazda|мазда)\\s?3(?![0-9])|axela|аксела',
+    otherEngines: ['L5-VE', 'LF-VD', 'P5-VPS', 'PE-VPS', 'PY-VPS', 'R2AA', 'SH-VPTS', 'Z6-DE'],
     otherCodes: /(?<![a-z0-9])(?:bl|bm|bn|bp)(?![a-z0-9])/i,
-    generations: [{ slug: '3-bk', codes: /(?<![a-z0-9])bk(?![a-z0-9])/i, startFrom: 2002, startTo: 2008 }],
+    generations: [{ slug: '3-bk', engines: ['LF-VE', 'LF-DE', 'L3-VE', 'RF7J', 'Z6-DE'], codes: /(?<![a-z0-9])bk(?![a-z0-9])/i, startFrom: 2002, startTo: 2008 }],
   },
   {
     make: 'mazda', model: 'CX-5', pattern: 'cx-?\\s?5',
+    otherEngines: ['PE-VPS', 'PY-VPS', 'PY-VPTS', 'SH-VPTS'],
     otherCodes: /(?<![a-z0-9])kf(?![a-z0-9])/i,
-    generations: [{ slug: 'cx-5-ke', codes: /(?<![a-z0-9])ke(?![a-z0-9])/i, startFrom: 2010, startTo: 2016 }],
+    generations: [{ slug: 'cx-5-ke', engines: ['PE-VPS', 'PY-VPS', 'SH-VPTS', 'SH-VPTR'], codes: /(?<![a-z0-9])ke(?![a-z0-9])/i, startFrom: 2010, startTo: 2016 }],
   },
   { make: 'mazda', model: 'CX-7', pattern: 'cx-?\\s?7' },
   { make: 'mazda', model: 'CX-9', pattern: 'cx-?\\s?9' },
@@ -265,7 +288,7 @@ const MODELS: ModelDef[] = [
   // ---------- Suzuki / Subaru ----------
   {
     make: 'suzuki', model: 'SX4', pattern: 'sx-?\\s?4(?!\\s?s-?\\s?cross)',
-    generations: [{ slug: 'sx4', codes: /sx-?\s?4/i, startFrom: 2006, startTo: 2013 }],
+    generations: [{ slug: 'sx4', engines: ['M15A*', 'M16A*', 'J20A*', 'D19AA', 'D16AA'], codes: /sx-?\s?4/i, startFrom: 2006, startTo: 2013 }],
   },
   { make: 'suzuki', model: 'Grand Vitara', pattern: 'grand\\s?vitara|гранд\\s?в[иі]тара' },
   { make: 'suzuki', model: 'Vitara', pattern: '(?<!grand\\s?)vitara' },
@@ -544,6 +567,33 @@ const COMPILED: CompiledModel[] = MODELS.map((m) => ({
 // каждой модели не нужен (полный пересчёт каталога в 5+ раз быстрее)
 const ANY_MODEL = new RegExp(`(?<!${L})(?:${MODELS.map((m) => m.pattern).join('|')})(?!${L})`, 'iu');
 
+// Код двигателя -> выражение: части из букв и цифр через необязательный
+// дефис/пробел ("QR25DE" найдёт и "QR25 DE", "QR25-DE"); "*" в конце —
+// семейство с любым буквенным суффиксом ("1AZ*" -> 1AZ, 1AZ-FE, 1AZ-FSE)
+const ENGINE_RE_CACHE = new Map<string, RegExp>();
+function engineRegex(code: string): RegExp {
+  let re = ENGINE_RE_CACHE.get(code);
+  if (!re) {
+    const family = code.endsWith('*');
+    const parts = code.replace('*', '').toLowerCase().match(/[a-z]+|[0-9]+/g) ?? [];
+    const body = parts.join('[- ]?') + (family ? '(?:[- ]?[a-z]{1,4})?' : '');
+    re = new RegExp(`(?<![a-z0-9])${body}(?![a-z0-9])`, 'i');
+    ENGINE_RE_CACHE.set(code, re);
+  }
+  return re;
+}
+
+// Коды двигателей модели, найденные в тексте, и на каких поколениях
+// словаря каждый стоял ('other' — только на поколениях вне словаря)
+function enginesInText(m: ModelDef, text: string): Array<{ code: string; generations: Set<string> }> {
+  const all = new Map<string, Set<string>>();
+  for (const g of m.generations ?? []) {
+    for (const code of g.engines ?? []) (all.get(code) ?? all.set(code, new Set()).get(code)!).add(g.slug);
+  }
+  for (const code of m.otherEngines ?? []) (all.get(code) ?? all.set(code, new Set()).get(code)!).add(OTHER_GENERATION);
+  return [...all].filter(([code]) => engineRegex(code).test(text)).map(([code, generations]) => ({ code, generations }));
+}
+
 export interface DetectedModel {
   make: string;
   model: string;
@@ -597,7 +647,8 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
     m.re.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = m.re.exec(text))) {
-      let generationSlug: string | null = null;
+      // Итог по поколению: одно значение или несколько "maybe:<slug>"
+      let generationSlugs: Array<string | null> = [null];
       let generationUnknown = false;
       if (m.generations) {
         // Поколение ПОДТВЕРЖДЕНО: код кузова ("ACV30") или годы "с–по"
@@ -607,6 +658,7 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
         const years = yearsNear(text, match.index + match[0].length);
         const byCode = m.generations.find((g) => g.codes.test(text));
         const byStart = years ? m.generations.find((g) => years.start >= g.startFrom && years.start <= g.startTo) : undefined;
+        let generationSlug: string | null = null;
         if (byCode) {
           generationSlug = byCode.slug;
         } else if (byStart && years && years.end !== null && years.end <= (byStart.endYear ?? byStart.startTo + 1)) {
@@ -617,13 +669,33 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
           // код поколения не из словаря (GH, XV50) — противоречие, не
           // "может подходить"
           generationSlug = OTHER_GENERATION;
-        } else {
-          // Поколение просто не указано — ни годов, ни кода кузова
-          generationUnknown = true;
         }
+
+        // Коды двигателей (только у поколений хабов, GenerationDef.engines)
+        const engines = enginesInText(m, text);
+        if (engines.length > 0 && generationSlug !== OTHER_GENERATION) {
+          const withEngines = m.generations.filter((g) => g.engines);
+          const fits = (g: GenerationDef) => engines.every((e) => e.generations.has(g.slug));
+          if (generationSlug !== null) {
+            // Поколение подтверждено кузовом/годами, но двигатель не его — противоречие
+            const g = m.generations.find((x) => x.slug === generationSlug)!;
+            if (g.engines && !fits(g)) generationSlug = OTHER_GENERATION;
+          } else {
+            const compatible = withEngines.filter(fits);
+            // Двигатель стоял только на одном поколении модели — подтверждение
+            const unique = compatible.length === 1 && engines.some((e) => e.generations.size === 1);
+            if (compatible.length === 0) generationSlug = OTHER_GENERATION;
+            else if (unique) generationSlug = compatible[0].slug;
+            else generationSlugs = compatible.map((g) => `${MAYBE_PREFIX}${g.slug}`);
+          }
+        }
+        if (generationSlug !== null) generationSlugs = [generationSlug];
+        else if (generationSlugs[0] === null) generationUnknown = true;
       }
-      const key = `${m.make}|${m.model}|${generationSlug ?? ''}`;
-      if (!found.has(key)) found.set(key, { make: m.make, model: m.model, generation: generationSlug, generationUnknown });
+      for (const generationSlug of generationSlugs) {
+        const key = `${m.make}|${m.model}|${generationSlug ?? ''}`;
+        if (!found.has(key)) found.set(key, { make: m.make, model: m.model, generation: generationSlug, generationUnknown });
+      }
       if (m.re.lastIndex === match.index) m.re.lastIndex++;
     }
   }

@@ -2,7 +2,8 @@
 // Словник російських слів -> українські для назв товарів (КРОК 2
 // очистки назв, див. lib/productNameTranslation.ts). Ключ — російська
 // словоформа в нижньому регістрі (конкретна форма, не лема).
-// Файл згенерований з .tecdoc-scratch/name-cleanup-audit/ru-ua-dictionary.json
+// Файл згенерований з ru-ua-dictionary.json аудиту очищення назв (робочий
+// файл поза репозиторієм)
 // ============================================================
 
 export const RU_UA_DICTIONARY: Readonly<Record<string, string>> = {
