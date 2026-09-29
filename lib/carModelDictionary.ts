@@ -559,7 +559,13 @@ export interface DetectedModel {
 // Необязательный месяц перед годом: "08.01-" = август 2001 (а не 2008).
 // Конец диапазона — 4 цифры или 2 цифры, за которыми нет цифры/точки
 // (иначе "06- 2.0" дало бы конец "2.")
-const YEAR_AFTER = /^.{0,25}?(?<![\d.,a-zа-яіїє])(?:\d{2}\.)?(\d{4}|\d{2})\s*[-–—]\s*(?:\d{2}\.)?(\d{4}|\d{2}(?![\d.]))?/iu;
+const YEAR_AFTER = /^.{0,25}?(?<![\d.,a-zа-яіїє])(?:\d{1,2}\.)?(\d{4}|\d{2})\s*[-–—]\s*(?:\d{1,2}\.)?(\d{4}|\d{2}(?![\d.]))?/iu;
+
+// Тот же диапазон лет в ЛЮБОМ месте текста ("mazda (07-12) mazda 6",
+// "…CX-9 2.0/2.5 11.11-"). Используется только как ПРОТИВОРЕЧИЕ (деталь не
+// "может подходить"), никогда — для подтверждения поколения: случайное
+// "12-24V" не должно попасть в основной список хаба
+const YEAR_ANYWHERE = /(?<![\d.,a-zа-яіїє])(?:\d{1,2}\.)?((?:19|20)\d{2}|\d{2})\s*[-–—]\s*(?:\d{1,2}\.)?((?:19|20)\d{2}|\d{2}(?![\d.]))?/iu;
 
 function toYear(token: string): number {
   const n = parseInt(token, 10);
@@ -605,10 +611,11 @@ export function detectCarModels(rawText: string | null | undefined): DetectedMod
           generationSlug = byCode.slug;
         } else if (byStart && years && years.end !== null && years.end <= (byStart.endYear ?? byStart.startTo + 1)) {
           generationSlug = byStart.slug;
-        } else if (years || m.otherCodes?.test(text)) {
+        } else if (years || m.otherCodes?.test(text) || YEAR_ANYWHERE.test(text)) {
           // Годы есть, но не лежат целиком внутри поколения ("07-" или
-          // "08.07-07.13" у Mazda 6 GG), либо код поколения не из словаря
-          // (GH, XV50) — противоречие, не "может подходить"
+          // "08.07-07.13" у Mazda 6 GG), годы в другом месте названия, либо
+          // код поколения не из словаря (GH, XV50) — противоречие, не
+          // "может подходить"
           generationSlug = OTHER_GENERATION;
         } else {
           // Поколение просто не указано — ни годов, ни кода кузова
