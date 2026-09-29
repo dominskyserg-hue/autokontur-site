@@ -84,9 +84,14 @@ export function resolveGroup(members: GroupMember[]): GroupResult {
   const inStock = members.filter((m) => m.stock > 0);
   const best = [...(inStock.length > 0 ? inStock : members)].sort((a, b) => a.retailPrice - b.retailPrice || a.id.localeCompare(b.id))[0];
 
-  // Уникальные названия (без учёта регистра и лишних пробелов), в порядке "подробности"
+  // Уникальные названия (без учёта регистра и лишних пробелов), в порядке "подробности".
+  // Обходим участников строго от старого к новому (byAge), а не в порядке строк
+  // из базы: иначе при равной "подробности" и при одинаковых очищенных
+  // названиях выбор зависел бы от случайного порядка, и каждый пересчёт менял
+  // H1 и "Також відомий як" без изменения данных. Сортировка в JS устойчивая —
+  // при равенстве побеждает название более старого товара
   const unique = new Map<string, string>();
-  for (const m of members) {
+  for (const m of byAge) {
     const name = (buildCleanProductName(m.name) ?? m.name ?? '').replace(/\s+/g, ' ').trim();
     if (name && !unique.has(name.toLowerCase())) unique.set(name.toLowerCase(), m.name ?? name);
   }
@@ -106,7 +111,8 @@ export function resolveGroup(members: GroupMember[]): GroupResult {
   return {
     primaryId: primary.id,
     bestOfferId: best.id,
-    imageUrl: primary.imageUrl ?? members.find((m) => m.imageUrl)?.imageUrl ?? null,
+    // Фото главной, иначе — самого старого двойника с фото (тоже не зависит от порядка строк)
+    imageUrl: primary.imageUrl ?? byAge.find((m) => m.imageUrl)?.imageUrl ?? null,
     displayName,
     otherNames,
   };
@@ -126,7 +132,8 @@ export async function loadProductGroups(db: Pool | PoolClient, supplierId?: stri
       WHERE p.is_active = true AND p.brand IS NOT NULL AND p.brand <> '' AND p.article <> ''
         ${supplierId ? 'AND (upper(p.brand), p.article) IN (SELECT upper(brand), article FROM products WHERE supplier_id = $1)' : ''}
     ) t
-    WHERE n > 1`, supplierId ? [supplierId] : []);
+    WHERE n > 1
+    ORDER BY key, created_at, id`, supplierId ? [supplierId] : []);
   const groups = new Map<string, GroupMember[]>();
   for (const row of result.rows) {
     if (!groups.has(row.key)) groups.set(row.key, []);
