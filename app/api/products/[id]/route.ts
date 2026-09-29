@@ -142,7 +142,8 @@ export async function PATCH(
   // Ссылку, вставленную вручную (обычный http(s)-адрес чужой картинки),
   // не трогаем — это осознанный выбор админа показывать чужое фото
   let resolvedImageUrl = hasImageUrl ? body.imageUrl?.trim() || null : null;
-  if (resolvedImageUrl?.startsWith('data:')) {
+  const uploadedImage = Boolean(resolvedImageUrl?.startsWith('data:'));
+  if (uploadedImage && resolvedImageUrl) {
     const match = resolvedImageUrl.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
     if (!match) {
       return NextResponse.json(
@@ -183,6 +184,7 @@ export async function PATCH(
         meta_description = COALESCE($4, meta_description),
         meta_description_override = meta_description_override OR $5::boolean,
         image_url = CASE WHEN $6::boolean THEN $7 ELSE image_url END,
+        image_source = CASE WHEN $6::boolean THEN $8 ELSE image_source END,
         updated_at = now()
       WHERE id = $1
       RETURNING id, article, brand, name, cost_price, retail_price, stock, supplier_id, meta_description, image_url, updated_at
@@ -195,6 +197,9 @@ export async function PATCH(
         hasMetaDescription,
         hasImageUrl,
         resolvedImageUrl,
+        // Откуда фото (schema.sql, products.image_source): файл, загруженный
+        // в админке, или вставленная вручную ссылка; фото убрали — NULL
+        !resolvedImageUrl ? null : uploadedImage ? 'manual_upload' : 'manual_url',
       ]
     );
 

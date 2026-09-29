@@ -438,6 +438,17 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS meta_description_override BOOLEAN 
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_url TEXT;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE products ADD COLUMN IF NOT EXISTS image_search_attempted_at TIMESTAMPTZ;
+-- Откуда взято фото image_url (NULL — фото нет):
+--   supplier_price — ссылка из колонки фото в прайсе поставщика (lib/priceListImport.ts);
+--   bing           — найдено поиском Bing и скачано с чужого сайта (lib/productImagePipeline.ts,
+--                    с 29.09.2026 выключено);
+--   manual_upload  — файл загружен в админке (app/api/products/[id]/route.ts);
+--   manual_url     — ссылка вставлена вручную в админке;
+--   unknown        — не удалось определить (заполнено задним числом 29.09.2026).
+-- Для фото до 29.09.2026 заполнено по косвенным признакам: домен ссылки,
+-- колонка фото у поставщика, отметка попытки поиска image_search_attempted_at
+ALTER TABLE products ADD COLUMN IF NOT EXISTS image_source TEXT
+  CHECK (image_source IN ('supplier_price', 'bing', 'manual_upload', 'manual_url', 'unknown'));
 ALTER TABLE products ADD COLUMN IF NOT EXISTS discount_percent NUMERIC(6, 2) NOT NULL DEFAULT 0;
 
 

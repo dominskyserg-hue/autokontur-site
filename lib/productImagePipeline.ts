@@ -134,7 +134,7 @@ export async function processProductImage(pool: Pool, product: ProductToProcess)
 
 async function markProductImage(pool: Pool, productId: string, imageUrl: string): Promise<void> {
   await pool.query(
-    `UPDATE products SET image_url = $2, image_search_attempted_at = now() WHERE id = $1`,
+    `UPDATE products SET image_url = $2, image_source = 'bing', image_search_attempted_at = now() WHERE id = $1`,
     [productId, imageUrl]
   );
 }

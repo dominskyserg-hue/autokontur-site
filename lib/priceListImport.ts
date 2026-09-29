@@ -426,11 +426,11 @@ async function upsertBatch(
   const values: unknown[] = [];
   const rowsSql: string[] = [];
 
-  // 16 значений на строку: supplier_id, article, brand, name,
+  // 17 значений на строку: supplier_id, article, brand, name,
   // cost_price, retail_price, discount_percent, stock, car_make,
   // car_model, car_year, engine_volume, image_url, slug, meta_title,
-  // meta_description
-  const COLUMNS_PER_ROW = 16;
+  // meta_description, image_source
+  const COLUMNS_PER_ROW = 17;
 
   batch.forEach((product, i) => {
     const base = i * COLUMNS_PER_ROW;
@@ -452,7 +452,9 @@ async function upsertBatch(
       product.imageUrl || null,
       product.slug,
       product.metaTitle,
-      product.metaDescription
+      product.metaDescription,
+      // Откуда фото (schema.sql, products.image_source) — из прайса поставщика
+      product.imageUrl ? 'supplier_price' : null
     );
   });
 
@@ -474,7 +476,7 @@ async function upsertBatch(
   // и ранее указанную ссылку
   const query = `
     INSERT INTO products
-      (supplier_id, article, brand, name, cost_price, retail_price, discount_percent, stock, car_make, car_model, car_year, engine_volume, image_url, slug, meta_title, meta_description)
+      (supplier_id, article, brand, name, cost_price, retail_price, discount_percent, stock, car_make, car_model, car_year, engine_volume, image_url, slug, meta_title, meta_description, image_source)
     VALUES
       ${rowsSql.join(', ')}
     ON CONFLICT (supplier_id, article)
@@ -490,6 +492,7 @@ async function upsertBatch(
       car_year = EXCLUDED.car_year,
       engine_volume = EXCLUDED.engine_volume,
       image_url = COALESCE(EXCLUDED.image_url, products.image_url),
+      image_source = CASE WHEN EXCLUDED.image_url IS NOT NULL THEN EXCLUDED.image_source ELSE products.image_source END,
       slug = EXCLUDED.slug,
       meta_title = EXCLUDED.meta_title,
       meta_description = CASE
