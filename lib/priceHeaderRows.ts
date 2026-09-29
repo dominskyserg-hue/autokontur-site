@@ -20,6 +20,7 @@ export const HEADER_ARTICLE_KEYS: ReadonlySet<string> = new Set([
   'НОМЕР', 'КОД', 'КОДТОВАРА', 'КОДТОВАРУ', 'АРТИКУЛ', 'АРТ', 'АРТИКУЛПРОИЗВОДИТЕЛЯ', 'АРТИКУЛВИРОБНИКА',
   'КАТАЛОЖНЫЙНОМЕР', 'КАТАЛОЖНЫЙНОМЕРПРОИЗВОДИТЕЛЯ', 'КАТАЛОЖНИЙНОМЕР', 'НОМЕРДЕТАЛИ', 'НОМЕРДЕТАЛ',
   'НОМЕРЗАПЧАСТИ', 'НОМЕРЗАПЧАСТИНИ', 'ИНДЕКС', 'НДЕКС', 'НДЕКСНТ', 'ARTICLE', 'ARTICLENUMBER', 'ARTNO', 'ARTNR',
+  'КОДПРОИЗВОДИТЕЛЯ', 'КОДВИРОБНИКА', 'ПОКАТАЛОГУ', 'НОМЕРПОКАТАЛОГУ', 'АРТИКУЛНАТОВАР',
   'SKU', 'PARTNUMBER', 'PARTNO', 'CATALOGNUMBER', 'CATALOGNO', 'CATITEMNO', 'CODE', 'NUMBER', 'OEM', 'OENUMBER',
   // бренд / производитель
   'БРЕНД', 'BRAND', 'ПРОИЗВОДИТЕЛЬ', 'ВИРОБНИК', 'ФИРМА', 'ФРМА', 'МАРКА', 'MANUFACTURER', 'MAKER',
@@ -31,7 +32,18 @@ export const HEADER_ARTICLE_KEYS: ReadonlySet<string> = new Set([
   'НАЛИЧИЕ', 'НАЯВНСТЬ', 'STOCK', 'ФОТО', 'PHOTO', 'IMAGE',
 ]);
 
-// article — уже очищенный артикул (cleanArticle)
-export function isHeaderArticle(article: string): boolean {
-  return HEADER_ARTICLE_KEYS.has(article);
+// Тот же вид, что у cleanArticle(): для сравнения названия и бренда со списком
+function headerKey(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9А-Я]/g, '');
+}
+
+// Строка — шапка таблицы, если артикул (уже очищенный cleanArticle) — типичный
+// заголовок, ИЛИ если и название, и бренд — заголовки ("Наименование" +
+// "Производитель"): так ловится шапка с необычным заголовком колонки
+// артикула ("По каталогу", "Код производителя" у NMCO)
+export function isHeaderRow(article: string, name: string, brand: string): boolean {
+  if (HEADER_ARTICLE_KEYS.has(article)) return true;
+  const nameKey = headerKey(name);
+  const brandKey = headerKey(brand);
+  return Boolean(nameKey && brandKey) && HEADER_ARTICLE_KEYS.has(nameKey) && HEADER_ARTICLE_KEYS.has(brandKey);
 }

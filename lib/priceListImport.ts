@@ -22,7 +22,7 @@ import { after } from 'next/server';
 import { recomputeProductGroupsSafely } from '@/lib/productGroups';
 import { startImportFollowup } from '@/lib/importFollowup';
 import { deleteReplacedImages } from '@/lib/imageStorage';
-import { isHeaderArticle } from '@/lib/priceHeaderRows';
+import { isHeaderRow } from '@/lib/priceHeaderRows';
 import { alertIfSlowImport, createImportTiming, updateImportTiming, type ImportSource } from '@/lib/importTimings';
 import { getCategoryBySlug, productMatchesCategory } from '@/lib/categories';
 
@@ -349,7 +349,7 @@ export function parseExcelBuffer(
     // Строка-шапка таблицы ("Артикул", "КОД", "CATITEMNO"...), если разбор
     // начат с неё — не товар, даже если в колонке цены оказалось число
     // (lib/priceHeaderRows.ts). До 23.09.2026 такие шапки оседали в каталоге
-    if (isHeaderArticle(article)) continue;
+    if (isHeaderRow(article, name, brand)) continue;
 
     // Шаг 1: переводим цену из валюты поставщика в местную валюту
     const supplierPrice = Math.round(priceInSupplierCurrency * exchangeRate * 100) / 100;
