@@ -27,6 +27,14 @@ export interface ProductToProcess {
 
 export type PipelineResult = 'found' | 'not_found' | 'error';
 
+// ВЫКЛЮЧАТЕЛЬ поиска фото через Bing (решение владельца, 29.09.2026):
+// фото так скачиваются с чужих сайтов — этот источник не используем.
+// Через processBatch() идут ВСЕ вызовы: cron fetch-product-images (и он
+// убран из vercel.json), поиск на сайте (app/api/products/route.ts) и
+// scripts/backfill-images.ts — при false они ничего не ищут и не
+// ставят отметок попыток. Код оставлен; включать только по решению владельца
+export const BING_IMAGE_SEARCH_ENABLED = false;
+
 // Скільки кандидатів із видачі Bing пробуємо ЗАВАНТАЖИТИ перед тим,
 // як здатись — перше фото в результатах не завжди підходить за
 // розміром (буває іконка чи скріншот), тому пробуємо кілька наступних
@@ -62,6 +70,8 @@ function isRelevantCandidate(candidate: { title: string }, article: string): boo
 }
 
 export async function processProductImage(pool: Pool, product: ProductToProcess): Promise<PipelineResult> {
+  // Поиск выключен — ни запроса в Bing, ни отметки попытки в базе
+  if (!BING_IMAGE_SEARCH_ENABLED) return 'not_found';
   const brand = product.brand?.trim() || '';
   // Кожен термін — в лапках: просимо в Bing ТОЧНЕ входження бренду і
   // ТОЧНЕ входження артикула окремо, а не смислово схожий запит —
@@ -150,6 +160,8 @@ export async function processBatch(
   delayRangeMs: [number, number] = [2000, 5000]
 ): Promise<ProcessBatchSummary> {
   const summary: ProcessBatchSummary = { processed: 0, found: 0, notFound: 0, errors: 0 };
+  // Поиск выключен — сразу выходим, без затяжек между товарами
+  if (!BING_IMAGE_SEARCH_ENABLED) return summary;
 
   for (let i = 0; i < products.length; i++) {
     const result = await processProductImage(pool, products[i]);

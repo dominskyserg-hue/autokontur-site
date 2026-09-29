@@ -1,10 +1,6 @@
 {
   "crons": [
     {
-      "path": "/api/cron/fetch-product-images",
-      "schedule": "0 3 * * *"
-    },
-    {
       "path": "/api/cron/import-supplier-emails",
       "schedule": "0 6 * * *"
     },
