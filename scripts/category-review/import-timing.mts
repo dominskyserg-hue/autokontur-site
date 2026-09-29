@@ -17,7 +17,7 @@ import pg from 'pg';
 const { saveProductsToDatabase } = await import('../../lib/priceListImport.ts');
 const { recomputeInTransaction } = await import('../../lib/categoryAssignment.ts');
 const { recomputeProductGroups } = await import('../../lib/productGroups.ts');
-const { refreshVehicleMakesForSupplier } = await import('../../lib/vehicleMakeIndex.ts');
+const { rebuildOwnVehicles } = await import('../../lib/ownVehicles.ts');
 const { rebuildUkrainianCorpusSafely } = await import('../../lib/corpusBuilder.ts');
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 2 });
@@ -104,7 +104,7 @@ async function runSplit() {
     client.release();
   }
   let t = Date.now();
-  await refreshVehicleMakesForSupplier(pool, supplier.supplier_id);
+  await rebuildOwnVehicles(pool, { supplierId: supplier.supplier_id });
   const tMakes = Date.now() - t;
   t = Date.now();
   await rebuildUkrainianCorpusSafely(pool);

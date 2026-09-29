@@ -18,6 +18,7 @@ import { detectCategoryInText, buildCategoryWhereClause } from './categories';
 import { extractCarReference } from './searchCarText';
 import { crossSideMatchesSql } from './crossBrandMatch';
 import { ownMakeSlugs } from './ownVehicles';
+import { generationsCoveringYear } from './carModelDictionary';
 
 // Та сама функція, що й у app/api/suppliers/parse-excel/route.ts —
 // нею чистяться артикули ПЕРЕД збереженням у базу, тому пошуковий
@@ -100,54 +101,38 @@ export async function buildTextSearchClause(
       categoryClauseSql = `(${categoryClause.clause})`;
     }
 
-    // "Сумісність з авто": (1) власні поля товару АБО (2) TecDoc. Це
-    // дві окремі гілки (кожна з власним індексом), а не OR в одній
-    // Гілки лише за МАРКОЮ (+ рік). Раніше була ще "точна" гілка з моделлю,
-    // але вона завжди вужча за цю (та сама умова + модель), тож в UNION
-    // нічого не додавала — прибрана; тому й модель у product_vehicle_makes
-    // не зберігається
+    // "Сумісність з авто" — дві гілки UNION (кожна з власним індексом):
+    // (1) власні поля товару car_make (+ car_year), (2) своя применимость
+    // product_vehicles_own (lib/ownVehicles.ts). TecDoc (product_vehicle_makes,
+    // построенная из tecdoc_compatibility) с этапа D перехода не читается.
+    // Год в запросе проверяется через поколение: деталь подходит, если её
+    // поколение выпускалось в этот год (generationsCoveringYear)
     const addCarCompatBranches = (): void => {
       values.push(carRef.makeDbValues);
       const ownParts = [`UPPER(p.car_make) = ANY($${startParamIndex + values.length - 1}::text[])`];
-      values.push(carRef.makeDbValues.map((make) => make.toUpperCase()));
-      // product_vehicle_makes — заздалегідь обчислений збіг tecdoc_compatibility
-      // з products (lib/vehicleMakeIndex.ts); make там уже UPPER(...)
-      const tecdocParts = [`pvm.make = ANY($${startParamIndex + values.length - 1}::text[])`];
-
       if (carRef.year) {
         values.push(`%${carRef.year}%`);
         ownParts.push(`p.car_year ILIKE $${startParamIndex + values.length - 1}`);
-        values.push(carRef.year);
-        tecdocParts.push(
-          `$${startParamIndex + values.length - 1}::int BETWEEN COALESCE(pvm.year_from, 1900) AND COALESCE(pvm.year_to, 2100)`
-        );
       }
 
       const categoryPart = categoryClauseSql ? `${categoryClauseSql} AND ` : '';
-      // Своя применимость (product_vehicles_own, lib/ownVehicles.ts) — марка
-      // из бренда, названия, OEM-номеров и прайса. Годов в своих данных нет,
-      // поэтому при годе в запросе эта ветка не участвует (иначе "колодки
-      // toyota 2005" находили бы детали для любых годов)
-      if (!carRef.year) {
-        values.push(ownMakeSlugs(carRef.makeDbValues));
-        const ownMakePlaceholder = `$${startParamIndex + values.length - 1}`;
+      const ownMakes = ownMakeSlugs(carRef.makeDbValues);
+      const yearGenerations = carRef.year ? generationsCoveringYear(ownMakes, parseInt(carRef.year, 10)) : [];
+      if (!carRef.year || yearGenerations.length > 0) {
+        values.push(ownMakes);
+        const vehicleParts = [`pvo.make = ANY($${startParamIndex + values.length - 1}::text[])`];
+        if (carRef.year) {
+          values.push(yearGenerations);
+          vehicleParts.push(`pvo.generation = ANY($${startParamIndex + values.length - 1}::text[])`);
+        }
         branches.push(
           categoryPart
             ? `SELECT p.id FROM product_vehicles_own pvo JOIN products p ON p.id = pvo.product_id
-                 WHERE ${categoryPart}pvo.make = ANY(${ownMakePlaceholder}::text[])`
-            : `SELECT pvo.product_id AS id FROM product_vehicles_own pvo WHERE pvo.make = ANY(${ownMakePlaceholder}::text[])`
+                 WHERE ${categoryPart}${vehicleParts.join(' AND ')}`
+            : `SELECT pvo.product_id AS id FROM product_vehicles_own pvo WHERE ${vehicleParts.join(' AND ')}`
         );
       }
       branches.push(`SELECT p.id FROM products p WHERE ${categoryPart}${ownParts.join(' AND ')}`);
-      // Без категорії товари не потрібні — лише id з product_vehicle_makes
-      branches.push(
-        categoryPart
-          ? `SELECT p.id
-               FROM product_vehicle_makes pvm
-               JOIN products p ON p.id = pvm.product_id
-               WHERE ${categoryPart}${tecdocParts.join(' AND ')}`
-          : `SELECT pvm.product_id AS id FROM product_vehicle_makes pvm WHERE ${tecdocParts.join(' AND ')}`
-      );
     };
 
     addCarCompatBranches();

@@ -7,16 +7,13 @@
 // components/CategoryVehicleFilter.tsx) — БЕЗ окремої, незалежної від
 // основного пошуку системи фільтрації.
 //
-// Джерела даних (обидва одночасно, через OR):
+// Джерела даних (через OR):
 //   1. Власні поля товару — products.car_make/car_model/car_year/
 //      engine_volume (вільний текст, який заповнює постачальник —
 //      часто порожній)
-//   2. tecdoc_compatibility — масовий SEO-індекс TecDoc (join по
-//      brand+article), той самий індекс, яким уже користуються вузькі
-//      SEO-сторінки (lib/categories.ts, поле tecdocVehicle) і
-//      випадаючі списки "Підбір за автомобілем" (app/api/products/
-//      car-options/route.ts) — так товар знаходиться, навіть якщо
-//      постачальник не заповнив власні car_make/car_year вручну
+//   2. Своя применимость product_vehicles_own (lib/ownVehicles.ts) —
+//      марка, модель, поколение из бренда, названия, OEM-номеров и прайса.
+//      TecDoc (tecdoc_compatibility) с этапа D перехода не читается.
 //
 // Усередині ОДНОГО джерела всі задані параметри перевіряються РАЗОМ
 // (AND) — інакше марка+рік могли б збігтись по одному джерелу, а
@@ -26,6 +23,7 @@
 
 import { resolveMakeDbValues } from './carMakes';
 import { ownMakeSlugs } from './ownVehicles';
+import { generationsCoveringYear } from './carModelDictionary';
 
 export interface VehicleFilterParams {
   make?: string;
@@ -78,32 +76,23 @@ export function buildVehicleWhereClause(
   }
   const ownMatchSql = ownParts.length > 0 ? ownParts.join(' AND ') : 'FALSE';
 
-  const tecdocParts: string[] = [];
-  if (make) {
-    tecdocParts.push(`UPPER(tc.make) = ANY($${push(makeDbValues)}::text[])`);
-  }
-  if (model) {
-    tecdocParts.push(`tc.model = $${push(model)}`);
-  }
-  if (year) {
-    tecdocParts.push(`$${push(year)}::int BETWEEN COALESCE(tc.year_from, 1900) AND COALESCE(tc.year_to, 2100)`);
-  }
-  if (engine) {
-    tecdocParts.push(`tc.engine ILIKE $${push(engine)}`);
-  }
-  const tecdocWhereSql = tecdocParts.length > 0 ? `AND ${tecdocParts.join(' AND ')}` : '';
-
   // Своя применимость (product_vehicles_own, lib/ownVehicles.ts): марка и
-  // модель из бренда, названия, OEM-номеров и прайса. Годов и двигателей в
-  // своих данных нет, поэтому при выбранном годе/двигателе эта ветка не
-  // участвует — иначе фильтр пропускал бы детали для других поколений.
-  // Модель из фильтра (запись TecDoc, напр. "CAMRY Stufenheck (...)")
-  // сравнивается по вхождению своей модели ("Camry")
+  // модель из бренда, названия, OEM-номеров и прайса. Год проверяется через
+  // поколение: деталь подходит, если её поколение выпускалось в этот год
+  // (lib/carModelDictionary.ts, generationsCoveringYear); без поколения при
+  // выбранном годе ветка не участвует. Двигателей в своих данных нет — при
+  // выбранном двигателе ветка тоже не участвует. Модель из фильтра
+  // сравнивается по вхождению своей модели ("Camry" в "Camry")
   let ownVehiclesSql = '';
-  if (make && !year && !engine) {
-    const ownVehicleParts = [`pvo.make = ANY($${push(ownMakeSlugs(makeDbValues))}::text[])`];
+  const ownMakes = make ? ownMakeSlugs(makeDbValues) : [];
+  const yearGenerations = year && /^\d{4}$/.test(year) ? generationsCoveringYear(ownMakes, parseInt(year, 10)) : [];
+  if (make && !engine && (!year || yearGenerations.length > 0)) {
+    const ownVehicleParts = [`pvo.make = ANY($${push(ownMakes)}::text[])`];
     if (model) {
       ownVehicleParts.push(`pvo.model IS NOT NULL AND position(upper(pvo.model) in upper($${push(model)})) > 0`);
+    }
+    if (year) {
+      ownVehicleParts.push(`pvo.generation = ANY($${push(yearGenerations)}::text[])`);
     }
     ownVehiclesSql = `
     OR EXISTS (
@@ -114,11 +103,6 @@ export function buildVehicleWhereClause(
 
   const clause = `(
     (${ownMatchSql})${ownVehiclesSql}
-    OR EXISTS (
-      SELECT 1 FROM tecdoc_compatibility tc
-      WHERE UPPER(translate(tc.brand, 'ÄÖÜäöüÉÈéè', 'AOUaoueEee')) = UPPER(p.brand) AND tc.article = p.article
-      ${tecdocWhereSql}
-    )
   )`;
 
   return { clause, params };

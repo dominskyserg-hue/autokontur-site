@@ -12,7 +12,6 @@
 
 import type { Pool } from 'pg';
 import { recomputeProductCategories } from '@/lib/categoryAssignment';
-import { refreshVehicleMakesForSupplier } from '@/lib/vehicleMakeIndex';
 import { rebuildOwnVehiclesSafely } from '@/lib/ownVehicles';
 import { rebuildUkrainianCorpusSafely } from '@/lib/corpusBuilder';
 import { SITE_URL } from '@/lib/siteConfig';
@@ -28,8 +27,7 @@ export async function runImportFollowup(pool: Pool, supplierId: string, timingId
     await recomputeProductCategories(pool, { kind: 'supplier', supplierId });
     times.categories_ms = Date.now() - t;
     t = Date.now();
-    await refreshVehicleMakesForSupplier(pool, supplierId);
-    // Своя применимость (марка/модель без TecDoc) — товары этого поставщика
+    // Своя применимость (марка/модель авто без TecDoc) — товары этого поставщика
     await rebuildOwnVehiclesSafely(pool, { supplierId });
     times.vehicle_makes_ms = Date.now() - t;
     t = Date.now();
@@ -41,7 +39,7 @@ export async function runImportFollowup(pool: Pool, supplierId: string, timingId
   }
   const total = Date.now() - started;
   console.log(
-    `Хвост импорта (${supplierId}): категории ${times.categories_ms} мс, марки ${times.vehicle_makes_ms} мс, словарь ${times.corpus_ms} мс, всего ${total} мс`
+    `Хвост импорта (${supplierId}): категории ${times.categories_ms} мс, своя применимость ${times.vehicle_makes_ms} мс, словарь ${times.corpus_ms} мс, всего ${total} мс`
   );
   await updateImportTiming(pool, timingId, {
     ...times,
@@ -51,7 +49,7 @@ export async function runImportFollowup(pool: Pool, supplierId: string, timingId
   });
   await alertIfSlowImport(pool, 'хвіст імпорту (категорії, марки, словник)', supplierId, total, {
     категорії: times.categories_ms,
-    'індекс марок': times.vehicle_makes_ms,
+    'своя применимость (марка/модель)': times.vehicle_makes_ms,
     'словник назв': times.corpus_ms,
   });
 }
