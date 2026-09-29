@@ -12,7 +12,8 @@
     "corpus:rebuild": "tsx scripts/rebuild-ukrainian-corpus.ts",
     "categories:rebuild": "tsx scripts/rebuild-categories.ts",
     "groups:rebuild": "tsx scripts/rebuild-groups.ts",
-    "own-vehicles:rebuild": "tsx scripts/rebuild-own-vehicles.ts"
+    "own-vehicles:rebuild": "tsx scripts/rebuild-own-vehicles.ts",
+    "dsa-feed:rebuild": "tsx scripts/rebuild-dsa-feed.ts"
   },
   "dependencies": {
     "@sparticuz/chromium": "^153.0.0",

@@ -10,8 +10,24 @@ const nextConfig = {
   // трассировку (Output File Tracing) при деплое
   // /sitemap-products-N.xml -> один динамічний роут app/sitemap-products/[chunk]
   // (App Router не підтримує динамічний сегмент усередині імені "…-N.xml")
+  //
+  // /feeds/dsa-pages.csv — фид страниц для DSA Google Ads (lib/dsaPageFeed.ts).
+  // Файл ~10 МБ больше лимита ответа функции Vercel (4,5 МБ), поэтому лежит в
+  // Vercel Blob, а Vercel проксирует адрес туда (внешний rewrite, без функции).
+  // Хост хранилища — из токена vercel_blob_rw_<storeId>_<секрет>
   async rewrites() {
-    return [{ source: '/sitemap-products-:chunk(\\d+).xml', destination: '/sitemap-products/:chunk' }];
+    const blobStoreId = (process.env.BLOB_READ_WRITE_TOKEN ?? '').split('_')[3]?.toLowerCase();
+    return [
+      { source: '/sitemap-products-:chunk(\\d+).xml', destination: '/sitemap-products/:chunk' },
+      ...(blobStoreId
+        ? [
+            {
+              source: '/feeds/dsa-pages.csv',
+              destination: `https://${blobStoreId}.public.blob.vercel-storage.com/feeds/dsa-pages.csv`,
+            },
+          ]
+        : []),
+    ];
   },
 
   serverExternalPackages: ['@sparticuz/chromium', 'puppeteer-core'],
