@@ -775,9 +775,9 @@ const loadCrossReferences = cache(async function loadCrossReferences(
 });
 
 // Аналог/OEM-номер з таблиці part_crosses — кроси з прайсів наших
-// постачальників і довідника TRW (scripts/tecdoc/schema.sql). НЕ те саме,
+// постачальників і довідника TRW (scripts/crosses/schema.sql). НЕ те саме,
 // що CrossRefItem вище (cross_reference_members — курована адміном модель)
-export interface TecdocCrossItem {
+export interface PartCrossItem {
   brand: string;
   article: string;
   // Якщо ця пара бренд+артикул реально є в наявності серед НАШИХ
@@ -797,7 +797,7 @@ export interface TecdocCrossItem {
 // null, якщо для цієї марки немає власної сторінки /marky/[slug]
 // (курований список, lib/carMakes.ts) — тоді рядок теж просто текст,
 // без посилання в нікуди
-export interface TecdocCompatibilityItem {
+export interface VehicleCompatibilityItem {
   make: string;
   // Сире значення марки (напр. "VW", а не
   // курована "Volkswagen" з make вище) — потрібне окремо, бо саме в
@@ -831,25 +831,25 @@ export interface TecdocCompatibilityItem {
   narrowPath?: string | null;
 }
 
-const TECDOC_CROSSES_LIMIT = 30;
-const TECDOC_COMPATIBILITY_LIMIT = 20;
+const PART_CROSSES_LIMIT = 30;
+const VEHICLE_COMPATIBILITY_LIMIT = 20;
 
 // article — уже ОЧИЩЕНИЙ (products.article в базі і так зберігається
 // очищеним, повторно чистити не треба — див. коментар біля products
 // у schema.sql). part_crosses.article_a заповнений тією ж функцією
-// cleanArticle() під час імпорту (scripts/tecdoc/cleanArticle.ts),
+// cleanArticle() під час імпорту (scripts/crosses/cleanArticle.ts),
 // тому пряме порівняння текстом коректне
-type TecdocCrossItemRaw = TecdocCrossItem & { costPrice: number | null };
+type PartCrossItemRaw = PartCrossItem & { costPrice: number | null };
 
 // brand — бренд самого товара: строки кроссов берутся только того же
 // производителя или длинные номера без бренда (lib/crossBrandMatch.ts),
 // иначе совпадение одного артикула у разных брендов давало чужие аналоги.
 // is_valid = false — строки, помеченные как ложные или из исключённого
-// источника (invalid_reason, scripts/tecdoc/schema.sql)
-const loadTecdocCrosses = cache(async function loadTecdocCrosses(
+// источника (invalid_reason, scripts/crosses/schema.sql)
+const loadPartCrosses = cache(async function loadPartCrosses(
   article: string,
   brand: string | null
-): Promise<TecdocCrossItemRaw[]> {
+): Promise<PartCrossItemRaw[]> {
   if (!brand) return [];
 
   const result = await pool.query(
@@ -884,7 +884,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(
     -- Спершу ті, що реально є в нашому каталозі (клікабельні,
     -- корисніші покупцю) — потім решта, просто текстом
     ORDER BY (p.id IS NOT NULL) DESC, tc.brand_b, tc.article_b
-    LIMIT ${TECDOC_CROSSES_LIMIT}
+    LIMIT ${PART_CROSSES_LIMIT}
     `,
     [article, brand]
   );
@@ -907,7 +907,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(
 });
 
 // Своя применимость (product_vehicles_own, lib/ownVehicles.ts) в том же
-// виде, что и TecdocCompatibilityItem выше — блок "Запчастина підходить для авто"
+// виде, что и VehicleCompatibilityItem выше — блок "Запчастина підходить для авто"
 // рисуется тем же бейджем. Годов и двигателей в своих данных нет — поля
 // пустые, бейдж их просто не показывает. Берутся строки всех предложений
 // этой детали (бренд + артикул): у одного поставщика модель есть в
@@ -915,7 +915,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(
 const loadOwnCompatibility = cache(async function loadOwnCompatibility(
   brand: string | null,
   article: string
-): Promise<TecdocCompatibilityItem[]> {
+): Promise<VehicleCompatibilityItem[]> {
   const result = await pool.query(
     `SELECT pvo.make, pvo.model, CASE WHEN pvo.generation = '${OTHER_GENERATION}' OR pvo.generation LIKE 'maybe:%' THEN NULL ELSE pvo.generation END AS generation, bool_and(pvo.source = 'brand') AS only_brand
        FROM product_vehicles_own pvo
@@ -928,7 +928,7 @@ const loadOwnCompatibility = cache(async function loadOwnCompatibility(
   const [visibleHubs, thin] = await Promise.all([loadVisibleHubs(), loadThinNarrowCategories()]);
   const withModel = new Set(result.rows.filter((r) => r.model).map((r) => r.make as string));
   const seen = new Set<string>();
-  const items: TecdocCompatibilityItem[] = [];
+  const items: VehicleCompatibilityItem[] = [];
   // Сначала — с поколением, потом — с моделью, потом — только марка
   const rows = [...result.rows].sort((a, b) => Number(Boolean(b.generation)) - Number(Boolean(a.generation)) || Number(Boolean(b.model)) - Number(Boolean(a.model)));
   for (const row of rows) {
@@ -963,7 +963,7 @@ const loadOwnCompatibility = cache(async function loadOwnCompatibility(
   }
   // Спершу марки з власною сторінкою /marky/[slug] (клікабельні)
   items.sort((a, b) => Number(b.makeSlug !== null) - Number(a.makeSlug !== null));
-  return items.slice(0, TECDOC_COMPATIBILITY_LIMIT);
+  return items.slice(0, VEHICLE_COMPATIBILITY_LIMIT);
 });
 
 export interface ProductPageData {
@@ -971,8 +971,8 @@ export interface ProductPageData {
   images: ProductImage[];
   otherOffers: OtherOffer[];
   crossRefs: { oem: CrossRefItem[]; aftermarket: CrossRefItem[] };
-  tecdocCrosses: TecdocCrossItem[];
-  tecdocCompatibility: TecdocCompatibilityItem[];
+  partCrosses: PartCrossItem[];
+  vehicleCompatibility: VehicleCompatibilityItem[];
   breadcrumbItems: BreadcrumbItem[];
   // Ручний SEO-оверрайд товару (data/seo-overrides.ts) — undefined,
   // якщо для артикула запису немає (переважна більшість товарів).
@@ -1034,12 +1034,12 @@ export async function loadProductPageData(
 
   const seoOverride = getSeoOverride(product.article);
 
-  const [images, rawOtherOffers, rawCrossRefs, rawTecdocCrosses, tecdocCompatibility, pairPartPath] =
+  const [images, rawOtherOffers, rawCrossRefs, rawPartCrosses, vehicleCompatibility, pairPartPath] =
     await Promise.all([
       loadProductImages(id),
       loadOtherOffers(product),
       loadCrossReferences(product),
-      loadTecdocCrosses(product.article, product.brand),
+      loadPartCrosses(product.article, product.brand),
       // Блок "Запчастина підходить для авто" — из своих данных
       loadOwnCompatibility(product.brand, product.article),
       // Запит на пару виконуємо ЛИШЕ якщо оверрайд її взагалі задає —
@@ -1108,7 +1108,7 @@ export async function loadProductPageData(
     oem: rawCrossRefs.oem.map(toPublicCrossRef),
     aftermarket: rawCrossRefs.aftermarket.map(toPublicCrossRef),
   };
-  const tecdocCrosses: TecdocCrossItem[] = rawTecdocCrosses.map((item) => ({
+  const partCrosses: PartCrossItem[] = rawPartCrosses.map((item) => ({
     brand: item.brand,
     article: item.article,
     productPath: item.productPath,
@@ -1167,8 +1167,8 @@ export async function loadProductPageData(
     images,
     otherOffers,
     crossRefs,
-    tecdocCrosses,
-    tecdocCompatibility,
+    partCrosses,
+    vehicleCompatibility,
     breadcrumbItems,
     seoOverride,
     pairPartPath,

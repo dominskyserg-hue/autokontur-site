@@ -21,7 +21,7 @@ import { TELEGRAM_BOT_USERNAME } from '@/lib/telegramNotify';
 import { buildProductPath } from '@/lib/slug';
 import { buildFaqJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
-import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type TecdocCompatibilityItem, type TecdocCrossItem } from '@/lib/productDetail';
+import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type VehicleCompatibilityItem, type PartCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
 import FavoriteButton from '@/components/FavoriteButton';
@@ -103,8 +103,8 @@ export default function ProductDetailContent({
   images,
   otherOffers,
   crossRefs,
-  tecdocCrosses,
-  tecdocCompatibility,
+  partCrosses,
+  vehicleCompatibility,
   breadcrumbItems,
   seoOverride,
   pairPartPath,
@@ -164,7 +164,7 @@ export default function ProductDetailContent({
 
   // Даних про сумісність немає ні своїх, ні з ручного оверрайду —
   // замість порожнього місця пропонуємо перевірити сумісність за VIN
-  const hasCompatibility = tecdocCompatibility.length > 0 || Boolean(seoOverride?.applicability?.length);
+  const hasCompatibility = vehicleCompatibility.length > 0 || Boolean(seoOverride?.applicability?.length);
 
   return (
     <>
@@ -507,10 +507,10 @@ export default function ProductDetailContent({
           лежить у HTML сторінки, тому пошуковики бачать його так само,
           як і раніше; звичайний покупець просто не бачить довгий
           список одразу, а розгортає його за бажанням */}
-      {tecdocCrosses.length > 0 && (
+      {partCrosses.length > 0 && (
         <section className="mb-10">
           {/* Короткий список (≤ 6) розгорнутий одразу — ховати нічого */}
-          <details className="group" open={tecdocCrosses.length <= 6}>
+          <details className="group" open={partCrosses.length <= 6}>
             <summary
               className="mb-3 flex cursor-pointer select-none items-center gap-2 text-lg font-semibold [&::-webkit-details-marker]:hidden"
               style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}
@@ -520,10 +520,10 @@ export default function ProductDetailContent({
               </span>
               Аналоги
               <span className="text-sm font-normal" style={{ fontFamily: BODY_FONT, color: FAINT }}>
-                ({tecdocCrosses.length})
+                ({partCrosses.length})
               </span>
             </summary>
-            <TecdocCrossList items={tecdocCrosses} />
+            <PartCrossList items={partCrosses} />
           </details>
         </section>
       )}
@@ -533,13 +533,13 @@ export default function ProductDetailContent({
           loadOwnCompatibility): марка, модель, поколение — без годов и
           двигателей. Под бейджами — ссылка на VIN-проверку: форма заявки
           открывается с уже подставленной деталью */}
-      {tecdocCompatibility.length > 0 && (
+      {vehicleCompatibility.length > 0 && (
         <section className="mb-10">
           <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
             Застосовується для
           </h2>
           <div className="flex flex-wrap gap-2">
-            {tecdocCompatibility.map((item, index) => (
+            {vehicleCompatibility.map((item, index) => (
               <CompatibilityBadge
                 key={`${item.make}-${item.model}-${item.yearFrom ?? ''}-${item.yearTo ?? ''}-${item.engine}-${index}`}
                 item={item}
@@ -750,7 +750,7 @@ function CrossRefList({ items, product }: { items: CrossRefItem[]; product: Prod
   );
 }
 
-function TecdocCrossList({ items }: { items: TecdocCrossItem[] }) {
+function PartCrossList({ items }: { items: PartCrossItem[] }) {
   return (
     <div className="flex flex-wrap gap-2">
       {items.map((item) =>
@@ -800,7 +800,7 @@ function cleanModelDisplay(model: string): string {
   return model.replace(/_/g, '').replace(/\s+/g, ' ').trim();
 }
 
-function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
+function CompatibilityBadge({ item }: { item: VehicleCompatibilityItem }) {
   const yearRange = formatYearRange(item.yearFrom, item.yearTo);
   const modelDisplay = item.model ? cleanModelDisplay(item.model) : '';
   // Оригинальная запчасть марки (известна только по бренду товара) —

@@ -29,7 +29,7 @@ import { CAR_MAKES, detectCarMakeInText, getCarMakeByDbValue } from '@/lib/carMa
 
 // Источники кроссов, которым мы доверяем: прайсы наших поставщиков и
 // официальный справочник TRW. Остальные источники (исключённые, см.
-// scripts/tecdoc/schema.sql) сюда не входят
+// scripts/crosses/schema.sql) сюда не входят
 export const ALLOWED_CROSS_SOURCES = ['autohelp', 'price_nippon', 'trw_2025'];
 
 export type OwnVehicleSource = 'brand' | 'name' | 'oem' | 'price';

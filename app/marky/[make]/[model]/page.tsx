@@ -191,9 +191,9 @@ export default async function ModelHubPage({ params }: { params: Promise<PagePar
     if (narrow && !thin.has(narrow.slug)) return `/category/${narrow.slug}`;
     // Категория с фильтром марки/модели сама перенаправляет на узкую
     // страницу этой модели (app/category/[slug]/page.tsx) — ведём туда сразу
-    const viaFilter = findNarrowPageForVehicle(broadSlug, make.name, hub.tecdocModels[0]);
+    const viaFilter = findNarrowPageForVehicle(broadSlug, make.name, hub.catalogModels[0]);
     if (viaFilter && !thin.has(viaFilter.slug)) return `/category/${viaFilter.slug}`;
-    const query = new URLSearchParams({ marka: make.slug, model: hub.tecdocModels[0] });
+    const query = new URLSearchParams({ marka: make.slug, model: hub.catalogModels[0] });
     return `/category/${broadSlug}?${query.toString()}`;
   };
 

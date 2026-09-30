@@ -6,7 +6,7 @@
 // ============================================================
 
 import { Pool } from 'pg';
-import { loadEnvLocal } from './tecdoc/loadEnv';
+import { loadEnvLocal } from './crosses/loadEnv';
 import { recomputeProductGroups } from '../lib/productGroups';
 
 async function main() {

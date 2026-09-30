@@ -20,7 +20,7 @@
 // brand для нього) — назва постачальника передається аргументом, бо
 // адмін міг завантажити файл під будь-якою назвою постачальника.
 //
-// Запуск: npx tsx scripts/tecdoc/import-autohelp-crosses.ts [шлях/до/файлу.xls] [назва_постачальника]
+// Запуск: npx tsx scripts/crosses/import-autohelp-crosses.ts [шлях/до/файлу.xls] [назва_постачальника]
 // ============================================================
 
 import { Pool } from 'pg';
@@ -49,7 +49,7 @@ async function main() {
   const supplierName = process.argv[3] || DEFAULT_SUPPLIER_NAME;
 
   if (!filePath) {
-    console.error('Використання: npx tsx scripts/tecdoc/import-autohelp-crosses.ts <шлях/до/файлу.xls> [назва_постачальника]');
+    console.error('Використання: npx tsx scripts/crosses/import-autohelp-crosses.ts <шлях/до/файлу.xls> [назва_постачальника]');
     process.exit(1);
   }
 
@@ -89,7 +89,7 @@ async function main() {
   console.log(`  Усього рядків у файлі: ${rows.length.toLocaleString('uk-UA')}\n`);
 
   console.log('Крок 3/3: зіставляємо з каталогом і записуємо нові кроси...');
-  // Источник строк для part_crosses.source (см. scripts/tecdoc/schema.sql)
+  // Источник строк для part_crosses.source (см. scripts/crosses/schema.sql)
   const CROSSES_SOURCE = 'autohelp';
   const inserter = new BatchInserter(
     pool,

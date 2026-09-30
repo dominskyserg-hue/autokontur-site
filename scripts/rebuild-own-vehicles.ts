@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Pool } from 'pg';
-import { loadEnvLocal } from './tecdoc/loadEnv';
+import { loadEnvLocal } from './crosses/loadEnv';
 import { rebuildOwnVehicles } from '../lib/ownVehicles';
 
 async function main() {

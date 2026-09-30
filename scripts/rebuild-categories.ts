@@ -10,7 +10,7 @@
 // ============================================================
 
 import { Pool } from 'pg';
-import { loadEnvLocal } from './tecdoc/loadEnv';
+import { loadEnvLocal } from './crosses/loadEnv';
 import { recomputeProductCategories } from '../lib/categoryAssignment';
 
 async function main() {

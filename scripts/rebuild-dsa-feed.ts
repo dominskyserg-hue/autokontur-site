@@ -6,7 +6,7 @@
 // ============================================================
 
 import { Pool } from 'pg';
-import { loadEnvLocal } from './tecdoc/loadEnv';
+import { loadEnvLocal } from './crosses/loadEnv';
 import { rebuildDsaFeed, buildDsaFeedRows, buildDsaFeedCsv } from '../lib/dsaPageFeed';
 
 async function main() {

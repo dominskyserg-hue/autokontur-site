@@ -5,9 +5,9 @@
 -- удалены таблицы tecdoc_compatibility, tecdoc_related_categories,
 -- product_vehicle_makes) в ней только кроссы из прайсов наших поставщиков
 -- и официального справочника TRW:
---   autohelp     — scripts/tecdoc/import-autohelp-crosses.ts
---   price_nippon — scripts/tecdoc/import-nippon-crosses.ts
---   trw_2025     — scripts/tecdoc/import-trw-oe.ts
+--   autohelp     — scripts/crosses/import-autohelp-crosses.ts
+--   price_nippon — scripts/crosses/import-nippon-crosses.ts
+--   trw_2025     — scripts/crosses/import-trw-oe.ts
 --
 -- Читает сайт: блок "Аналоги" (lib/productDetail.ts), поиск по номеру
 -- (lib/productSearch.ts), своя применимость по OEM-номерам
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS part_crosses (
 
   brand_a TEXT NOT NULL,
   -- Артикул уже очищений тією ж функцією cleanArticle(), що й
-  -- products.article (scripts/tecdoc/cleanArticle.ts) — без цього
+  -- products.article (scripts/crosses/cleanArticle.ts) — без цього
   -- зв'язки не зматчаться з реальними товарами при пошуку
   article_a TEXT NOT NULL,
 
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS part_crosses (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   -- Захист від дублікатів при повторному запуску скрипта імпорту
-  -- (ON CONFLICT DO NOTHING у scripts/tecdoc/batchInserter.ts
+  -- (ON CONFLICT DO NOTHING у scripts/crosses/batchInserter.ts
   -- спирається саме на це обмеження)
   UNIQUE (brand_a, article_a, brand_b, article_b, relation_type)
 );
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS part_crosses (
 -- складений індекс (brand_a, article_a, ...) ефективний лише коли
 -- фільтр йде ПО ПЕРШІЙ колонці (brand_a) або по обох одразу, а не
 -- коли фільтруємо ЛИШЕ по другій (article_a), як роблять і
--- lib/productDetail.ts (loadTecdocCrosses), і пошук на сайті
+-- lib/productDetail.ts (loadPartCrosses), і пошук на сайті
 -- (app/api/products/route.ts) — без окремого індексу саме на
 -- article_a Postgres змушений сканувати всю таблицю (мільйони рядків)
 -- на кожен пошук

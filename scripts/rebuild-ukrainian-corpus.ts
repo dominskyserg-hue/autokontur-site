@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { Pool } from 'pg';
-import { loadEnvLocal } from './tecdoc/loadEnv';
+import { loadEnvLocal } from './crosses/loadEnv';
 import { collectCorpusWords, loadAllProductNames, saveCorpusToDatabase, MIN_UA_NAMES } from '../lib/corpusBuilder';
 
 async function main() {

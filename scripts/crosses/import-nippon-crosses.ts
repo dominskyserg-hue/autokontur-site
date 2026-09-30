@@ -11,7 +11,7 @@
 // так підхоплюються кроси для всіх 354 брендів одразу, а не тільки
 // для Nippon.
 //
-// НА ВІДМІНУ від scripts/tecdoc/import-trw-oe.ts (там колонка OE-Number
+// НА ВІДМІНУ від scripts/crosses/import-trw-oe.ts (там колонка OE-Number
 // сама вказує виробника для кожного номера: "FORD 123, VOLKSWAGEN 456"),
 // колонка "Замены" (індекс 12, тобто 13-та колонка) у цьому файлі —
 // ПРОСТИЙ список номерів через "; ", БЕЗ вказівки бренду для кожного
@@ -32,7 +32,7 @@
 // товару блок "також відомий як" покаже загальну позначку замість
 // конкретного виробника.
 //
-// Запуск: npx tsx scripts/tecdoc/import-nippon-crosses.ts [шлях/до/файлу.xls] [назва_постачальника]
+// Запуск: npx tsx scripts/crosses/import-nippon-crosses.ts [шлях/до/файлу.xls] [назва_постачальника]
 // (назва постачальника за замовчуванням — NMCO)
 // ============================================================
 
@@ -104,7 +104,7 @@ async function main() {
   console.log(`  Усього рядків даних у файлі: ${(rows.length - 1).toLocaleString('uk-UA')}\n`);
 
   console.log('Крок 3/3: зіставляємо з каталогом і записуємо нові кроси...');
-  // Источник строк для part_crosses.source (см. scripts/tecdoc/schema.sql)
+  // Источник строк для part_crosses.source (см. scripts/crosses/schema.sql)
   const CROSSES_SOURCE = 'price_nippon';
   const inserter = new BatchInserter(
     pool,

@@ -2829,7 +2829,7 @@ export function detectCategoryForProductName(name: string | null | undefined): C
 // SENS (KLAT)" -> "LANOS", "CAMRY Stufenheck (AVV5_, XV5_)" ->
 // "CAMRY") — наближений ключ для зіставлення з вільним текстом
 // car_model постачальника, який рідко співпадає з ним дослівно
-function tecdocModelKeyword(model: string): string {
+function catalogModelKeyword(model: string): string {
   return model.split(/[\s([/]/)[0].trim().toUpperCase();
 }
 
@@ -2858,7 +2858,7 @@ export function narrowCategoryMatchesVehicle(
   if (!category.catalogVehicle || !carMake || !carModel) return false;
   if (category.catalogVehicle.make.toUpperCase() !== carMake.trim().toUpperCase()) return false;
   const upperModel = carModel.toUpperCase();
-  return category.catalogVehicle.models.some((m) => containsWholeWord(upperModel, tecdocModelKeyword(m)));
+  return category.catalogVehicle.models.some((m) => containsWholeWord(upperModel, catalogModelKeyword(m)));
 }
 
 export function detectCategoryForProductH1(

@@ -28,7 +28,7 @@ export interface ModelHubDef {
   // slug марки з lib/carMakes.ts (/marky/{makeSlug})
   makeSlug: string;
   // Марка великими літерами — так само, як catalogVehicle.make у lib/categories.ts
-  tecdocMake: string;
+  catalogMake: string;
   // Друга частина адреси: /marky/{makeSlug}/{slug}
   slug: string;
   // Назва для покупця (як шукають в Україні), без марки: "Camry XV40"
@@ -43,7 +43,7 @@ export interface ModelHubDef {
   // основний кузов: його підставляємо у фільтр категорії
   // (/category/{slug}?marka=...&model=...), бо той фільтр приймає лише
   // одну модель
-  tecdocModels: string[];
+  catalogModels: string[];
   // modelGroup вузьких сторінок "модель + деталь" (lib/categories.ts),
   // на які хаб посилається і які посилаються на хаб
   modelGroups: string[];
@@ -54,102 +54,102 @@ export interface ModelHubDef {
 export const MODEL_HUBS: ModelHubDef[] = [
   {
     makeSlug: 'toyota',
-    tecdocMake: 'TOYOTA',
+    catalogMake: 'TOYOTA',
     slug: 'camry-xv30',
     label: 'Camry XV30',
     yearFrom: 2001,
     yearTo: 2006,
-    tecdocModels: ['CAMRY Stufenheck (MCV3_, ACV3_, _XV3_)'],
+    catalogModels: ['CAMRY Stufenheck (MCV3_, ACV3_, _XV3_)'],
     modelGroups: ['toyota-camry'],
     intro:
       'Запчастини для Toyota Camry XV30 (2001–2006) з бензиновими двигунами 2.4 і 3.0. Сумісність кожної деталі перевірена за каталогами виробників та OEM-номерами саме для цього покоління, тож підібрані тут деталі підходять для XV30.',
   },
   {
     makeSlug: 'toyota',
-    tecdocMake: 'TOYOTA',
+    catalogMake: 'TOYOTA',
     slug: 'camry-xv40',
     label: 'Camry XV40',
     yearFrom: 2006,
     yearTo: 2011,
-    tecdocModels: ['CAMRY Stufenheck (_XV4_)'],
+    catalogModels: ['CAMRY Stufenheck (_XV4_)'],
     modelGroups: ['toyota-camry'],
     intro:
       'Запчастини для Toyota Camry XV40 (2006–2011) — седана з двигунами 2.4 і 3.5. Усі деталі на сторінці підібрані за каталогами виробників та OEM-номерами саме під це покоління. Якщо потрібної деталі немає, підберемо її за VIN-кодом.',
   },
   {
     makeSlug: 'toyota',
-    tecdocMake: 'TOYOTA',
+    catalogMake: 'TOYOTA',
     slug: 'corolla-e120',
     label: 'Corolla E12',
     altNames: 'седан Altis, хетчбек RunX',
     yearFrom: 2001,
     yearTo: 2007,
-    tecdocModels: ['AXIO/ALTIS Stufenheck (_E12J_, _E12T_)', 'RUNX (ZZE12_, NDE12_, ZDE12_)', 'COROLLA Combi (_E12J_, _E12T_)'],
+    catalogModels: ['AXIO/ALTIS Stufenheck (_E12J_, _E12T_)', 'RUNX (ZZE12_, NDE12_, ZDE12_)', 'COROLLA Combi (_E12J_, _E12T_)'],
     modelGroups: ['toyota-corolla-e120'],
     intro:
       "Запчастини для Toyota Corolla E12 (2001–2007): седан, хетчбек і універсал. У каталогах виробників ця Corolla записана також як Altis (седан) і RunX (хетчбек) — деталі для всіх трьох кузовів зібрані тут в одному місці.",
   },
   {
     makeSlug: 'toyota',
-    tecdocMake: 'TOYOTA',
+    catalogMake: 'TOYOTA',
     slug: 'corolla-e150',
     label: 'Corolla E150',
     altNames: 'Altis',
     yearFrom: 2006,
     yearTo: 2013,
-    tecdocModels: ['ALTIS Stufenheck (E15_)', 'COROLLA Hatchback (E15)'],
+    catalogModels: ['ALTIS Stufenheck (E15_)', 'COROLLA Hatchback (E15)'],
     modelGroups: ['toyota-corolla-e150'],
     intro:
       'Запчастини для Toyota Corolla E150 (2006–2013). У каталогах виробників седан цього покоління записаний як Corolla Altis — сумісність деталей нижче перевірена саме для нього.',
   },
   {
     makeSlug: 'honda',
-    tecdocMake: 'HONDA',
+    catalogMake: 'HONDA',
     slug: 'accord-7',
     label: 'Accord VII',
     altNames: 'CL/CM',
     yearFrom: 2003,
     yearTo: 2008,
-    tecdocModels: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'],
+    catalogModels: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'],
     modelGroups: ['honda-accord-7'],
     intro:
       'Запчастини для Honda Accord VII (2003–2008) — європейського седана CL і універсала Tourer CM. Американський Accord з кузовом CG — інша машина, деталі для нього тут не зібрані.',
   },
   {
     makeSlug: 'honda',
-    tecdocMake: 'HONDA',
+    catalogMake: 'HONDA',
     slug: 'civic-8',
     label: 'Civic VIII',
     altNames: 'хетчбек FN/FK, седан FD',
     yearFrom: 2005,
     yearTo: 2011,
-    tecdocModels: ['CIVIC VIII Hatchback (FN, FK)', 'BALLADE VIII Stufenheck (FD, FA)'],
+    catalogModels: ['CIVIC VIII Hatchback (FN, FK)', 'BALLADE VIII Stufenheck (FD, FA)'],
     modelGroups: ['honda-civic-4d'],
     intro:
       'Запчастини для Honda Civic VIII (2005–2011): хетчбек 5D (FN, FK) і седан 4D (FD). Кузови відрізняються підвіскою та багатьма деталями, тому сумісність кожної деталі перевірена за каталогами виробників та OEM-номерами.',
   },
   {
     makeSlug: 'mazda',
-    tecdocMake: 'MAZDA',
+    catalogMake: 'MAZDA',
     slug: '6-gg',
     label: '6 GG',
     altNames: 'Atenza',
     yearFrom: 2002,
     yearTo: 2008,
-    tecdocModels: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)', 'ATENZA Kombi (GY)'],
+    catalogModels: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)', 'ATENZA Kombi (GY)'],
     modelGroups: ['mazda6-gg'],
     intro:
       'Запчастини для Mazda 6 GG (2002–2008) — седан, ліфтбек і універсал GY. У каталогах виробників ця модель записана як Mazda Atenza, тому деталі з позначкою Atenza теж підходять на вашу «шістку».',
   },
   {
     makeSlug: 'mazda',
-    tecdocMake: 'MAZDA',
+    catalogMake: 'MAZDA',
     slug: '3-bk',
     label: '3 BK',
     altNames: 'Axela',
     yearFrom: 2003,
     yearTo: 2009,
-    tecdocModels: ['3 (BK)', 'AXELA Stufenheck (BK)'],
+    catalogModels: ['3 (BK)', 'AXELA Stufenheck (BK)'],
     modelGroups: ['mazda-3'],
     intro:
       'Запчастини для Mazda 3 першого покоління BK (2003–2009): хетчбек і седан. У каталогах виробників седан цього покоління записаний як Mazda Axela — так модель називалась у Японії, тож деталі з такою позначкою теж підходять.',
@@ -158,50 +158,50 @@ export const MODEL_HUBS: ModelHubDef[] = [
     // Пілот: 27 унікальних запчастин < MIN_HUB_PRODUCTS — хаб прихований
     // (404, немає в списках і сайтмапі), доки товарів не стане більше
     makeSlug: 'mazda',
-    tecdocMake: 'MAZDA',
+    catalogMake: 'MAZDA',
     slug: 'cx-5-ke',
     label: 'CX-5 KE',
     yearFrom: 2011,
     yearTo: 2017,
-    tecdocModels: ['CX-5 (KE, GH)'],
+    catalogModels: ['CX-5 (KE, GH)'],
     modelGroups: ['mazda-cx5'],
     intro:
       'Запчастини для Mazda CX-5 першого покоління KE (2011–2017). Деталі підібрані за каталогами виробників та OEM-номерами саме під цей кросовер; потрібну позицію також можна знайти за артикулом або VIN-кодом.',
   },
   {
     makeSlug: 'nissan',
-    tecdocMake: 'NISSAN',
+    catalogMake: 'NISSAN',
     slug: 'qashqai-j10',
     label: 'Qashqai J10',
     altNames: 'Dualis',
     yearFrom: 2007,
     yearTo: 2013,
-    tecdocModels: ['DUALIS (J10, JJ10)'],
+    catalogModels: ['DUALIS (J10, JJ10)'],
     modelGroups: [],
     intro:
       'Запчастини для Nissan Qashqai першого покоління J10 (2007–2013), включно з семимісною версією Qashqai+2 (JJ10). У каталогах виробників ця модель записана як Nissan Dualis — так вона називалась на ринку Японії.',
   },
   {
     makeSlug: 'nissan',
-    tecdocMake: 'NISSAN',
+    catalogMake: 'NISSAN',
     slug: 'x-trail-t31',
     label: 'X-Trail T31',
     yearFrom: 2007,
     yearTo: 2014,
-    tecdocModels: ['X-TRAIL (T31)'],
+    catalogModels: ['X-TRAIL (T31)'],
     modelGroups: [],
     intro:
       'Запчастини для Nissan X-Trail T31 (2007–2014). Деталі перевірені за каталогами виробників та OEM-номерами саме для цього покоління — вони відрізняються від попереднього X-Trail T30.',
   },
   {
     makeSlug: 'mitsubishi',
-    tecdocMake: 'MITSUBISHI',
+    catalogMake: 'MITSUBISHI',
     slug: 'pajero-2',
     label: 'Pajero II',
     altNames: 'Shogun II / Montero',
     yearFrom: 1990,
     yearTo: 2006,
-    tecdocModels: [
+    catalogModels: [
       'SHOGUN II (V3_W, V2_W, V4_W)',
       'SHOGUN II Geländewagen offen (V2_W, V4_W)',
       'PAJERO/SHOGUN CLASSIC (V2_W)',
@@ -213,12 +213,12 @@ export const MODEL_HUBS: ModelHubDef[] = [
   },
   {
     makeSlug: 'suzuki',
-    tecdocMake: 'SUZUKI',
+    catalogMake: 'SUZUKI',
     slug: 'sx4',
     label: 'SX4',
     yearFrom: 2006,
     yearTo: 2014,
-    tecdocModels: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'],
+    catalogModels: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'],
     modelGroups: ['suzuki-sx4'],
     intro:
       'Запчастини для Suzuki SX4 першого покоління (2006–2014): хетчбек і седан. Сумісність кожної деталі перевірена за каталогами виробників та OEM-номерами; чого немає в наявності — привеземо під замовлення.',
@@ -268,9 +268,9 @@ export function hubPath(hub: ModelHubDef): string {
 
 // Хаб для рядка сумісності (блок "Запчастина підходить для авто"
 // у картці товару): точний збіг марки й запису моделі
-export function findHubForTecdocModel(tecdocMake: string, tecdocModel: string): ModelHubDef | undefined {
-  const make = tecdocMake.toUpperCase();
-  return MODEL_HUBS.find((hub) => hub.tecdocMake === make && hub.tecdocModels.includes(tecdocModel));
+export function findHubForCatalogModel(catalogMake: string, catalogModel: string): ModelHubDef | undefined {
+  const make = catalogMake.toUpperCase();
+  return MODEL_HUBS.find((hub) => hub.catalogMake === make && hub.catalogModels.includes(catalogModel));
 }
 
 // Хаби, пов'язані з вузькою сторінкою "модель + деталь" (за modelGroup,

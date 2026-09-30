@@ -969,9 +969,9 @@ WHERE NOT EXISTS (SELECT 1 FROM search_synonym_groups WHERE label = 'Гальм�
 
 
 -- ============================================================
--- TECDOC — МАСОВИЙ SEO-ІНДЕКС КРОСІВ І ЗАСТОСОВНОСТІ
+-- PART_CROSSES — МАСОВІ КРОСИ З ПРАЙСІВ
 -- ============================================================
--- Ці три таблиці — НЕ те саме, що cross_reference_groups/
+-- Ця таблиця — НЕ те саме, що cross_reference_groups/
 -- cross_reference_members вище (розділ "11. КРОСС-НОМЕРА"). Різниця
 -- принципова:
 --
@@ -981,23 +981,20 @@ WHERE NOT EXISTS (SELECT 1 FROM search_synonym_groups WHERE label = 'Гальм�
 --     (cross_reference_conflicts), масштаб — сотні/тисячі рядків.
 --
 --   part_crosses нижче    — масові кроси з прайсів постачальників і
---     довідника TRW (скрипти scripts/tecdoc/import-*.ts) без ручної
+--     довідника TRW (скрипти scripts/crosses/import-*.ts) без ручної
 --     перевірки кожного зв'язку. Використовується для блоку "Аналоги"
 --     на сторінці товару, пошуку за чужим номером і своєї
 --     застосовності за OEM-номерами.
 --
--- Свідомо BIGSERIAL/SERIAL замість UUID для первинного ключа: ці
--- таблиці — суто довідковий індекс на мільйони рядків, на який
--- ніхто й ніколи не посилається через FOREIGN KEY і чий id ніколи
--- не потрапляє в URL чи назовні — послідовний цілочисельний ключ
--- тут суттєво легший і швидший при вставці/індексації, ніж
--- випадковий UUID, а весь сенс UUID (непередбачуваність id у
--- публічних адресах) тут просто не потрібен.
+-- Свідомо BIGSERIAL замість UUID для первинного ключа: це суто
+-- довідкова таблиця на сотні тисяч рядків, на яку ніхто не посилається
+-- через FOREIGN KEY і чий id не потрапляє в URL — послідовний
+-- цілочисельний ключ тут легший і швидший при вставці/індексації.
 --
--- Наповнюються ЛИШЕ вручну, локальним скриптом scripts/tecdoc/
--- import-dump.ts (детальний план і сам скрипт — окремо від
--- schema.sql, у папці scripts/tecdoc/). Застосуйте цю секцію в
--- Supabase ПЕРЕД першим запуском того скрипта.
+-- Наповнюється ЛИШЕ вручну, локальними скриптами scripts/crosses/
+-- import-*.ts. Повна схема таблиці (з колонками source, is_valid і
+-- тригером) — у scripts/crosses/schema.sql.
+-- ============================================================
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -1035,7 +1032,7 @@ CREATE TABLE IF NOT EXISTS part_crosses (
 
   brand_a TEXT NOT NULL,
   -- Артикул уже очищений тією ж функцією cleanArticle(), що й
-  -- products.article (scripts/tecdoc/cleanArticle.ts) — без цього
+  -- products.article (scripts/crosses/cleanArticle.ts) — без цього
   -- зв'язки не зматчаться з реальними товарами при пошуку
   article_a TEXT NOT NULL,
 
@@ -1049,7 +1046,7 @@ CREATE TABLE IF NOT EXISTS part_crosses (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   -- Захист від дублікатів при повторному запуску скрипта імпорту
-  -- (ON CONFLICT DO NOTHING у scripts/tecdoc/batchInserter.ts
+  -- (ON CONFLICT DO NOTHING у scripts/crosses/batchInserter.ts
   -- спирається саме на це обмеження)
   UNIQUE (brand_a, article_a, brand_b, article_b, relation_type)
 );
@@ -1059,7 +1056,7 @@ CREATE TABLE IF NOT EXISTS part_crosses (
 -- складений індекс (brand_a, article_a, ...) ефективний лише коли
 -- фільтр йде ПО ПЕРШІЙ колонці (brand_a) або по обох одразу, а не
 -- коли фільтруємо ЛИШЕ по другій (article_a), як роблять і
--- lib/productDetail.ts (loadTecdocCrosses), і пошук на сайті
+-- lib/productDetail.ts (loadPartCrosses), і пошук на сайті
 -- (app/api/products/route.ts) — без окремого індексу саме на
 -- article_a Postgres змушений сканувати всю таблицю (мільйони рядків)
 -- на кожен пошук

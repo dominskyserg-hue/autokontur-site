@@ -90,7 +90,7 @@ out('| Способ | Получили категорию | В наличии |'
 out('|---|---:|---:|');
 out(`| Правила сальников и болтов (x5-*) | ${gainedBy.rule.length} | ${inStock(gainedBy.rule)} |`);
 out(`| По двойнику (тот же бренд + артикул у другого поставщика) | ${gainedBy.twin.length} | ${inStock(gainedBy.twin)} |`);
-out(`| По кроссу TecDoc (двойника нет) | ${gainedBy.cross.length} | ${inStock(gainedBy.cross)} |`);
+out(`| По кроссу (двойника нет) | ${gainedBy.cross.length} | ${inStock(gainedBy.cross)} |`);
 out(`\nПропущено из-за противоречий (двойник есть, но двойники дают больше 2 разных широких категорий): ${conflicts} товаров (все, не только в наличии).`);
 
 // б) По двойнику: категории

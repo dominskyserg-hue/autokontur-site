@@ -35,7 +35,7 @@
 // однакова пара з різним relation_type — це два різні рядки, а
 // повторний запуск цього скрипта безпечний (ON CONFLICT DO NOTHING).
 //
-// Запуск: npx tsx scripts/tecdoc/import-trw-oe.ts [шлях/до/файлу.xlsx]
+// Запуск: npx tsx scripts/crosses/import-trw-oe.ts [шлях/до/файлу.xlsx]
 // (за замовчуванням бере шлях до файлу, який прислав користувач)
 // ============================================================
 
@@ -132,7 +132,7 @@ async function main() {
   console.log(`  Усього рядків даних у файлі: ${(rows.length - 1).toLocaleString('uk-UA')}\n`);
 
   console.log('Крок 3/3: зіставляємо з каталогом і записуємо нові OEM-кроси...');
-  // Источник строк для part_crosses.source (см. scripts/tecdoc/schema.sql)
+  // Источник строк для part_crosses.source (см. scripts/crosses/schema.sql)
   const CROSSES_SOURCE = 'trw_2025';
   const inserter = new BatchInserter(
     pool,

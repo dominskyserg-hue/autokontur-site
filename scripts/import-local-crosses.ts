@@ -56,7 +56,7 @@
 
 import { Pool, PoolClient } from 'pg';
 import * as XLSX from 'xlsx';
-import { loadEnvLocal } from './tecdoc/loadEnv';
+import { loadEnvLocal } from './crosses/loadEnv';
 import { getCarMakeByDbValue } from '../lib/carMakes';
 
 loadEnvLocal();

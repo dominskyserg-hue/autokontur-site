@@ -31,7 +31,7 @@ import { CAR_MAKES } from '@/lib/carMakes';
 import { ALLOWED_PAIRS } from '@/lib/brandFamilies';
 
 // Метка скриптов импорта из прайсов для номера без известного бренда
-// (scripts/tecdoc/import-*-crosses.ts, CROSS_BRAND_LABEL)
+// (scripts/crosses/import-*-crosses.ts, CROSS_BRAND_LABEL)
 export const PRICE_LABEL = 'OEM/аналог';
 
 // Номер без бренда засчитывается, если он не короче этого (артикулы в
