@@ -66,6 +66,7 @@ import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
 import OwnStockBadge from '@/components/OwnStockBadge';
+import { maxQuantityFor } from '@/lib/cart';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -817,9 +818,12 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        // Товар уже в корзине — просто увеличиваем количество
+        // Товар уже в корзине — увеличиваем количество, но не больше
+        // остатка поставщика (lib/cart.ts, maxQuantityFor)
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === product.id
+            ? { ...item, quantity: Math.min(maxQuantityFor(item.stock), item.quantity + 1) }
+            : item
         );
       }
       return [
@@ -844,16 +848,14 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // Изменение количества кнопками "+"/"-" в панели корзины. delta —
   // +1 или -1. Снизу ограничиваем единицей (убрать товар полностью —
   // это отдельная кнопка removeFromCart, а не количество 0), сверху —
-  // MAX_CART_QUANTITY. Остатком поставщика НЕ ограничиваем: раньше из-за
-  // этого товар "під замовлення" (остаток 0) или с остатком 1 шт нельзя
-  // было заказать больше 1 шт. Если просят больше, чем есть, — под
-  // строкой пишем подсказку, а менеджер уточнит срок
+  // остатком поставщика; товар "під замовлення" (остаток 0) — до 99 шт.
+  // Правило общее с карточкой товара: maxQuantityFor в lib/cart.ts
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
         const nextQuantity = item.quantity + delta;
-        if (nextQuantity < 1 || nextQuantity > MAX_CART_QUANTITY) return item;
+        if (nextQuantity < 1 || nextQuantity > maxQuantityFor(item.stock)) return item;
         return { ...item, quantity: nextQuantity };
       })
     );
@@ -3587,10 +3589,6 @@ function CartDrawer({
   );
 }
 
-// Больше этого количества одной позиции через корзину не заказать —
-// защита от случайного "999" (крупный опт менеджер оформит сам)
-const MAX_CART_QUANTITY = 99;
-
 // Одна строка товара внутри панели корзины: название/артикул/бренд,
 // счётчик количества с кнопками +/-, цена за штуку и сумма по строке
 function CartRow({
@@ -3604,9 +3602,8 @@ function CartRow({
   onDecrement: () => void;
   onRemove: () => void;
 }) {
-  const atLimit = item.quantity >= MAX_CART_QUANTITY;
-  // Просят больше, чем сейчас есть у поставщика (и товар вообще в наличии)
-  const overStock = item.stock > 0 && item.quantity > item.stock;
+  // Дальше "+" не нажимается: весь остаток поставщика уже в корзине
+  const atLimit = item.quantity >= maxQuantityFor(item.stock);
 
   return (
     <div className="flex items-start gap-3 pb-3" style={{ borderBottom: `1px solid ${TECH_BORDER}` }}>
@@ -3647,9 +3644,9 @@ function CartRow({
             × {formatMoney(item.price)} грн
           </span>
         </div>
-        {overStock && (
-          <p className="mt-1.5 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_HEAT }}>
-            В наявності {item.stock} шт — решту привеземо під замовлення, термін уточнить менеджер
+        {item.stock > 0 && atLimit && (
+          <p className="mt-1.5 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+            Це весь наявний залишок ({item.stock} шт)
           </p>
         )}
       </div>

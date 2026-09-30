@@ -31,6 +31,7 @@
 // ============================================================
 
 import { useState } from 'react';
+import { maxQuantityFor } from '@/lib/cart';
 import { createPortal } from 'react-dom';
 import type { FormEvent } from 'react';
 import { trackBeginCheckout, trackPurchase } from '@/lib/analytics';
@@ -78,12 +79,14 @@ interface QuickOrderModalProps {
   };
   // compact — маленькая кнопка "1 клік" для таблицы пропозицій
   compact?: boolean;
+  // Количество, уже выбранное на карточке товара (components/ProductBuyBox.tsx) —
+  // с ним окно и открывается; внутри его можно поменять
+  initialQuantity?: number;
 }
 
-// Сколько штук максимум можно выбрать в быстром заказе (как и в корзине)
-const MAX_QUANTITY = 99;
-
-export default function QuickOrderModal({ product, compact = false }: QuickOrderModalProps) {
+export default function QuickOrderModal({ product, compact = false, initialQuantity = 1 }: QuickOrderModalProps) {
+  // Не больше остатка поставщика (под заказ — до 99), см. lib/cart.ts
+  const maxQuantity = maxQuantityFor(product.stock ?? 0);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -112,12 +115,17 @@ export default function QuickOrderModal({ product, compact = false }: QuickOrder
     }, 200);
   };
 
-  // Кнопки "−" / "+" и ручной ввод — всегда в пределах 1..MAX_QUANTITY
+  // Кнопки "−" / "+" и ручной ввод — всегда в пределах 1..maxQuantity
   const changeQuantity = (next: number) => {
     if (!Number.isFinite(next)) return;
-    setQuantity(Math.min(MAX_QUANTITY, Math.max(1, Math.round(next))));
+    setQuantity(Math.min(maxQuantity, Math.max(1, Math.round(next))));
   };
-  const overStock = product.stock !== undefined && product.stock > 0 && quantity > product.stock;
+
+  // Открываем окно сразу с количеством, выбранным на карточке товара
+  const openModal = () => {
+    setQuantity(Math.min(maxQuantity, Math.max(1, initialQuantity)));
+    setOpen(true);
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -175,7 +183,7 @@ export default function QuickOrderModal({ product, compact = false }: QuickOrder
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={openModal}
         className={
           compact
             ? 'inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-[rgba(59,130,246,0.08)]'
@@ -271,7 +279,7 @@ export default function QuickOrderModal({ product, compact = false }: QuickOrder
                     <input
                       type="number"
                       min={1}
-                      max={MAX_QUANTITY}
+                      max={maxQuantity}
                       inputMode="numeric"
                       aria-label="Кількість"
                       value={quantity}
@@ -282,7 +290,7 @@ export default function QuickOrderModal({ product, compact = false }: QuickOrder
                     <button
                       type="button"
                       onClick={() => changeQuantity(quantity + 1)}
-                      disabled={quantity >= MAX_QUANTITY}
+                      disabled={quantity >= maxQuantity}
                       aria-label="Збільшити кількість"
                       className="flex h-8 w-8 items-center justify-center rounded-lg text-base font-semibold disabled:opacity-30"
                       style={{ background: 'rgba(255,255,255,0.06)', color: TECH_INK }}
@@ -297,9 +305,9 @@ export default function QuickOrderModal({ product, compact = false }: QuickOrder
                     {Math.ceil(product.retailPrice * quantity).toLocaleString('uk-UA')} грн
                   </span>
                 </div>
-                {overStock && (
-                  <p className="text-xs" style={{ fontFamily: SANS_TECH, color: '#FF6B00' }}>
-                    В наявності {product.stock} шт — решту привеземо під замовлення, термін уточнить менеджер
+                {product.stock !== undefined && product.stock > 0 && (
+                  <p className="text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                    В наявності: {product.stock} шт
                   </p>
                 )}
 
