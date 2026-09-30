@@ -16,6 +16,8 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { isCustomerTelegramLinked, notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
 import { logOrderEvent, historyValue } from '@/lib/orderHistory';
+import { describeOrderSource, type OrderSource } from '@/lib/orderSource';
+import { normalizePhone } from '@/lib/phoneNormalize';
 import { STATUS_LABELS } from '@/lib/orderUi';
 import { requireAdmin } from '@/lib/adminAuth';
 
@@ -157,6 +159,12 @@ interface OrderDetailsResponse {
   // Подключил ли клиент Telegram-бота магазина — если да, сообщение о
   // ТТН уходит ему автоматически (lib/orderNotifications.ts)
   telegramLinked: boolean;
+  // Откуда пришёл клиент (Google Ads, Google пошук, прямой заход...) —
+  // по сохранённым при оформлении меткам, lib/orderSource.ts
+  source: OrderSource;
+  // Персональное правило цены клиента (раздел "Скидки и наценки
+  // клиентам"): скидка/наценка в % от закупки. null — правила нет
+  pricingRule: { ruleType: 'discount' | 'markup'; percent: number } | null;
 }
 
 // ------------------------------------------------------------
@@ -214,6 +222,7 @@ export async function GET(
       `
       SELECT id, order_number, customer_name, customer_surname, customer_phone, city, nova_poshta_address,
              city_ref, warehouse_ref, comment, manager_note, customer_id,
+             utm_source, utm_medium, utm_campaign, utm_term, gclid, referrer,
              ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at
       FROM orders
       WHERE id = $1
@@ -321,6 +330,22 @@ export async function GET(
       managerNote: orderRow.manager_note,
       customer,
       telegramLinked: await isCustomerTelegramLinked(orderRow.customer_phone),
+      source: describeOrderSource({
+        utmSource: orderRow.utm_source,
+        utmMedium: orderRow.utm_medium,
+        utmCampaign: orderRow.utm_campaign,
+        utmTerm: orderRow.utm_term,
+        gclid: orderRow.gclid,
+        referrer: orderRow.referrer,
+      }),
+      pricingRule: await (async () => {
+        const ruleResult = await pool.query(
+          'SELECT rule_type, percent FROM customer_pricing_rules WHERE phone = $1',
+          [normalizePhone(orderRow.customer_phone || '')]
+        );
+        const rule = ruleResult.rows[0];
+        return rule ? { ruleType: rule.rule_type, percent: parseFloat(rule.percent) } : null;
+      })(),
     };
 
     return NextResponse.json({ success: true, order });

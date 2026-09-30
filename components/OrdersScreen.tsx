@@ -461,6 +461,11 @@ export default function OrdersScreen() {
           orderId={selectedOrderId}
           onClose={() => setSelectedOrderId(null)}
           onOrderChanged={fetchOrders}
+          // "Повторити замовлення" — сразу открываем только что созданный заказ
+          onOpenOrder={(newOrderId) => {
+            fetchOrders();
+            setSelectedOrderId(newOrderId);
+          }}
           navigation={(() => {
             // Листаем в пределах текущей страницы списка (с теми же
             // фильтрами, что сейчас на экране)

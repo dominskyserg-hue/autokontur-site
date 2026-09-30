@@ -108,7 +108,24 @@ interface OrderDetails {
   // Подключил ли клиент Telegram-бота магазина (сообщение о ТТН уходит
   // ему автоматически)
   telegramLinked: boolean;
+  // Откуда пришёл клиент (lib/orderSource.ts)
+  source: { label: string; detail: string | null; kind: 'ads' | 'search' | 'social' | 'messenger' | 'other' | 'direct' };
+  // Персональное правило цены клиента: скидка/наценка в % от закупки
+  pricingRule: { ruleType: 'discount' | 'markup'; percent: number } | null;
 }
+
+// Цвет плашки "Звідки клієнт" по типу источника
+const SOURCE_COLORS: Record<OrderDetails['source']['kind'], { bg: string; fg: string }> = {
+  ads: { bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+  search: { bg: 'var(--good-soft)', fg: 'var(--good)' },
+  social: { bg: 'var(--warn-soft)', fg: 'var(--warn)' },
+  messenger: { bg: 'var(--warn-soft)', fg: 'var(--warn)' },
+  other: { bg: 'var(--surface-2)', fg: 'var(--ink-muted)' },
+  direct: { bg: 'var(--surface-2)', fg: 'var(--ink-faint)' },
+};
+
+// Кнопки быстрой скидки на цену продажи позиции: −5%, −10%
+const QUICK_DISCOUNTS = [5, 10];
 
 // Статус посылки от Новой Почты (GET /api/orders/[id]/ttn-status,
 // lib/novaPoshta/tracking.ts)
@@ -267,11 +284,15 @@ export default function OrderDetailsModal({
   onClose,
   onOrderChanged,
   navigation,
+  onOpenOrder,
 }: {
   orderId: string;
   onClose: () => void;
   onOrderChanged: () => void;
   navigation?: OrderNavigation;
+  // Открыть другой заказ в этом же окне (например, только что созданный
+  // кнопкой "Повторити замовлення")
+  onOpenOrder?: (orderId: string) => void;
 }) {
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(true);
@@ -443,6 +464,85 @@ export default function OrderDetailsModal({
     };
   }, [orderId, historyVersion]);
 
+  // Перечитать заказ целиком с сервера — после действий, которые меняют
+  // сразу несколько полей (скидка меняет цены всех позиций, "Взяти зі
+  // складу" — ещё и статус заказа)
+  const reloadOrder = async () => {
+    const orderResponse = await fetch(`/api/orders/${orderId}`);
+    const orderData = await orderResponse.json();
+    if (orderResponse.ok && orderData.order) {
+      setOrderDetails(orderData.order as OrderDetails);
+      setStatusDraft((orderData.order as OrderDetails).status);
+    }
+  };
+
+  // ---- скидка на весь заказ ----
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
+  const [discountValue, setDiscountValue] = useState('');
+  const [discountSaving, setDiscountSaving] = useState(false);
+  const [discountError, setDiscountError] = useState<string | null>(null);
+
+  const handleApplyDiscount = async () => {
+    const value = parseFloat(discountValue.replace(',', '.'));
+    if (!Number.isFinite(value) || value <= 0) {
+      setDiscountError('Вкажіть розмір знижки — число більше нуля');
+      return;
+    }
+    setDiscountSaving(true);
+    setDiscountError(null);
+    try {
+      const response = await fetch(`/api/orders/${orderId}/discount`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: discountType, value }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося застосувати знижку');
+      await reloadOrder();
+      setShowDiscount(false);
+      setDiscountValue('');
+      onOrderChanged();
+      bumpHistory();
+    } catch (error) {
+      setDiscountError(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setDiscountSaving(false);
+    }
+  };
+
+  // ---- повторить заказ: новый заказ с теми же товарами по текущим ценам ----
+  const [repeating, setRepeating] = useState(false);
+  const handleRepeatOrder = async () => {
+    if (!orderDetails) return;
+    const confirmed = window.confirm(
+      `Створити нове замовлення для ${orderDetails.customerName} з тими самими товарами?\n\n` +
+        'Ціни будуть актуальні з каталогу (з урахуванням персонального правила клієнта), доставка — та сама.'
+    );
+    if (!confirmed) return;
+    setRepeating(true);
+    try {
+      const response = await fetch(`/api/admin/orders/${orderDetails.id}/repeat`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося повторити замовлення');
+      onOrderChanged();
+      const skippedNote =
+        (data.skipped as string[]).length > 0
+          ? `\n\nНе перенесено (товару вже немає в каталозі): ${(data.skipped as string[]).join(', ')}`
+          : '';
+      if (onOpenOrder) {
+        if (skippedNote) window.alert(`Створено замовлення №${data.orderNumber}.${skippedNote}`);
+        onOpenOrder(data.orderId as string);
+      } else {
+        window.alert(`Створено замовлення №${data.orderNumber}.${skippedNote}`);
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setRepeating(false);
+    }
+  };
+
   // "Взяти зі складу": позиция закрепляется за деталью с нашей полки и
   // сразу становится "На складе". Статус всего заказа мог при этом
   // сдвинуться дальше — поэтому перечитываем заказ целиком
@@ -458,12 +558,7 @@ export default function OrderDetailsModal({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не вдалося взяти зі складу');
 
-      const orderResponse = await fetch(`/api/orders/${orderDetails.id}`);
-      const orderData = await orderResponse.json();
-      if (orderResponse.ok && orderData.order) {
-        setOrderDetails(orderData.order as OrderDetails);
-        setStatusDraft((orderData.order as OrderDetails).status);
-      }
+      await reloadOrder();
       onOrderChanged();
       bumpHistory();
     } catch (error) {
@@ -1211,6 +1306,24 @@ export default function OrderDetailsModal({
                 {formatDateTime(orderDetails.createdAt)}
               </p>
             )}
+            {/* Звідки прийшов клієнт — щоб бачити, які замовлення приносить
+                реклама Google Ads, а які — звичайний пошук чи прямий захід */}
+            {orderDetails && (
+              <p className="mt-1.5">
+                <span
+                  className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: SOURCE_COLORS[orderDetails.source.kind].bg, color: SOURCE_COLORS[orderDetails.source.kind].fg }}
+                  title="Звідки клієнт прийшов на сайт (за мітками при оформленні замовлення)"
+                >
+                  Звідки: {orderDetails.source.label}
+                </span>
+                {orderDetails.source.detail && (
+                  <span className="text-[11px] ml-1.5" style={{ color: 'var(--ink-faint)' }}>
+                    {orderDetails.source.detail}
+                  </span>
+                )}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -1268,6 +1381,16 @@ export default function OrderDetailsModal({
                   style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
                 >
                   Принять оплату
+                </button>
+                <button
+                  type="button"
+                  disabled={repeating}
+                  onClick={handleRepeatOrder}
+                  className="px-3.5 py-2 rounded-md text-sm font-medium whitespace-nowrap disabled:opacity-50"
+                  style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+                  title="Нове замовлення з тими самими товарами за актуальними цінами"
+                >
+                  {repeating ? 'Створюю...' : '↻ Повторити'}
                 </button>
                 {orderDetails.ttnRef && (
                   <a
@@ -1466,6 +1589,16 @@ export default function OrderDetailsModal({
                         Картка →
                       </a>
                     </div>
+                  )}
+
+                  {/* Персональне правило ціни клієнта (розділ «Скидки и наценки
+                      клиентам») — щоб менеджер не забув про нього, коли
+                      домовляється про ціну */}
+                  {orderDetails.pricingRule && (
+                    <p className="text-xs mt-1.5 px-3 py-1.5 rounded-md" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                      Персональне правило: {orderDetails.pricingRule.ruleType === 'discount' ? 'знижка' : 'націнка'}{' '}
+                      {orderDetails.pricingRule.percent}% від закупки
+                    </p>
                   )}
 
                   <div className="text-sm flex flex-col gap-1 mb-3">
@@ -1966,8 +2099,91 @@ export default function OrderDetailsModal({
                         + Додати товар
                       </button>
                     )}
+                    {orderDetails.status !== 'shipped' && orderDetails.items.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDiscount((v) => !v);
+                          setDiscountError(null);
+                        }}
+                        className="text-[11px] px-2 py-1 rounded-md"
+                        style={{
+                          color: showDiscount ? 'var(--accent-ink)' : 'var(--warn)',
+                          background: showDiscount ? 'var(--warn)' : 'transparent',
+                          border: '1px solid var(--warn)',
+                        }}
+                      >
+                        % Знижка
+                      </button>
+                    )}
                   </div>
                 </div>
+
+                {/* ---- знижка на все замовлення: відсоток або сума в гривнях
+                    (сума розкладається на позиції пропорційно їх вартості) ---- */}
+                {showDiscount && (
+                  <div className="mb-3 p-3 rounded-md" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className="px-3 py-2 text-sm rounded-md"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                        value={discountType}
+                        onChange={(e) => setDiscountType(e.target.value as 'percent' | 'amount')}
+                      >
+                        <option value="percent">Відсоток, %</option>
+                        <option value="amount">Сума, грн</option>
+                      </select>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        autoFocus
+                        className="w-28 px-3 py-2 text-sm rounded-md font-mono text-right"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                        placeholder={discountType === 'percent' ? '5' : '200'}
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleApplyDiscount();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={discountSaving}
+                        onClick={handleApplyDiscount}
+                        className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                        style={{ background: 'var(--warn)', color: '#1a1a1a' }}
+                      >
+                        {discountSaving ? 'Застосовую...' : 'Застосувати'}
+                      </button>
+                      {/* Попередній перегляд нової суми — до натискання */}
+                      {(() => {
+                        const value = parseFloat(discountValue.replace(',', '.'));
+                        if (!Number.isFinite(value) || value <= 0) return null;
+                        const activeTotal = orderDetails.items
+                          .filter((i) => i.status !== 'shipped' && i.status !== 'returned' && i.status !== 'cancelled')
+                          .reduce((sum, i) => sum + i.price * i.quantity, 0);
+                        const after = discountType === 'percent' ? activeTotal * (1 - value / 100) : activeTotal - value;
+                        return (
+                          <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+                            {formatMoney(activeTotal)} → <b>{formatMoney(Math.max(0, after))} грн</b>
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    {discountError && (
+                      <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
+                        {discountError}
+                      </p>
+                    )}
+                    <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                      Знижка змінює ціни продажу позицій (без відвантажених і повернених). Знижку на одну позицію — у
+                      формі редагування позиції (кнопки «−5%», «−10%»).
+                    </p>
+                  </div>
+                )}
 
                 {/* ---- пошук і додавання нової позиції (клієнт хоче
                     докупити щось ще, вже після оформлення заказа) ---- */}
@@ -2340,6 +2556,23 @@ export default function OrderDetailsModal({
                                                     Прайс
                                                   </button>
                                                 )}
+                                                {/* Знижка від поточної ціни продажу позиції */}
+                                                {(() => {
+                                                  const sale = parseFloat(editItemPrice.replace(',', '.'));
+                                                  if (!Number.isFinite(sale) || sale <= 0) return null;
+                                                  return QUICK_DISCOUNTS.map((percent) => (
+                                                    <button
+                                                      key={`d${percent}`}
+                                                      type="button"
+                                                      onClick={() => setEditItemPrice(String(Math.floor(sale * (1 - percent / 100))))}
+                                                      className="text-[11px] px-1.5 py-0.5 rounded"
+                                                      style={{ border: '1px solid var(--line)', color: 'var(--warn)' }}
+                                                      title={`Знижка ${percent}% від поточної ціни продажу`}
+                                                    >
+                                                      −{percent}%
+                                                    </button>
+                                                  ));
+                                                })()}
                                                 {hasCost &&
                                                   QUICK_MARKUPS.map((percent) => (
                                                     <button
