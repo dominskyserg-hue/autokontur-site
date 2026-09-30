@@ -112,6 +112,15 @@ interface OrderDetails {
   source: { label: string; detail: string | null; kind: 'ads' | 'search' | 'social' | 'messenger' | 'other' | 'direct' };
   // Персональное правило цены клиента: скидка/наценка в % от закупки
   pricingRule: { ruleType: 'discount' | 'markup'; percent: number } | null;
+  // Напоминание "Передзвонити" (ISO) или null
+  callbackAt: string | null;
+}
+
+// Дата в формате поля <input type="datetime-local"> — "2026-10-01T10:00"
+// по МЕСТНОМУ времени браузера (toISOString дал бы UTC и сдвинул часы)
+function toDateTimeLocal(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 // Цвет плашки "Звідки клієнт" по типу источника
@@ -208,7 +217,7 @@ interface AddItemProductOption {
   supplierName: string;
 }
 
-type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer' | 'delivery' | 'note';
+type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer' | 'delivery' | 'note' | 'callback';
 type SaveState = { state: 'idle' | 'saving' | 'saved' | 'error'; error?: string };
 const IDLE: SaveState = { state: 'idle' };
 
@@ -313,7 +322,7 @@ export default function OrderDetailsModal({
   // Зміна міста/відділення прямо в картці — пошук НП з Ref'ами, тож
   // обране відділення одразу підхоплюється формою створення ТТН
   const [editingDelivery, setEditingDelivery] = useState(false);
-  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE, delivery: IDLE, note: IDLE });
+  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE, delivery: IDLE, note: IDLE, callback: IDLE });
 
   // ---- создание ТТН через API Новой Почты ----
   const [showCreateTtn, setShowCreateTtn] = useState(false);
@@ -508,6 +517,50 @@ export default function OrderDetailsModal({
       setDiscountError(error instanceof Error ? error.message : 'Помилка мережі');
     } finally {
       setDiscountSaving(false);
+    }
+  };
+
+  // ---- разделить заказ: выбранные позиции -> в новый связанный заказ ----
+  const [showSplit, setShowSplit] = useState(false);
+  const [splitSelected, setSplitSelected] = useState<Set<string>>(new Set());
+  const [splitting, setSplitting] = useState(false);
+  const [splitError, setSplitError] = useState<string | null>(null);
+
+  // По умолчанию отмечаем всё, что ещё НЕ на складе: готовое остаётся
+  // в этом заказе и может ехать клиенту сейчас
+  const openSplit = () => {
+    if (!orderDetails) return;
+    const notReady = orderDetails.items
+      .filter((i) => i.status === 'pending' || i.status === 'ordered_from_supplier')
+      .map((i) => i.id);
+    setSplitSelected(new Set(notReady));
+    setSplitError(null);
+    setShowSplit(true);
+  };
+
+  const handleSplit = async () => {
+    if (!orderDetails) return;
+    setSplitting(true);
+    setSplitError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${orderDetails.id}/split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds: Array.from(splitSelected) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося розділити замовлення');
+      setShowSplit(false);
+      await reloadOrder();
+      onOrderChanged();
+      bumpHistory();
+      if (onOpenOrder && window.confirm(`Створено замовлення №${data.orderNumber}. Відкрити його?`)) {
+        onOpenOrder(data.orderId as string);
+      }
+    } catch (error) {
+      setSplitError(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setSplitting(false);
     }
   };
 
@@ -804,6 +857,12 @@ export default function OrderDetailsModal({
     const next = ttnDraft.trim();
     if (next === (orderDetails.ttnNumber || '')) return;
     savePatch('ttn', { ttnNumber: next || null });
+  };
+
+  // ---- напоминание "Передзвонити": сохраняется сразу при выборе ----
+  // null — снять напоминание (кнопка "Виконано")
+  const saveCallback = (date: Date | null) => {
+    savePatch('callback', { callbackAt: date ? date.toISOString() : null });
   };
 
   // ---- заметка менеджера — сохраняется при потере фокуса, если изменилась ----
@@ -2005,6 +2064,76 @@ export default function OrderDetailsModal({
                   </div>
                 </div>
 
+                {/* ---- нагадування "Передзвонити" ----
+                    Замовлення з нагадуванням на сьогодні видно у списку (фільтр
+                    «📞 Передзвонити»), а в меню — лічильник, коли час настав */}
+                {(() => {
+                  const callbackDate = orderDetails.callbackAt ? new Date(orderDetails.callbackAt) : null;
+                  const isDue = callbackDate ? callbackDate.getTime() <= Date.now() : false;
+                  const quickButtonStyle = { border: '1px solid var(--line)', color: 'var(--ink-muted)' };
+                  const at = (daysAhead: number, hours: number) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + daysAhead);
+                    d.setHours(hours, 0, 0, 0);
+                    return d;
+                  };
+                  return (
+                    <div
+                      className="p-4 rounded-md"
+                      style={{
+                        background: isDue ? 'var(--bad-soft)' : 'var(--surface-2)',
+                        border: '1px solid var(--line)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-semibold" style={{ color: isDue ? 'var(--bad)' : 'var(--ink-muted)' }}>
+                          📞 ПЕРЕДЗВОНИТИ{isDue ? ' — ЧАС НАСТАВ' : ''}
+                        </h3>
+                        <SaveIndicator save={saveState.callback} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="datetime-local"
+                          className="px-3 py-2 text-sm rounded-md"
+                          // colorScheme: 'dark' — иначе значок календаря чёрный на тёмном фоне
+                          style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)', colorScheme: 'dark' }}
+                          value={callbackDate ? toDateTimeLocal(callbackDate) : ''}
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            const d = new Date(e.target.value);
+                            if (!Number.isNaN(d.getTime())) saveCallback(d);
+                          }}
+                        />
+                        {callbackDate && (
+                          <button
+                            type="button"
+                            onClick={() => saveCallback(null)}
+                            className="text-xs px-2.5 py-1.5 rounded-md font-medium"
+                            style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
+                            title="Зателефонували — зняти нагадування"
+                          >
+                            ✓ Виконано
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        <button type="button" onClick={() => saveCallback(new Date(Date.now() + 60 * 60 * 1000))} className="text-[11px] px-2 py-1 rounded-md" style={quickButtonStyle}>
+                          через 1 год
+                        </button>
+                        <button type="button" onClick={() => saveCallback(at(0, 17))} className="text-[11px] px-2 py-1 rounded-md" style={quickButtonStyle}>
+                          сьогодні 17:00
+                        </button>
+                        <button type="button" onClick={() => saveCallback(at(1, 10))} className="text-[11px] px-2 py-1 rounded-md" style={quickButtonStyle}>
+                          завтра 10:00
+                        </button>
+                        <button type="button" onClick={() => saveCallback(at(3, 10))} className="text-[11px] px-2 py-1 rounded-md" style={quickButtonStyle}>
+                          через 3 дні
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* ---- внутрішня замітка менеджера (клієнт її не бачить) ---- */}
                 <div className="p-4 rounded-md" style={{ background: 'var(--warn-soft)', border: '1px solid var(--line)' }}>
                   <div className="flex items-center justify-between mb-2">
@@ -2066,6 +2195,8 @@ export default function OrderDetailsModal({
                 {/* ---- друк документів ---- */}
                 <PrintDocumentsPanel
                   orderId={orderDetails.id}
+                  orderNumber={orderDetails.orderNumber}
+                  telegramLinked={orderDetails.telegramLinked}
                   items={orderDetails.items}
                   onItemNameSaved={(itemId, name) => {
                     setOrderDetails((prev) =>
@@ -2116,8 +2247,95 @@ export default function OrderDetailsModal({
                         % Знижка
                       </button>
                     )}
+                    {orderDetails.status !== 'shipped' &&
+                      orderDetails.status !== 'cancelled' &&
+                      orderDetails.items.filter((i) => i.status !== 'cancelled' && i.status !== 'returned').length >= 2 && (
+                        <button
+                          type="button"
+                          onClick={() => (showSplit ? setShowSplit(false) : openSplit())}
+                          className="text-[11px] px-2 py-1 rounded-md"
+                          style={{
+                            color: showSplit ? 'var(--accent-ink)' : 'var(--ink-muted)',
+                            background: showSplit ? 'var(--ink-muted)' : 'transparent',
+                            border: '1px solid var(--ink-muted)',
+                          }}
+                          title="Перенести частину позицій у нове замовлення"
+                        >
+                          ✂ Розділити
+                        </button>
+                      )}
                   </div>
                 </div>
+
+                {/* ---- розділення замовлення: відмічені позиції переїдуть у нове
+                    замовлення (готові лишаються тут і можуть їхати зараз) ---- */}
+                {showSplit && (
+                  <div className="mb-3 p-3 rounded-md" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                    <p className="text-xs mb-2" style={{ color: 'var(--ink-muted)' }}>
+                      Відмітьте позиції, які переїдуть у <b>нове замовлення</b>. Решта залишиться тут.
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      {orderDetails.items
+                        .filter((i) => i.status !== 'cancelled' && i.status !== 'returned')
+                        .map((item) => {
+                          const movable = item.status === 'pending' || item.status === 'ordered_from_supplier' || item.status === 'in_stock';
+                          return (
+                            <label
+                              key={item.id}
+                              className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-md cursor-pointer"
+                              style={{ background: 'var(--surface)', opacity: movable ? 1 : 0.5 }}
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={!movable}
+                                checked={splitSelected.has(item.id)}
+                                onChange={(e) =>
+                                  setSplitSelected((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(item.id);
+                                    else next.delete(item.id);
+                                    return next;
+                                  })
+                                }
+                              />
+                              <span className="font-mono text-xs">{item.article}</span>
+                              <span className="truncate">{item.name || ''}</span>
+                              <span className="ml-auto text-[11px]" style={{ color: ITEM_STATUS_COLORS[item.status].fg }}>
+                                {ITEM_STATUS_LABELS[item.status]}
+                              </span>
+                            </label>
+                          );
+                        })}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <button
+                        type="button"
+                        disabled={splitting || splitSelected.size === 0}
+                        onClick={handleSplit}
+                        className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                        style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                      >
+                        {splitting ? 'Розділяю...' : `Перенести ${splitSelected.size} поз. у нове замовлення`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowSplit(false)}
+                        className="px-4 py-2 rounded-md text-sm"
+                        style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                      >
+                        Скасувати
+                      </button>
+                    </div>
+                    {splitError && (
+                      <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
+                        {splitError}
+                      </p>
+                    )}
+                    <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                      Оплати залишаться в цьому замовленні. Доставка, клієнт і авто скопіюються в нове.
+                    </p>
+                  </div>
+                )}
 
                 {/* ---- знижка на все замовлення: відсоток або сума в гривнях
                     (сума розкладається на позиції пропорційно їх вартості) ---- */}

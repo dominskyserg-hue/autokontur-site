@@ -71,9 +71,15 @@ export default function PrintDocumentsPanel({
   orderId,
   items,
   onItemNameSaved,
+  telegramLinked = false,
+  orderNumber,
 }: {
   orderId: string;
   items: PanelOrderItem[];
+  // Подключил ли клиент Telegram-бота магазина — тогда документ можно
+  // отправить ему прямо в Telegram (кнопка "Надіслати клієнту")
+  telegramLinked?: boolean;
+  orderNumber?: number;
   // Викликається після успішного збереження виправленої назви — щоб
   // склад заказа в самій картці (components/OrderDetailsModal.tsx)
   // одразу показав виправлений текст, а не лише документ у прев'ю
@@ -95,6 +101,15 @@ export default function PrintDocumentsPanel({
   const [downloading, setDownloading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // ---- отправка документа клиенту ----
+  // Ссылка на сохранённый PDF (Vercel Blob) — после "Сохранить в заказ"
+  const [savedUrl, setSavedUrl] = useState<string | null>(null);
+  const [showSend, setShowSend] = useState(false);
+  const [sendState, setSendState] = useState<{ state: 'idle' | 'sending' | 'done' | 'error'; text?: string }>({
+    state: 'idle',
+  });
+  const [linkCopied, setLinkCopied] = useState(false);
 
   // ---- "Редактировать" — какие колонки показывать в таблице позиций ----
   const [showEditBar, setShowEditBar] = useState(false);
@@ -267,6 +282,11 @@ export default function PrintDocumentsPanel({
     setPreviewHtml(null);
     setPreviewError(null);
     setShowEditBar(false);
+    // Способы отправки — для каждого документа заново, после его сохранения
+    setShowSend(false);
+    setSavedUrl(null);
+    setSaved(false);
+    setSendState({ state: 'idle' });
   }
 
   function handlePrint() {
@@ -317,10 +337,58 @@ export default function PrintDocumentsPanel({
         throw new Error(data.error || 'Не удалось сохранить документ');
       }
       setSaved(true);
+      setSavedUrl(data.url as string);
+      return data.url as string;
     } catch (error) {
       setPreviewError(error instanceof Error ? error.message : 'Ошибка сети при сохранении документа');
+      return null;
     } finally {
       setSaving(false);
+    }
+  }
+
+  // "Надіслати клієнту": сначала сохраняем свежий PDF в заказ (чтобы
+  // клиент получил ровно то, что сейчас в предпросмотре), затем
+  // показываем способы отправки
+  async function handleOpenSend() {
+    setSendState({ state: 'idle' });
+    setLinkCopied(false);
+    const url = await handleSaveToOrder();
+    if (url) setShowSend(true);
+  }
+
+  async function handleSendTelegram() {
+    if (!activeDocType) return;
+    setSendState({ state: 'sending' });
+    try {
+      const response = await fetch(`/api/orders/${orderId}/documents/${activeDocType}/send`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося надіслати');
+      const texts: Record<string, string> = {
+        sent: '✓ Надіслано клієнту в Telegram',
+        not_linked: 'Клієнт не підключав Telegram-бота — надішліть у Viber або скопіюйте посилання',
+        failed: 'Telegram не прийняв файл (можливо, клієнт заблокував бота)',
+      };
+      setSendState({ state: data.result === 'sent' ? 'done' : 'error', text: texts[data.result] || data.result });
+    } catch (error) {
+      setSendState({ state: 'error', text: error instanceof Error ? error.message : 'Помилка мережі' });
+    }
+  }
+
+  // Текст для Viber/копирования: название документа, номер заказа и ссылка на PDF
+  function buildShareText(url: string): string {
+    const title = activeDocType ? DOC_LABELS[activeDocType].title : 'Документ';
+    return `${title}${orderNumber ? ` до замовлення №${orderNumber}` : ''}: ${url}`;
+  }
+
+  async function handleCopyLink() {
+    if (!savedUrl) return;
+    try {
+      await navigator.clipboard.writeText(buildShareText(savedUrl));
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    } catch {
+      // Буфер обмена недоступен — посилання все одно видно нижче
     }
   }
 
@@ -568,6 +636,69 @@ export default function PrintDocumentsPanel({
                   <span className="text-xs" style={{ color: 'var(--good)' }}>
                     Сохранено
                   </span>
+                )}
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleOpenSend}
+                  className="ml-auto px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                  style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
+                >
+                  📤 Надіслати клієнту
+                </button>
+              </div>
+            )}
+
+            {/* ---- способы отправки документа клиенту ---- */}
+            {showSend && savedUrl && (
+              <div className="px-4 py-3 flex flex-wrap items-center gap-2" style={{ borderTop: '1px solid var(--line)' }}>
+                {telegramLinked ? (
+                  <button
+                    type="button"
+                    disabled={sendState.state === 'sending'}
+                    onClick={handleSendTelegram}
+                    className="px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+                    style={{ border: '1px solid var(--line)', color: '#4FB3F0' }}
+                  >
+                    {sendState.state === 'sending' ? 'Надсилаю...' : 'Telegram (PDF-файлом)'}
+                  </button>
+                ) : (
+                  <span className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                    Клієнт не підключав Telegram-бота —
+                  </span>
+                )}
+                <a
+                  href={`viber://forward?text=${encodeURIComponent(buildShareText(savedUrl))}`}
+                  className="px-3 py-1.5 rounded-md text-sm"
+                  style={{ border: '1px solid var(--line)', color: '#9B8CFF' }}
+                  title="Відкриє Viber: оберіть клієнта, і йому піде посилання на PDF"
+                >
+                  Viber (посиланням)
+                </a>
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="px-3 py-1.5 rounded-md text-sm"
+                  style={{ border: '1px solid var(--line)', color: linkCopied ? 'var(--good)' : 'var(--ink-muted)' }}
+                >
+                  {linkCopied ? '✓ Скопійовано' : 'Скопіювати посилання'}
+                </button>
+                <a
+                  href={savedUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs underline"
+                  style={{ color: 'var(--accent)' }}
+                >
+                  Відкрити PDF ↗
+                </a>
+                {sendState.text && (
+                  <p
+                    className="w-full text-xs"
+                    style={{ color: sendState.state === 'done' ? 'var(--good)' : 'var(--warn)' }}
+                  >
+                    {sendState.text}
+                  </p>
                 )}
               </div>
             )}

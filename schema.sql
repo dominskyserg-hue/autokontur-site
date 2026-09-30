@@ -2758,3 +2758,14 @@ CREATE TABLE IF NOT EXISTS order_history (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_order_history_order_id ON order_history (order_id, created_at DESC);
+
+
+-- ============================================================
+-- ЗАКАЗЫ: НАПОМИНАНИЕ "ПЕРЕДЗВОНИТИ"
+-- ============================================================
+-- Когда менеджеру перезвонить клиенту по заказу. Заказы с наступившим
+-- напоминанием помечаются в списке, а в меню админки виден счётчик.
+-- NULL — напоминания нет (или уже выполнено). lib/orderColumns.ts
+-- добавляет эту колонку сам при первом обращении, если её ещё нет
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS callback_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_orders_callback_at ON orders (callback_at) WHERE callback_at IS NOT NULL;
