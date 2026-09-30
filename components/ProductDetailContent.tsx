@@ -131,6 +131,19 @@ export default function ProductDetailContent({
   // Главная страница группы с несколькими предложениями — в разметке
   // AggregateOffer по ВИДИМЫМ ценам: основное предложение + "Інші пропозиції"
   const visibleOffers = [{ retailPrice: product.retailPrice, stock: product.stock }, ...otherOffers];
+  // Строки таблицы "Інші пропозиції": текущее предложение первым, потом
+  // остальные (у них уже своя сортировка: в наличии -> дешевле)
+  const offerRows = [
+    {
+      id: product.id,
+      retailPrice: product.retailPrice,
+      stock: product.stock,
+      isRefurbished: product.isRefurbished,
+      deliveryTime: product.deliveryTime,
+      isCurrent: true,
+    },
+    ...otherOffers.map((offer) => ({ ...offer, isCurrent: false })),
+  ];
   const aggregateOffer =
     product.hasGroupOffers && otherOffers.length > 0
       ? {
@@ -448,69 +461,167 @@ export default function ProductDetailContent({
           <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
             Інші пропозиції на цю деталь
           </h2>
-          <div className="flex flex-col gap-2">
-            {/* Название поставщика покупателю НЕ показываем (аудит
-                безопасности) — только номер предложения, наличие и цену */}
-            {/* По нажатию строка раскрывается: подробности и кнопки заказа
-                именно этого предложения (components/OfferAccordion.tsx) */}
-            {otherOffers.map((offer, index) => (
-              <OfferAccordion
-                key={offer.id}
-                background={SURFACE_GLASS}
-                border={BORDER_SOFT}
-                color={PAPER}
-                fontFamily={BODY_FONT}
-                summary={
-                  <span className="flex flex-1 flex-wrap items-center justify-between gap-3">
-                    <span>Пропозиція {index + 2}</span>
-                    <span className="flex items-center gap-3">
-                      {offer.isRefurbished && <RefurbishedBadge />}
-                      <StockBadge stock={offer.stock} />
-                      <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>
-                        {formatMoney(offer.retailPrice)} грн
-                      </span>
+          {/* Свёрнутая строка: сколько предложений и от какой цены. По
+              нажатию выпадает таблица всех предложений (включая текущее):
+              склад, деталь, артикул, срок, количество, цена и кнопки заказа.
+              Название поставщика покупателю НЕ показываем (аудит
+              безопасности) — вместо него "Склад 1", "Склад 2"... */}
+          <OfferAccordion
+            background={SURFACE_GLASS}
+            border={BORDER_SOFT}
+            color={PAPER}
+            fontFamily={BODY_FONT}
+            summary={
+              <span className="flex flex-1 flex-wrap items-center justify-between gap-3">
+                <span>
+                  Пропозицій: {offerRows.length} · є на {offerRows.filter((row) => row.stock > 0).length}{' '}
+                  {offerRows.filter((row) => row.stock > 0).length === 1 ? 'складі' : 'складах'}
+                </span>
+                <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>
+                  від {formatMoney(Math.min(...offerRows.map((row) => row.retailPrice)))} грн
+                </span>
+              </span>
+            }
+          >
+            {/* На телефоне таблица не помещается — показываем те же данные
+                карточками (одна карточка = одна строка таблицы) */}
+            <div className="flex flex-col md:hidden">
+              {offerRows.map((row, index) => (
+                <div key={row.id} className="py-3" style={{ borderTop: index > 0 ? `1px solid ${BORDER_SOFT}` : 'none' }}>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-semibold">
+                      Склад {index + 1}
+                      {row.isCurrent && (
+                        <span className="ml-1.5 text-xs font-normal" style={{ color: MUTED }}>
+                          (ця)
+                        </span>
+                      )}
                     </span>
-                  </span>
-                }
-              >
-                <div className="mb-3 flex flex-col gap-1 text-xs" style={{ color: MUTED }}>
-                  <span>{displayName}</span>
-                  <span>Стан: {offer.isRefurbished ? 'відновлена' : 'нова'}</span>
-                  {offer.stock > 0 ? (
-                    <span>В наявності: {offer.stock} шт · відправка в день замовлення</span>
-                  ) : (
-                    <span>
-                      Під замовлення
-                      {offer.deliveryTime ? ` · очікуваний термін відвантаження постачальником: ${offer.deliveryTime}` : ''}
+                    <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>{formatMoney(row.retailPrice)} грн</span>
+                  </div>
+                  <div className="text-xs" style={{ color: MUTED }}>
+                    {displayName} · <span className="font-mono">{product.article}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+                    {row.stock > 0 ? (
+                      <span style={{ color: SUCCESS_TEXT }}>{row.stock} шт</span>
+                    ) : (
+                      <span style={{ color: HEAT }}>під замовлення</span>
+                    )}
+                    <span style={{ color: MUTED }}>
+                      · {row.stock > 0 ? 'відправка сьогодні' : row.deliveryTime || 'термін уточнить менеджер'}
                     </span>
-                  )}
-                  <span>Оплата при отриманні · 14 днів на повернення</span>
+                    {row.isRefurbished && <RefurbishedBadge />}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <AddToCartButton
+                      compact
+                      product={{
+                        id: row.id,
+                        article: product.article,
+                        brand: product.brand,
+                        name: product.name,
+                        retailPrice: row.retailPrice,
+                        stock: row.stock,
+                      }}
+                    />
+                    <QuickOrderModal
+                      compact
+                      product={{
+                        id: row.id,
+                        article: product.article,
+                        brand: product.brand,
+                        name: product.name,
+                        retailPrice: row.retailPrice,
+                        stock: row.stock,
+                      }}
+                    />
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <AddToCartButton
-                    product={{
-                      id: offer.id,
-                      article: product.article,
-                      brand: product.brand,
-                      name: product.name,
-                      retailPrice: offer.retailPrice,
-                      stock: offer.stock,
-                    }}
-                  />
-                  <QuickOrderModal
-                    product={{
-                      id: offer.id,
-                      article: product.article,
-                      brand: product.brand,
-                      name: product.name,
-                      retailPrice: offer.retailPrice,
-                      stock: offer.stock,
-                    }}
-                  />
-                </div>
-              </OfferAccordion>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            <div className="-mx-1 hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead>
+                  <tr className="text-xs" style={{ color: MUTED }}>
+                    <th className="px-2 py-2 font-normal">Склад</th>
+                    <th className="px-2 py-2 font-normal">Деталь</th>
+                    <th className="px-2 py-2 font-normal">Артикул</th>
+                    <th className="px-2 py-2 font-normal">Термін доставки</th>
+                    <th className="px-2 py-2 text-right font-normal">Кількість</th>
+                    <th className="px-2 py-2 text-right font-normal">Ціна</th>
+                    <th className="px-2 py-2 font-normal"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {offerRows.map((row, index) => (
+                    <tr key={row.id} style={{ borderTop: `1px solid ${BORDER_SOFT}` }}>
+                      <td className="whitespace-nowrap px-2 py-2.5">
+                        Склад {index + 1}
+                        {row.isCurrent && (
+                          <span className="ml-1.5 text-xs" style={{ color: MUTED }}>
+                            (ця)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div>{displayName}</div>
+                        {row.isRefurbished && (
+                          <div className="mt-1">
+                            <RefurbishedBadge />
+                          </div>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2.5 font-mono text-xs">{product.article}</td>
+                      <td className="px-2 py-2.5 text-xs" style={{ color: MUTED }}>
+                        {row.stock > 0 ? 'відправка сьогодні' : row.deliveryTime || 'уточнить менеджер'}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2.5 text-right text-xs">
+                        {row.stock > 0 ? (
+                          <span style={{ color: SUCCESS_TEXT }}>{row.stock} шт</span>
+                        ) : (
+                          <span style={{ color: HEAT }}>під замовлення</span>
+                        )}
+                      </td>
+                      <td
+                        className="whitespace-nowrap px-2 py-2.5 text-right"
+                        style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}
+                      >
+                        {formatMoney(row.retailPrice)} грн
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center justify-end gap-2">
+                          <AddToCartButton
+                            compact
+                            product={{
+                              id: row.id,
+                              article: product.article,
+                              brand: product.brand,
+                              name: product.name,
+                              retailPrice: row.retailPrice,
+                              stock: row.stock,
+                            }}
+                          />
+                          <QuickOrderModal
+                            compact
+                            product={{
+                              id: row.id,
+                              article: product.article,
+                              brand: product.brand,
+                              name: product.name,
+                              retailPrice: row.retailPrice,
+                              stock: row.stock,
+                            }}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </OfferAccordion>
         </section>
       )}
 
