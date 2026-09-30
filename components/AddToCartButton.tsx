@@ -27,14 +27,17 @@ interface AddToCartButtonProps {
   // compact — маленькая кнопка "У кошик" для таблицы пропозицій
   // на странице товара (components/ProductDetailContent.tsx)
   compact?: boolean;
+  // Сколько штук добавить (выбор количества на карточке товара,
+  // components/ProductBuyBox.tsx). По умолчанию 1
+  quantity?: number;
 }
 
-export default function AddToCartButton({ product, compact = false }: AddToCartButtonProps) {
+export default function AddToCartButton({ product, compact = false, quantity = 1 }: AddToCartButtonProps) {
   const [added, setAdded] = useState(false);
   const router = useRouter();
 
   const handleAdd = () => {
-    if (!addToCart(product)) return;
+    if (!addToCart(product, quantity)) return;
 
     trackAddToCart({
       id: product.id,

@@ -22,12 +22,11 @@ import { buildProductPath } from '@/lib/slug';
 import { buildFaqJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type VehicleCompatibilityItem, type PartCrossItem } from '@/lib/productDetail';
-import AddToCartButton from '@/components/AddToCartButton';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
 import OfferAccordion from '@/components/OfferAccordion';
+import ProductBuyBox from '@/components/ProductBuyBox';
 import OwnStockBadge from '@/components/OwnStockBadge';
 import FavoriteButton from '@/components/FavoriteButton';
-import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
 import ProductGallery, { type GalleryPhoto } from '@/components/ProductGallery';
 import { getCategoryIcon } from '@/lib/categoryIcons';
@@ -309,7 +308,9 @@ export default function ProductDetailContent({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            <AddToCartButton
+            {/* Количество (не больше остатка у поставщика) + кнопки заказа —
+                components/ProductBuyBox.tsx */}
+            <ProductBuyBox
               product={{
                 id: product.id,
                 article: product.article,
@@ -318,18 +319,9 @@ export default function ProductDetailContent({
                 retailPrice: product.retailPrice,
                 stock: product.stock,
               }}
-            />
-            <FavoriteButton productId={product.id} />
-            <QuickOrderModal
-              product={{
-                id: product.id,
-                article: product.article,
-                brand: product.brand,
-                name: product.name,
-                retailPrice: product.retailPrice,
-                stock: product.stock,
-              }}
-            />
+            >
+              <FavoriteButton productId={product.id} />
+            </ProductBuyBox>
           </div>
 
           {/* ==================== ПИТАННЯ ПРО ТОВАР У TELEGRAM ==================== */}
@@ -514,18 +506,7 @@ export default function ProductDetailContent({
                     {row.isRefurbished && <RefurbishedBadge />}
                   </div>
                   <div className="mt-2 flex items-center gap-2">
-                    <AddToCartButton
-                      compact
-                      product={{
-                        id: row.id,
-                        article: product.article,
-                        brand: product.brand,
-                        name: product.name,
-                        retailPrice: row.retailPrice,
-                        stock: row.stock,
-                      }}
-                    />
-                    <QuickOrderModal
+                    <ProductBuyBox
                       compact
                       product={{
                         id: row.id,
@@ -542,7 +523,7 @@ export default function ProductDetailContent({
             </div>
 
             <div className="-mx-1 hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[640px] text-left text-sm">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead>
                   <tr className="text-xs" style={{ color: MUTED }}>
                     <th className="px-2 py-2 font-normal">Склад</th>
@@ -592,18 +573,7 @@ export default function ProductDetailContent({
                       </td>
                       <td className="px-2 py-2.5">
                         <div className="flex items-center justify-end gap-2">
-                          <AddToCartButton
-                            compact
-                            product={{
-                              id: row.id,
-                              article: product.article,
-                              brand: product.brand,
-                              name: product.name,
-                              retailPrice: row.retailPrice,
-                              stock: row.stock,
-                            }}
-                          />
-                          <QuickOrderModal
+                          <ProductBuyBox
                             compact
                             product={{
                               id: row.id,
