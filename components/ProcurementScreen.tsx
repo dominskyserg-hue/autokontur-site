@@ -24,6 +24,15 @@
 //   POST /api/admin/procurement/order-from-supplier
 //   POST /api/admin/procurement/mark-in-stock
 //   POST /api/admin/procurement/receive
+//   POST /api/admin/procurement/expected-date  — сменить ожидаемую дату поставки
+//   PATCH /api/orders/[id]/items/[itemId]      — "Перекинути" позицию на
+//                                                  другого поставщика (productId)
+//
+// Подсказки:
+//   - "Є дешевше" (вкладка "Нужно заказать") — тот же артикул у другого
+//     поставщика дешевле или в наличии, когда у текущего нет;
+//   - "Запізнюється на N днів" (вкладка "Ожидают приёмки") — прошла дата,
+//     которую поставщик обещал при заказе
 // ============================================================
 
 import { useCallback, useEffect, useState } from 'react';
@@ -44,6 +53,22 @@ interface NeededItem {
   customerPhone: string;
   orderStatus: string;
   orderCreatedAt: string;
+  // "Нужно заказать": выгоднее предложение у другого поставщика (или null)
+  betterOffer: BetterOffer | null;
+  // "Ожидают приёмки": обещанная дата поставки (YYYY-MM-DD) и опоздание в днях
+  supplierOrderedAt: string | null;
+  expectedAt: string | null;
+  daysLate: number;
+}
+
+// Тот же артикул у другого поставщика — см. app/api/admin/procurement/needed/route.ts
+interface BetterOffer {
+  productId: string;
+  supplierName: string;
+  costPrice: number;
+  stock: number;
+  reason: 'cheaper' | 'in_stock';
+  saving: number;
 }
 
 interface SupplierGroup {
@@ -63,6 +88,33 @@ function formatMoney(value: number): string {
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// "2026-10-05" -> "05.10.2026" (без new Date — чтобы дата не сдвинулась
+// из-за часового пояса браузера)
+function formatIsoDay(value: string): string {
+  const [year, month, day] = value.split('-');
+  return `${day}.${month}.${year}`;
+}
+
+// Дата через N дней от сегодня в формате YYYY-MM-DD — для кнопок
+// быстрого выбора ожидаемой даты поставки
+function isoDayFromToday(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+// Украинское склонение: 1 день, 2 дні, 5 днів, 21 день
+function daysWord(count: number): string {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return 'днів';
+  if (last === 1) return 'день';
+  if (last >= 2 && last <= 4) return 'дні';
+  return 'днів';
 }
 
 type Tab = 'toOrder' | 'toReceive';
@@ -106,6 +158,8 @@ export default function ProcurementScreen() {
 
   const totalToOrder = toOrderGroups.reduce((sum, g) => sum + g.items.length, 0);
   const totalToReceive = toReceiveGroups.reduce((sum, g) => sum + g.items.length, 0);
+  // Сколько позиций поставщики уже привозят с опозданием
+  const totalLate = toReceiveGroups.reduce((sum, g) => sum + g.items.filter((item) => item.daysLate > 0).length, 0);
 
   return (
     <AdminLayout active="procurement">
@@ -154,6 +208,15 @@ export default function ProcurementScreen() {
           }}
         >
           Ожидают приёмки {totalToReceive > 0 && `(${totalToReceive})`}
+          {totalLate > 0 && (
+            <span
+              className="ml-2 px-1.5 py-0.5 rounded-full text-[11px] font-semibold"
+              style={{ background: 'var(--bad)', color: '#fff' }}
+              title="Постачальник запізнюється з поставкою"
+            >
+              ⏰ {totalLate}
+            </span>
+          )}
         </button>
       </div>
 
@@ -205,6 +268,11 @@ function ToOrderTab({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [markingId, setMarkingId] = useState<string | null>(null);
+  // Когда поставщик обещал привезти — необязательно, но без неё не будет
+  // видно опозданий на вкладке "Ожидают приёмки"
+  const [expectedDate, setExpectedDate] = useState('');
+  // Позиция, которую сейчас "перекидываем" на другого поставщика
+  const [switchingId, setSwitchingId] = useState<string | null>(null);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -236,7 +304,7 @@ function ToOrderTab({
       const response = await fetch('/api/admin/procurement/order-from-supplier', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderItemIds: Array.from(selected) }),
+        body: JSON.stringify({ orderItemIds: Array.from(selected), expectedDate: expectedDate || null }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось оформить заказ поставщику');
@@ -256,8 +324,12 @@ function ToOrderTab({
       }
       onPrint(Array.from(bySupplier.values()));
 
-      onNotice(`Заказ поставщику оформлен: позиций — ${data.items.length}.`);
+      onNotice(
+        `Заказ поставщику оформлен: позиций — ${data.items.length}.` +
+          (expectedDate ? ` Ожидаем поставку ${formatIsoDay(expectedDate)}.` : '')
+      );
       setSelected(new Set());
+      setExpectedDate('');
       onRefresh();
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Ошибка сети при оформлении заказа поставщику');
@@ -292,18 +364,102 @@ function ToOrderTab({
     }
   };
 
+  // "Перекинути": меняем поставщика позиции на того, у кого дешевле или
+  // есть в наличии. Цена продажи клиенту остаётся прежней — меняются
+  // только товар, поставщик и закупочная цена (тот же PATCH, что и
+  // замена детали в окне заказа)
+  const handleSwitchSupplier = async (item: NeededItem) => {
+    if (!item.betterOffer) return;
+    const offer = item.betterOffer;
+    const confirmed = window.confirm(
+      `Перекинути ${item.brand || ''} ${item.article} на постачальника «${offer.supplierName}»?\n` +
+        `Закупка: ${formatMoney(item.costPrice)} → ${formatMoney(offer.costPrice)} грн. Ціна для клієнта не зміниться.`
+    );
+    if (!confirmed) return;
+
+    onError(null);
+    onNotice(null);
+    setSwitchingId(item.id);
+    try {
+      const response = await fetch(`/api/orders/${item.orderId}/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: offer.productId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось сменить поставщика');
+      onNotice(
+        `Позиция ${item.article} перекинута на «${offer.supplierName}».` +
+          (offer.saving > 0 ? ` Экономия: ${formatMoney(offer.saving)} грн.` : '')
+      );
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(item.id);
+        return next;
+      });
+      onRefresh();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Ошибка сети');
+    } finally {
+      setSwitchingId(null);
+    }
+  };
+
   if (groups.length === 0) {
     return <p style={{ color: 'var(--ink-muted)' }}>Всё заказано — нет позиций, ожидающих закупки.</p>;
   }
 
+  // Итог по всем подсказкам "Є дешевше" — сколько можно сэкономить
+  const allItems = groups.flatMap((group) => group.items);
+  const cheaperCount = allItems.filter((item) => item.betterOffer?.reason === 'cheaper').length;
+  const totalSaving = allItems.reduce((sum, item) => sum + (item.betterOffer?.saving ?? 0), 0);
+
   return (
     <div className="flex flex-col gap-6">
+      {cheaperCount > 0 && (
+        <div className="px-4 py-3 rounded-md text-sm" style={{ background: 'var(--good-soft)', color: 'var(--good)' }}>
+          💡 Є дешевше у інших постачальників: позицій — {cheaperCount}, можлива економія {formatMoney(totalSaving)} грн.
+          Натисніть «Перекинути» біля позиції.
+        </div>
+      )}
+
       {selected.size > 0 && (
         <div
-          className="sticky top-0 z-10 flex items-center justify-between px-4 py-3 rounded-md"
+          className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-md"
           style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}
         >
           <span className="text-sm">Выбрано позиций: {selected.size}</span>
+          {/* Ожидаемая дата поставки — сохраняется в позициях, по ней
+              потом видно опоздание поставщика */}
+          <div className="flex flex-wrap items-center gap-2 text-xs" style={{ color: 'var(--ink-muted)' }}>
+            <span>Привезут:</span>
+            <input
+              type="date"
+              className="px-2 py-1 text-sm rounded-md"
+              style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}
+              value={expectedDate}
+              onChange={(e) => setExpectedDate(e.target.value)}
+            />
+            {[
+              { label: 'завтра', days: 1 },
+              { label: '+2 дні', days: 2 },
+              { label: '+3 дні', days: 3 },
+            ].map((option) => (
+              <button
+                key={option.days}
+                type="button"
+                onClick={() => setExpectedDate(isoDayFromToday(option.days))}
+                className="px-2 py-1 rounded-md"
+                style={{
+                  border: '1px solid var(--line)',
+                  background: expectedDate === isoDayFromToday(option.days) ? 'var(--accent-soft)' : 'var(--surface)',
+                  color: expectedDate === isoDayFromToday(option.days) ? 'var(--accent)' : 'var(--ink-muted)',
+                }}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             disabled={submitting}
@@ -368,7 +524,31 @@ function ToOrderTab({
                         </div>
                       </td>
                       <td className="px-2 py-2 text-right">{item.quantity}</td>
-                      <td className="px-2 py-2 text-right font-mono">{formatMoney(item.costPrice)}</td>
+                      <td className="px-2 py-2 text-right">
+                        <div className="font-mono">{formatMoney(item.costPrice)}</div>
+                        {/* Подсказка "Є дешевше" / "Є в наявності" у другого поставщика */}
+                        {item.betterOffer && (
+                          <div className="mt-1 flex flex-col items-end gap-1 text-xs">
+                            <span
+                              style={{ color: item.betterOffer.reason === 'cheaper' ? 'var(--good)' : 'var(--warn)' }}
+                              title={`Залишок у постачальника: ${item.betterOffer.stock}`}
+                            >
+                              {item.betterOffer.reason === 'cheaper' ? 'Є дешевше' : 'Є в наявності'}:{' '}
+                              {item.betterOffer.supplierName} — {formatMoney(item.betterOffer.costPrice)}
+                              {item.betterOffer.saving > 0 && ` (−${formatMoney(item.betterOffer.saving)})`}
+                            </span>
+                            <button
+                              type="button"
+                              disabled={switchingId === item.id}
+                              onClick={() => handleSwitchSupplier(item)}
+                              className="px-2 py-1 rounded-md disabled:opacity-50"
+                              style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                            >
+                              {switchingId === item.id ? '...' : 'Перекинути'}
+                            </button>
+                          </div>
+                        )}
+                      </td>
                       <td className="px-2 py-2 text-right" style={{ color: hasStock ? 'var(--good)' : 'var(--ink-faint)' }}>
                         {item.currentStock ?? '—'}
                       </td>
@@ -420,6 +600,31 @@ function ToReceiveTab({
   const [drafts, setDrafts] = useState<Record<string, ReceiveDraft>>({});
   const [invoiceMeta, setInvoiceMeta] = useState<Record<string, { invoiceNumber: string; comment: string }>>({});
   const [submittingSupplierId, setSubmittingSupplierId] = useState<string | null>(null);
+  // Позиция, у которой сейчас сохраняется новая ожидаемая дата
+  const [savingDateId, setSavingDateId] = useState<string | null>(null);
+
+  // Поставщик перенёс срок (или дату забыли указать при заказе) —
+  // сохраняем новую ожидаемую дату сразу при выборе в календаре
+  const handleExpectedDateChange = async (item: NeededItem, value: string) => {
+    onError(null);
+    onNotice(null);
+    setSavingDateId(item.id);
+    try {
+      const response = await fetch('/api/admin/procurement/expected-date', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderItemIds: [item.id], expectedDate: value || null }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось изменить дату');
+      onNotice(value ? `Очікувана дата поставки ${item.article}: ${formatIsoDay(value)}.` : `Дату поставки ${item.article} прибрано.`);
+      onRefresh();
+    } catch (error) {
+      onError(error instanceof Error ? error.message : 'Ошибка сети');
+    } finally {
+      setSavingDateId(null);
+    }
+  };
 
   const draftFor = (item: NeededItem): ReceiveDraft =>
     drafts[item.id] || { checked: true, quantity: String(item.remainingToReceive ?? item.quantity), costPrice: String(item.costPrice) };
@@ -502,6 +707,11 @@ function ToReceiveTab({
           >
             <div className="px-4 py-3 text-sm font-semibold" style={{ borderBottom: '1px solid var(--line)' }}>
               {group.supplierName} <span className="text-xs font-normal" style={{ color: 'var(--ink-faint)' }}>({group.items.length})</span>
+              {group.items.some((item) => item.daysLate > 0) && (
+                <span className="ml-2 text-xs font-medium" style={{ color: 'var(--bad)' }}>
+                  ⏰ запізнюється: {group.items.filter((item) => item.daysLate > 0).length}
+                </span>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -511,6 +721,7 @@ function ToReceiveTab({
                     <th className="text-left px-4 py-2 font-normal"></th>
                     <th className="text-left px-2 py-2 font-normal">Товар</th>
                     <th className="text-left px-2 py-2 font-normal">Заказ</th>
+                    <th className="text-left px-2 py-2 font-normal">Очікується</th>
                     <th className="text-right px-2 py-2 font-normal">Заказано</th>
                     <th className="text-right px-2 py-2 font-normal">Принять сейчас</th>
                     <th className="text-right px-4 py-2 font-normal">Закупочная цена</th>
@@ -539,6 +750,32 @@ function ToReceiveTab({
                             {item.customerName} {item.customerSurname}
                           </div>
                           <div style={{ color: 'var(--ink-faint)' }}>{item.customerPhone}</div>
+                        </td>
+                        {/* Ожидаемая дата поставки: можно поменять прямо здесь.
+                            Если дата прошла — красная пометка опоздания */}
+                        <td className="px-2 py-2 text-xs whitespace-nowrap">
+                          <input
+                            type="date"
+                            disabled={savingDateId === item.id}
+                            className="px-2 py-1 text-xs rounded-md disabled:opacity-50"
+                            style={{
+                              border: `1px solid ${item.daysLate > 0 ? 'var(--bad)' : 'var(--line)'}`,
+                              background: 'var(--surface-2)',
+                            }}
+                            value={item.expectedAt ?? ''}
+                            onChange={(e) => handleExpectedDateChange(item, e.target.value)}
+                          />
+                          {item.daysLate > 0 ? (
+                            <div className="mt-1 font-semibold" style={{ color: 'var(--bad)' }}>
+                              запізнюється на {item.daysLate} {daysWord(item.daysLate)}
+                            </div>
+                          ) : (
+                            item.supplierOrderedAt && (
+                              <div className="mt-1" style={{ color: 'var(--ink-faint)' }}>
+                                замовлено {formatDate(item.supplierOrderedAt)}
+                              </div>
+                            )
+                          )}
                         </td>
                         <td className="px-2 py-2 text-right">
                           {item.remainingToReceive !== item.quantity ? (

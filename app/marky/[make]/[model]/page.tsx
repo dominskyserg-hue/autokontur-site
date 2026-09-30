@@ -33,6 +33,7 @@ import VinCheckTrigger from '@/components/VinCheckTrigger';
 import { loadThinNarrowCategories, narrowRedirectTarget } from '@/lib/narrowCategoryStatus';
 import { findNarrowPageForVehicle, getCategoryBySlug } from '@/lib/categories';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
+import OwnStockBadge from '@/components/OwnStockBadge';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import {
   TECH_BG,
@@ -361,9 +362,9 @@ function HubProductCard({
         <div className="mb-2 text-sm" style={{ color: TECH_INK }}>
           {buildSeoProductName(product)}
         </div>
-        {(product.stock > 0 || product.isRefurbished) && (
+        {(product.ownStock || product.stock > 0 || product.isRefurbished) && (
           <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-            {product.stock > 0 && <StockBadge stock={product.stock} />}
+            {product.ownStock ? <OwnStockBadge compact /> : product.stock > 0 && <StockBadge stock={product.stock} />}
             {product.isRefurbished && <RefurbishedBadge />}
           </div>
         )}

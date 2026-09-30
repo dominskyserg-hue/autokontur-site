@@ -24,6 +24,7 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type VehicleCompatibilityItem, type PartCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
+import OwnStockBadge from '@/components/OwnStockBadge';
 import FavoriteButton from '@/components/FavoriteButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
@@ -248,7 +249,7 @@ export default function ProductDetailContent({
             >
               {formatMoney(product.retailPrice)} <span style={{ fontSize: 16, color: FAINT, fontFamily: BODY_FONT }}>грн</span>
             </span>
-            <StockBadge stock={product.stock} />
+            {product.ownStock ? <OwnStockBadge /> : <StockBadge stock={product.stock} />}
             {product.isRefurbished && <RefurbishedBadge />}
           </div>
 
@@ -260,7 +261,7 @@ export default function ProductDetailContent({
               {X}" одразу під бейджем "Під замовлення" — це читалось
               як суперечність ("під замовлення" + "сьогодні" поруч).
               Уточнене формулювання прибирає цю двозначність */}
-          {product.stock <= 0 && product.deliveryTime && (
+          {!product.ownStock && product.stock <= 0 && product.deliveryTime && (
             <p className="mb-4 text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
               Очікуваний термін відвантаження постачальником: {product.deliveryTime}
             </p>
@@ -277,7 +278,7 @@ export default function ProductDetailContent({
             className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs"
             style={{ fontFamily: BODY_FONT, color: MUTED }}
           >
-            {product.stock > 0 && (
+            {(product.ownStock || product.stock > 0) && (
               <span className="inline-flex items-center gap-1.5">
                 <Truck className="h-3.5 w-3.5" style={{ color: ACCENT }} />
                 Відправка сьогодні

@@ -14,6 +14,7 @@ import { PRODUCT_GROUPS_ACTIVE } from '@/lib/productGroups';
 import { buildCleanProductName } from '@/lib/productNameCleanup';
 import { MODEL_HUBS, MIN_HUB_PRODUCTS, PRIORITY_CATEGORY_SLUGS, type ModelHubDef } from '@/lib/modelHubs';
 import { comparePopular, getRecentlySoldProductIds } from '@/lib/popularitySort';
+import { getOwnStockKeys, ownStockKey } from '@/lib/ownStock';
 import { modelForGeneration } from '@/lib/carModelDictionary';
 import { isEmptyPartName } from '@/lib/emptyPartName';
 import { publicImageUrl } from '@/lib/imageUrl';
@@ -52,6 +53,8 @@ export interface HubProduct {
   groupPrimaryId: string | null;
   // Восстановленная / б/у деталь (бейдж "Відновлена")
   isRefurbished: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж и первое место
+  ownStock?: boolean;
 }
 
 export interface HubCategoryCount {
@@ -175,7 +178,9 @@ function bestPerPart(offers: HubProduct[]): HubProduct[] {
     const key = `${(offer.brand ?? '').toUpperCase()}|${offer.article}`;
     offersByPart.set(key, (offersByPart.get(key) ?? 0) + 1);
     const current = bestByPart.get(key);
-    if (!current || gridRank(offer) < gridRank(current) || (gridRank(offer) === gridRank(current) && offer.retailPrice < current.retailPrice)) {
+    // Предложение с НАШЕГО склада — всегда лучшее (отправка сегодня)
+    const ownBetter = Boolean(offer.ownStock) !== Boolean(current?.ownStock) ? Boolean(offer.ownStock) : null;
+    if (!current || ownBetter === true || (ownBetter === null && (gridRank(offer) < gridRank(current) || (gridRank(offer) === gridRank(current) && offer.retailPrice < current.retailPrice)))) {
       bestByPart.set(key, offer);
     }
   }
@@ -188,16 +193,22 @@ function bestPerPart(offers: HubProduct[]): HubProduct[] {
 
 export const loadHubData = cache(async function loadHubData(hub: ModelHubDef): Promise<HubData> {
   const hubModel = modelForGeneration(hub.slug);
-  const [result, maybeResult, soldList] = await Promise.all([
+  const [result, maybeResult, soldList, ownKeysList] = await Promise.all([
     pool.query(HUB_PRODUCTS_SQL, [hub.makeSlug, hub.slug, hubModel?.model ?? '']),
     hubModel ? pool.query(HUB_MAYBE_SQL, [hub.makeSlug, hubModel.model, hub.slug]) : Promise.resolve({ rows: [] }),
     getRecentlySoldProductIds(pool),
+    getOwnStockKeys(pool),
   ]);
   const soldIds = new Set(soldList);
-  const maybe = bestPerPart(rowsToOffers(maybeResult.rows))
+  // Детали с нашего склада помечаем прямо в товарах — сортировка
+  // (comparePopular) и бейдж на странице читают это поле
+  const ownKeys = new Set(ownKeysList);
+  const markOwn = (items: HubProduct[]): HubProduct[] =>
+    items.map((item) => ({ ...item, ownStock: ownKeys.has(ownStockKey(item.article, item.brand)) }));
+  const maybe = markOwn(bestPerPart(rowsToOffers(maybeResult.rows)))
     .sort((a, b) => gridRank(a) - gridRank(b) || comparePopular(a, b, soldIds))
     .slice(0, MAYBE_LIMIT);
-  const offers: HubProduct[] = rowsToOffers(result.rows);
+  const offers: HubProduct[] = markOwn(rowsToOffers(result.rows));
 
   // Той самий товар (бренд + артикул) часто є в кількох постачальників —
   // на хабі це ОДНА запчастина: лишаємо найкращу пропозицію (в наявності з

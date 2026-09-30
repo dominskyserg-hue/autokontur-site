@@ -59,6 +59,7 @@ import { CUSTOMER_SESSION_COOKIE, getCustomerSessionPhoneFromRequest } from '@/l
 import { buildTextSearchClause } from '@/lib/productSearch';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
+import { getOwnStockKeys, ownStockKey } from '@/lib/ownStock';
 import { isAdminRequest } from '@/lib/adminSession';
 import { publicImageUrl } from '@/lib/imageUrl';
 
@@ -151,6 +152,9 @@ interface ProductResponse {
   offerCount?: number;
   // Лучшее предложение — восстановленная / б/у деталь (бейдж "Відновлена")
   isRefurbished: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — на витрине бейдж
+  // "На нашому складі · відправка сьогодні" и первое место в поиске
+  ownStock: boolean;
   updatedAt: string;
 }
 
@@ -342,8 +346,11 @@ export async function GET(request: NextRequest) {
     // Пошук — та сама сортування "За популярністю", що й на категоріях,
     // марках і хабах (lib/popularitySort.ts): наявність → продаж за 180
     // днів → фото → група бренду (lib/brandPriority.ts) → ціна за зростанням
+    // Ключи деталей с НАШЕГО склада (кэш 2 минуты) — нужны и для
+    // сортировки поиска (такие первыми), и для бейджа в ответе
+    const ownStockKeys = await getOwnStockKeys(pool);
     const orderBySql = search
-      ? groupedOrderBy(buildPopularOrderBy(await getRecentlySoldProductIds(pool)))
+      ? groupedOrderBy(buildPopularOrderBy(await getRecentlySoldProductIds(pool), ownStockKeys))
       : featured
         ? 'ORDER BY p.updated_at DESC'
         : 'ORDER BY p.article ASC';
@@ -438,6 +445,7 @@ export async function GET(request: NextRequest) {
       discountPercent: parseFloat(row.discount_percent),
       stock: row.stock,
       isRefurbished: row.is_refurbished,
+      ownStock: ownStockKeys.includes(ownStockKey(row.article, row.brand)),
       ...(isAdmin ? { supplierId: row.supplier_id, supplierName: row.supplier_name } : {}),
       deliveryTime: row.delivery_time,
       updatedAt: row.updated_at,

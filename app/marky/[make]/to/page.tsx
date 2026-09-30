@@ -30,6 +30,8 @@ import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
+import OwnStockBadge from '@/components/OwnStockBadge';
+import { getOwnStockKeys, ownStockKey } from '@/lib/ownStock';
 import { groupedListSql } from '@/lib/productGroups';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import {
@@ -89,6 +91,8 @@ interface ToProduct {
   offerCount: number;
   // Лучшее предложение — восстановленная деталь (бейдж "Відновлена")
   isRefurbished: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж "На нашому складі"
+  ownStock: boolean;
 }
 
 interface ToSection {
@@ -107,6 +111,9 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
   // самий покупець для всіх секцій), а не по колу на кожну категорію.
   // Див. коментар біля того ж коду в app/category/[slug]/page.tsx
   const customerPricingRule = await getCustomerPricingRule(pool, await getCustomerSessionPhone());
+  // Детали с нашего склада — ставим первыми в каждой секции и
+  // помечаем бейджем. Ключи "артикул|бренд" (lib/ownStock.ts)
+  const ownStockKeys = await getOwnStockKeys(pool);
 
   return Promise.all(
     categories.map(async (category): Promise<ToSection> => {
@@ -123,10 +130,12 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
           ${g.join}
           JOIN suppliers s ON s.id = b.supplier_id
           WHERE ${clause} AND ${g.where}
-          ORDER BY (b.stock > 0) DESC, ${g.name} ASC NULLS LAST
+          ORDER BY
+            ((p.article || '|' || UPPER(regexp_replace(COALESCE(p.brand, ''), '[[:space:]-]', '', 'g'))) = ANY($${params.length + 2}::text[])) DESC,
+            (b.stock > 0) DESC, ${g.name} ASC NULLS LAST
           LIMIT $${params.length + 1}
           `,
-          [...params, PREVIEW_SIZE]
+          [...params, PREVIEW_SIZE, ownStockKeys]
         ),
         pool.query(
           `SELECT COUNT(*)::int AS total FROM products p JOIN suppliers s ON s.id = p.supplier_id WHERE ${clause} AND ${g.where}`,
@@ -145,6 +154,7 @@ const loadToSections = cache(async function loadToSections(makeSlug: string): Pr
         offerId: row.offer_id,
         offerCount: row.offer_count,
         isRefurbished: row.is_refurbished,
+        ownStock: ownStockKeys.includes(ownStockKey(row.article, row.brand)),
       }));
 
       return { category, products, total: countResult.rows[0]?.total ?? 0 };
@@ -288,9 +298,9 @@ export default async function MakeToPage({ params }: { params: Promise<PageParam
                       <div className="mb-2 line-clamp-2 text-sm" style={{ color: TECH_INK }}>
                         {product.name || category.name}
                       </div>
-                      {(product.stock > 0 || product.isRefurbished) && (
+                      {(product.ownStock || product.stock > 0 || product.isRefurbished) && (
                         <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                          {product.stock > 0 && <StockBadge stock={product.stock} />}
+                          {product.ownStock ? <OwnStockBadge compact /> : product.stock > 0 && <StockBadge stock={product.stock} />}
                           {product.isRefurbished && <RefurbishedBadge />}
                         </div>
                       )}
