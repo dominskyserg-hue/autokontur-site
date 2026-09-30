@@ -314,6 +314,7 @@ export default function ProductDetailContent({
                 brand: product.brand,
                 name: product.name,
                 retailPrice: product.retailPrice,
+                stock: product.stock,
               }}
             />
           </div>
@@ -503,6 +504,7 @@ export default function ProductDetailContent({
                       brand: product.brand,
                       name: product.name,
                       retailPrice: offer.retailPrice,
+                      stock: offer.stock,
                     }}
                   />
                 </div>

@@ -844,13 +844,16 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // Изменение количества кнопками "+"/"-" в панели корзины. delta —
   // +1 или -1. Снизу ограничиваем единицей (убрать товар полностью —
   // это отдельная кнопка removeFromCart, а не количество 0), сверху —
-  // остатком на складе, каким он был на момент добавления в корзину
+  // MAX_CART_QUANTITY. Остатком поставщика НЕ ограничиваем: раньше из-за
+  // этого товар "під замовлення" (остаток 0) или с остатком 1 шт нельзя
+  // было заказать больше 1 шт. Если просят больше, чем есть, — под
+  // строкой пишем подсказку, а менеджер уточнит срок
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
         const nextQuantity = item.quantity + delta;
-        if (nextQuantity < 1 || nextQuantity > item.stock) return item;
+        if (nextQuantity < 1 || nextQuantity > MAX_CART_QUANTITY) return item;
         return { ...item, quantity: nextQuantity };
       })
     );
@@ -3584,6 +3587,10 @@ function CartDrawer({
   );
 }
 
+// Больше этого количества одной позиции через корзину не заказать —
+// защита от случайного "999" (крупный опт менеджер оформит сам)
+const MAX_CART_QUANTITY = 99;
+
 // Одна строка товара внутри панели корзины: название/артикул/бренд,
 // счётчик количества с кнопками +/-, цена за штуку и сумма по строке
 function CartRow({
@@ -3597,7 +3604,9 @@ function CartRow({
   onDecrement: () => void;
   onRemove: () => void;
 }) {
-  const atStockLimit = item.quantity >= item.stock;
+  const atLimit = item.quantity >= MAX_CART_QUANTITY;
+  // Просят больше, чем сейчас есть у поставщика (и товар вообще в наличии)
+  const overStock = item.stock > 0 && item.quantity > item.stock;
 
   return (
     <div className="flex items-start gap-3 pb-3" style={{ borderBottom: `1px solid ${TECH_BORDER}` }}>
@@ -3627,7 +3636,7 @@ function CartRow({
           <button
             type="button"
             onClick={onIncrement}
-            disabled={atStockLimit}
+            disabled={atLimit}
             aria-label="Збільшити кількість"
             className="flex h-6 w-6 items-center justify-center rounded-md text-sm font-semibold disabled:opacity-30"
             style={{ background: 'rgba(255,255,255,0.06)', color: TECH_INK }}
@@ -3638,6 +3647,11 @@ function CartRow({
             × {formatMoney(item.price)} грн
           </span>
         </div>
+        {overStock && (
+          <p className="mt-1.5 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_HEAT }}>
+            В наявності {item.stock} шт — решту привеземо під замовлення, термін уточнить менеджер
+          </p>
+        )}
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-2">

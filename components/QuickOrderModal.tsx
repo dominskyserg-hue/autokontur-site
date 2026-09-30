@@ -72,8 +72,14 @@ interface QuickOrderModalProps {
     brand: string | null;
     name: string | null;
     retailPrice: number;
+    // Остаток у поставщика — только для подсказки "в наявності N шт,
+    // решту привеземо під замовлення". Необязательный
+    stock?: number;
   };
 }
+
+// Сколько штук максимум можно выбрать в быстром заказе (как и в корзине)
+const MAX_QUANTITY = 99;
 
 export default function QuickOrderModal({ product }: QuickOrderModalProps) {
   const [open, setOpen] = useState(false);
@@ -82,6 +88,8 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
   const [touched, setTouched] = useState(false);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success'>('idle');
   const [error, setError] = useState<string | null>(null);
+  // Сколько штук заказывает покупатель (раньше всегда было 1)
+  const [quantity, setQuantity] = useState(1);
 
   const displayName = product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ');
 
@@ -98,8 +106,16 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
       setTouched(false);
       setStatus('idle');
       setError(null);
+      setQuantity(1);
     }, 200);
   };
+
+  // Кнопки "−" / "+" и ручной ввод — всегда в пределах 1..MAX_QUANTITY
+  const changeQuantity = (next: number) => {
+    if (!Number.isFinite(next)) return;
+    setQuantity(Math.min(MAX_QUANTITY, Math.max(1, Math.round(next))));
+  };
+  const overStock = product.stock !== undefined && product.stock > 0 && quantity > product.stock;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -112,7 +128,7 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
     setStatus('submitting');
     setError(null);
 
-    trackBeginCheckout([{ id: product.id, name: displayName, brand: product.brand, price: product.retailPrice, quantity: 1 }]);
+    trackBeginCheckout([{ id: product.id, name: displayName, brand: product.brand, price: product.retailPrice, quantity }]);
 
     // Бекенд вимагає ім'я І прізвище окремо (customerName/customerSurname
     // NOT NULL) — а швидка форма навмисно просить лише одне поле "Ім'я"
@@ -135,7 +151,7 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
           city: PENDING_NOTE,
           novaPoshtaAddress: PENDING_NOTE,
           comment: 'Замовлення оформлено через "Купити в 1 клік" — уточнити спосіб доставки та оплати під час дзвінка.',
-          items: [{ id: product.id, count: 1 }],
+          items: [{ id: product.id, count: quantity }],
           website: honeypot,
         }),
       });
@@ -145,7 +161,7 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
         throw new Error(data.error || 'Не вдалося оформити замовлення');
       }
 
-      trackPurchase(data.orderId, [{ id: product.id, name: displayName, brand: product.brand, price: product.retailPrice, quantity: 1 }]);
+      trackPurchase(data.orderId, [{ id: product.id, name: displayName, brand: product.brand, price: product.retailPrice, quantity }]);
       setStatus('success');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Помилка мережі під час оформлення замовлення');
@@ -229,6 +245,57 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
                 <p className="text-xs leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
                   Залиште ім&apos;я і телефон — менеджер сам зателефонує, уточнить доставку і оплату для «{displayName}».
                 </p>
+
+                {/* ==================== КІЛЬКІСТЬ ==================== */}
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                    Кількість
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => changeQuantity(quantity - 1)}
+                      disabled={quantity <= 1}
+                      aria-label="Зменшити кількість"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-base font-semibold disabled:opacity-30"
+                      style={{ background: 'rgba(255,255,255,0.06)', color: TECH_INK }}
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      min={1}
+                      max={MAX_QUANTITY}
+                      inputMode="numeric"
+                      aria-label="Кількість"
+                      value={quantity}
+                      onChange={(e) => changeQuantity(parseInt(e.target.value, 10))}
+                      className="h-8 w-14 rounded-lg text-center text-sm outline-none"
+                      style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TECH_BORDER_2}`, color: TECH_INK }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => changeQuantity(quantity + 1)}
+                      disabled={quantity >= MAX_QUANTITY}
+                      aria-label="Збільшити кількість"
+                      className="flex h-8 w-8 items-center justify-center rounded-lg text-base font-semibold disabled:opacity-30"
+                      style={{ background: 'rgba(255,255,255,0.06)', color: TECH_INK }}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-sm" style={{ fontFamily: SANS_TECH }}>
+                  <span style={{ color: TECH_MUTED }}>Сума</span>
+                  <span className="font-semibold" style={{ color: '#fff', fontVariantNumeric: 'tabular-nums' }}>
+                    {Math.ceil(product.retailPrice * quantity).toLocaleString('uk-UA')} грн
+                  </span>
+                </div>
+                {overStock && (
+                  <p className="text-xs" style={{ fontFamily: SANS_TECH, color: '#FF6B00' }}>
+                    В наявності {product.stock} шт — решту привеземо під замовлення, термін уточнить менеджер
+                  </p>
+                )}
 
                 <div>
                   <input
