@@ -20,7 +20,7 @@
 // Используется в трёх местах одним и тем же SQL:
 //   - блок "Аналоги" на странице товара (lib/productDetail.ts);
 //   - поиск по номеру (lib/productSearch.ts);
-//   - разметка tecdoc_crosses.is_valid (scripts/tecdoc/mark-invalid-crosses.ts).
+//   - своя применимость по OEM-номерам в кроссах (lib/ownVehicles.ts).
 //
 // Ключ в JS (crossBrandKey) и в SQL (crossBrandKeySql) считается
 // ОДИНАКОВО — иначе фильтр молча перестанет совпадать

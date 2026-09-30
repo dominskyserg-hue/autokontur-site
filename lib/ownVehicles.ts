@@ -144,8 +144,8 @@ export interface OwnVehicleRowsBatch {
   sources: string[];
 }
 
-// Расчёт строк своей применимости БЕЗ записи — для пересчёта и для замеров
-// "что будет после включения" (scripts/vehicle-coverage/*)
+// Расчёт строк своей применимости БЕЗ записи — для пересчёта и для
+// проверок "что будет после изменения словаря" без записи в базу
 export async function computeOwnVehicleRows(db: Pool | PoolClient, scope: { supplierId?: string } = {}): Promise<OwnVehicleRowsBatch> {
   const products = await db.query(
     `SELECT id, brand, name, car_make, car_model FROM products

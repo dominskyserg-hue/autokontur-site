@@ -289,20 +289,10 @@ export async function GET(request: NextRequest) {
 
     // "Підбір за автомобілем" — точное совпадение (без учёта регистра),
     // каждый параметр применяется независимо от остальных, если передан.
-    // carMake/carModel/carYear/engineVolume проверяются ТРЕМЯ способами
-    // разом (через OR): (1) собственные поля товара p.car_make/car_model/
-    // car_year/engine_volume, (2) своя применимость product_vehicles_own
-    // (марка/модель без годов, lib/ownVehicles.ts) и (3) EXISTS по
-    // tecdoc_compatibility для ТОГО ЖЕ товара (join по brand+article — на
-    // это есть индекс idx_tecdoc_compat_part, см. schema.sql) — так товар
-    // находится по подбору авто, даже если поставщик не заполнил
-    // car_make/car_year/engine_volume вручную, но для его артикула есть
-    // данные из дампа TecDoc (включая объём двигателя КОНКРЕТНОЙ
-    // модификации — types.TYP_LITRES/TYP_CCM, см. scripts/tecdoc/
-    // import-dump.ts). Все параметры внутри ОДНОЙ ветки (own или tecdoc)
-    // проверяются ВМЕСТЕ (AND), а не по отдельности — иначе марка+год
-    // могли бы совпасть по одному источнику, а объём двигателя — по
-    // совсем другой, не связанной модификации того же товара
+    // Условие строит lib/vehicleFilter.ts: свои поля товара
+    // (car_make/car_model/car_year/engine_volume) ИЛИ своя применимость
+    // product_vehicles_own (марка/модель/поколение, lib/ownVehicles.ts).
+    // Внутри одной ветки все параметры проверяются вместе (AND)
     if (carMake || carModel || carYear || engineVolume) {
       // Та же функция, что у фильтра на странице категории (lib/vehicleFilter.ts):
       // свои поля товара ИЛИ своя применимость (product_vehicles_own) ИЛИ

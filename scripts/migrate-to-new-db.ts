@@ -62,8 +62,6 @@ const TABLES_IN_ORDER = [
   'site_pages',
   'search_synonym_groups',
   'tecdoc_crosses',
-  'tecdoc_compatibility',
-  'tecdoc_related_categories',
 ];
 
 const BATCH_SIZE = 500;

@@ -1048,75 +1048,8 @@ CREATE TABLE IF NOT EXISTS tecdoc_crosses (
 CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (article_a);
 
 
--- ------------------------------------------------------------
--- Застосовність до автомобілів: "бренд+артикул" <-> модифікація авто
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS tecdoc_compatibility (
-  id BIGSERIAL PRIMARY KEY,
-
-  brand TEXT NOT NULL,
-  article TEXT NOT NULL,
-
-  make TEXT NOT NULL,
-
-  -- Текстові поля навмисно NOT NULL DEFAULT '' (а не NULL) — щоб
-  -- UNIQUE-обмеження нижче реально захищало від дублів: у Postgres
-  -- NULL ніколи "не дорівнює" іншому NULL, тому рядки з NULL замість
-  -- порожнього рядка проходили б повз ON CONFLICT DO NOTHING.
-  -- engine заповнюється реальним об'ємом двигуна конкретної модифікації
-  -- (types.TYP_LITRES/TYP_CCM з дампа TecDoc, див. scripts/tecdoc/
-  -- import-dump.ts) — generation поки завжди порожній, окремих даних
-  -- про покоління/кузов у використовуваному ланцюжку TecDoc немає
-  model TEXT NOT NULL DEFAULT '',
-  generation TEXT NOT NULL DEFAULT '',
-  engine TEXT NOT NULL DEFAULT '',
-
-  year_from SMALLINT,
-  year_to SMALLINT,
-
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  UNIQUE (brand, article, make, model, generation, engine)
-);
-
--- Напрямок "дано товар — показати список авто, куди підходить" (на
--- самій сторінці товару)
-CREATE INDEX IF NOT EXISTS idx_tecdoc_compat_part ON tecdoc_compatibility (brand, article);
-
--- Зворотний напрямок "дано марку/модель — показати всі підходящі
--- запчастини" — знадобиться, якщо колись захочете доповнити SEO-
--- сторінки марок (app/marky/[make]/page.tsx) переліком за моделлю
-CREATE INDEX IF NOT EXISTS idx_tecdoc_compat_vehicle ON tecdoc_compatibility (make, model);
-
-
--- ------------------------------------------------------------
--- Супутні категорії: "цю деталь часто шукають разом з..." (напр.
--- "Гальмівний диск" -> "Гальмівні колодки"). На відміну від двох
--- таблиць вище, тут очікується не мільйони, а десятки/сотні рядків
--- (довідник товарних груп TecDoc, а не лінкування по кожному
--- окремому товару) — тому й без BIGSERIAL, звичайного SERIAL досить
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS tecdoc_related_categories (
-  id SERIAL PRIMARY KEY,
-
-  -- Назви категорій ТАКІ, ЯК ВОНИ Є в дампі TecDoc (зазвичай англ./
-  -- нім.) — це НЕ те саме, що slug категорій у нашому власному
-  -- каталозі (lib/categories.ts). to_category_slug нижче — місток
-  -- до нашої реальної категорії, свідомо необов'язковий і порожній
-  -- одразу після імпорту: жоден скрипт не підбере його автоматично
-  -- надійно (назви категорій TecDoc і наші власні — різні мови й
-  -- різна деталізація), це одноразова ручна звірка адміністратором
-  -- вже ПІСЛЯ імпорту, а не частина потокового скрипта
-  from_category_name TEXT NOT NULL,
-  to_category_name TEXT NOT NULL,
-  to_category_slug TEXT,
-
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  UNIQUE (from_category_name, to_category_name)
-);
-
-CREATE INDEX IF NOT EXISTS idx_tecdoc_related_from ON tecdoc_related_categories (from_category_name);
+-- Таблицы TecDoc tecdoc_compatibility и tecdoc_related_categories удалены
+-- 30.09.2026 (переход на свои данные: product_vehicles_own, lib/ownVehicles.ts)
 
 
 -- ============================================================
@@ -1498,23 +1431,7 @@ ALTER TABLE orders ADD COLUMN IF NOT EXISTS gclid TEXT;
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS referrer TEXT;
 
 
--- ============================================================
--- 27. МІГРАЦІЯ — позначка "аналог за крос-номером" у tecdoc_compatibility
--- ============================================================
--- Деякі рядки застосовності до авто в цій таблиці додані НЕ з
--- офіційного дампа TecDoc для конкретного бренду/артикула, а вручну,
--- через таблицю кросс-номерів (tecdoc_crosses): у самого бренду
--- (напр. Ferodo FDB1594) в дампі TecDoc взагалі немає даних про
--- авто, зате під ТИМ САМИМ номером в іншого бренду (напр. OPTIMAL
--- 12192) дані є — і ми вважаємо, що це фізично той самий товар.
---
--- Для гальмівних колодок (безпека!) таку "непряму" відповідність
--- ЗАВЖДИ потрібно явно позначати на сторінці товару, а не подавати
--- як офіційний каталог виробника — звідси ця колонка. NULL —
--- звичайний рядок з дампа TecDoc, як і раніше. Текст —
--- "за крос-номером {бренд} {артикул}", показується покупцю прямо
--- на бейджі застосовності (components/ProductDetailContent.tsx)
-ALTER TABLE tecdoc_compatibility ADD COLUMN IF NOT EXISTS source_note TEXT;
+-- 27. (удалено вместе с таблицей tecdoc_compatibility, 30.09.2026)
 
 
 -- ============================================================
@@ -2345,7 +2262,6 @@ CREATE INDEX IF NOT EXISTS idx_products_car_make_trgm ON products USING gin (car
 CREATE INDEX IF NOT EXISTS idx_products_car_model_trgm ON products USING gin (car_model gin_trgm_ops);
 -- UPPER(...) = ANY(...) в ветках "совместимость с авто"
 CREATE INDEX IF NOT EXISTS idx_products_car_make_upper ON products (UPPER(car_make));
-CREATE INDEX IF NOT EXISTS idx_tecdoc_compat_make_upper ON tecdoc_compatibility (UPPER(make));
 
 
 -- Блок "Популярні товари" на главной (GET /api/products?featured=true): товары с
@@ -2363,21 +2279,8 @@ CREATE TABLE IF NOT EXISTS ukrainian_corpus_words (
 );
 
 
--- "Марка авто -> товары" для поиска (lib/vehicleMakeIndex.ts, lib/productSearch.ts):
--- заранее вычисленное соединение tecdoc_compatibility с products по brand+article
--- (make хранится в UPPER). Обновляется после импорта прайса (товары этого
--- поставщика), полностью — cron /api/cron/rebuild-vehicle-makes раз в неделю и
--- `npm run vehicle-makes:rebuild`. Сразу после создания таблицы заполните её
--- этой командой — пустая таблица означает, что поиск "деталь + марка" не
--- найдёт совместимость из TecDoc
-CREATE TABLE IF NOT EXISTS product_vehicle_makes (
-  product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  make TEXT NOT NULL,
-  year_from INTEGER,
-  year_to INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_pvm_make ON product_vehicle_makes (make) INCLUDE (product_id, year_from, year_to);
-CREATE INDEX IF NOT EXISTS idx_pvm_product ON product_vehicle_makes (product_id);
+-- Таблица product_vehicle_makes ("марка авто -> товары" из TecDoc) удалена
+-- 30.09.2026 — поиск и фильтр по марке используют product_vehicles_own
 
 
 -- ============================================================

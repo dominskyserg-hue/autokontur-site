@@ -1,59 +1,23 @@
 -- ============================================================
--- ІЗОЛЬОВАНА МІГРАЦІЯ: TecDoc SEO-індекс (tecdoc_crosses,
--- tecdoc_compatibility, tecdoc_related_categories)
+-- ТАБЛИЦА КРОССОВ tecdoc_crosses (кросс- и OEM-номера из прайсов)
 --
--- Як застосувати: Supabase → ваш проєкт → SQL Editor → New query →
--- вставити весь цей файл цілком → Run. Скрипт ІДЕМПОТЕНТНИЙ (можна
--- запускати повторно скільки завгодно раз — CREATE TABLE IF NOT EXISTS
--- / CREATE INDEX IF NOT EXISTS ніде нічого не зламають, якщо об'єкти
--- вже існують).
+-- Название историческое: раньше здесь был сырой индекс из дампа TecDoc.
+-- С 30.09.2026 данные TecDoc удалены (как и таблицы tecdoc_compatibility,
+-- tecdoc_related_categories, product_vehicle_makes) — в таблице только
+-- кроссы из прайсов наших поставщиков и официального справочника TRW:
+--   autohelp     — scripts/tecdoc/import-autohelp-crosses.ts
+--   price_nippon — scripts/tecdoc/import-nippon-crosses.ts
+--   trw_2025     — scripts/tecdoc/import-trw-oe.ts
 --
--- ЦЕ ТОЧНА КОПІЯ секції "TECDOC — МАСОВИЙ SEO-ІНДЕКС КРОСІВ І
--- ЗАСТОСОВНОСТІ" з кореневого schema.sql — виділена в окремий файл
--- лише заради зручності: щоб застосувати САМЕ ЦІ три таблиці одним
--- запуском, не гортаючи й не копіюючи вручну весь schema.sql (там
--- уже є всі попередні таблиці проєкту). Якщо колись схема разійдеться
--- між файлами — schema.sql лишається єдиним джерелом правди, цей файл
--- просто підтримувати в синхроні з тією ж секцією там.
+-- Читает сайт: блок "Аналоги" (lib/productDetail.ts), поиск по номеру
+-- (lib/productSearch.ts), своя применимость по OEM-номерам
+-- (lib/ownVehicles.ts) — везде только строки с is_valid.
 --
--- ПІСЛЯ застосування: наступний крок — npm run tecdoc:inspect --
--- шлях/до/дампа.sql (див. scripts/tecdoc/inspect-dump.ts), а вже
--- потім npm run tecdoc:import -- шлях/до/дампа.sql
--- ============================================================
-
-
--- ============================================================
--- TECDOC — МАСОВИЙ SEO-ІНДЕКС КРОСІВ І ЗАСТОСОВНОСТІ
--- ============================================================
--- Ці три таблиці — НЕ те саме, що cross_reference_groups/
--- cross_reference_members (основний schema.sql, розділ
--- "11. КРОСС-НОМЕРА"). Різниця принципова:
+-- НЕ то же самое, что cross_reference_groups/cross_reference_members
+-- (основной schema.sql, раздел "11. КРОСС-НОМЕРА"): там админ вручну
+-- подтверждает каждую связь, здесь — массовые данные прайсов.
 --
---   cross_reference_members  — куратор-модель: адмін вручну (або
---     невеликим Excel-файлом) підтверджує кожен зв'язок, конфлікти
---     при об'єднанні кластерів деталей йдуть на ручний розгляд
---     (cross_reference_conflicts), масштаб — сотні/тисячі рядків.
---
---   tecdoc_* нижче          — сирий, "як є" індекс з дампа TecDoc
---     (мільйони рядків), завантажується ОДНИМ потоковим скриптом
---     (scripts/tecdoc/import-dump.ts) без жодної ручної перевірки
---     кожного зв'язку. Використовується ЛИШЕ для додаткового
---     SEO-контенту на сторінці товару (app/p/[id]/[[...slug]]) —
---     "з цією деталлю також шукають" / "підходить до" — а не для
---     показу реальних товарів з наявністю на складі.
---
--- Свідомо BIGSERIAL/SERIAL замість UUID для первинного ключа: ці
--- таблиці — суто довідковий індекс на мільйони рядків, на який
--- ніхто й ніколи не посилається через FOREIGN KEY і чий id ніколи
--- не потрапляє в URL чи назовні — послідовний цілочисельний ключ
--- тут суттєво легший і швидший при вставці/індексації, ніж
--- випадковий UUID, а весь сенс UUID (непередбачуваність id у
--- публічних адресах) тут просто не потрібен.
---
--- Наповнюються ЛИШЕ вручну, локальним скриптом scripts/tecdoc/
--- import-dump.ts (детальний план і сам скрипт — окремо від
--- schema.sql, у папці scripts/tecdoc/). Застосуйте цю секцію в
--- Supabase ПЕРЕД першим запуском того скрипта.
+-- Скрипт идемпотентный: можно запускать повторно.
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -101,28 +65,18 @@ CREATE TABLE IF NOT EXISTS tecdoc_crosses (
 -- на кожен пошук
 CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (article_a);
 
--- Источник строки кросса. В таблице лежат не только данные TecDoc, но и
--- кроссы из прайсов поставщиков, поэтому источник храним явно:
---   tecdoc_2016   — старый дамп TecDoc (scripts/tecdoc/import-dump.ts)
---   tecdoc_2018   — OEM-номера из дампа 2018 (import-2018-fr-oe.ts)
+-- Источник строки кросса — каждый скрипт импорта пишет свой:
 --   trw_2025      — OEM-справочник TRW (import-trw-oe.ts)
 --   autohelp      — прайс Autohelp (import-autohelp-crosses.ts)
 --   price_nippon  — прайс NMCO/Nippon (import-nippon-crosses.ts)
---   price_cardon  — справочник CarDon (import-cardon-crosses.ts)
---   price_va      — справочник VA (import-va-crosses.ts)
---   unknown       — источник определить не удалось
--- Каждый скрипт импорта сам пишет свой source. Строки, загруженные до
--- появления колонки, размечены scripts/tecdoc/backfill-crosses-source.ts.
+--   unknown       — источник не указан
+-- Бывшие источники tecdoc_2016, tecdoc_2018 (дампы TecDoc), price_cardon и
+-- price_va (сторонние файлы) удалены 30.09.2026 вместе со скриптами импорта
 -- Константный DEFAULT не переписывает таблицу — ALTER выполняется мгновенно
 ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'unknown';
 
--- false — строка признана ложной и нигде не используется (сайт фильтрует
--- AND is_valid). Строки не удаляются, чтобы решение можно было пересмотреть.
--- Сейчас так помечены строки tecdoc_2016, у которых НИ ОДНА сторона
--- (бренд + артикул) не относится к товару нашего каталога по правилу
--- бренда из lib/crossBrandMatch.ts: старый импорт сопоставлял дамп с
--- каталогом только по артикулу. Разметка —
--- scripts/tecdoc/mark-invalid-crosses.ts (повторный запуск пересчитывает)
+-- false — строка признана ложной или из исключённого источника и нигде
+-- не используется (сайт фильтрует AND is_valid). Причина — invalid_reason
 ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS is_valid BOOLEAN NOT NULL DEFAULT true;
 
 -- Почему строка не используется (is_valid = false):
@@ -130,12 +84,11 @@ ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS is_valid BOOLEAN NOT NULL DE
 --                     (tecdoc_2016, tecdoc_2018) и сторонние файлы
 --                     неизвестного происхождения (price_cardon, price_va);
 --   brand_mismatch  — ни одна сторона строки не совпала с товаром каталога
---                     по бренду (scripts/tecdoc/mark-invalid-crosses.ts)
+--                     по бренду (так размечались строки старого дампа TecDoc)
 ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS invalid_reason TEXT;
 
--- Строки исключённых источников сразу пишутся помеченными — даже если
--- кто-то снова запустит старый скрипт импорта (import-dump.ts,
--- import-2018-fr-oe.ts, import-cardon-crosses.ts, import-va-crosses.ts)
+-- Строки исключённых источников (если их снова кто-то загрузит) сразу
+-- пишутся помеченными и сайтом не используются
 CREATE OR REPLACE FUNCTION tecdoc_crosses_exclude_sources() RETURNS trigger AS $$
 BEGIN
   IF NEW.source IN ('tecdoc_2016', 'tecdoc_2018', 'price_cardon', 'price_va') THEN
@@ -150,70 +103,3 @@ DROP TRIGGER IF EXISTS trg_tecdoc_crosses_exclude_sources ON tecdoc_crosses;
 CREATE TRIGGER trg_tecdoc_crosses_exclude_sources
   BEFORE INSERT OR UPDATE OF source, is_valid ON tecdoc_crosses
   FOR EACH ROW EXECUTE FUNCTION tecdoc_crosses_exclude_sources();
-
-
--- ------------------------------------------------------------
--- Застосовність до автомобілів: "бренд+артикул" <-> модифікація авто
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS tecdoc_compatibility (
-  id BIGSERIAL PRIMARY KEY,
-
-  brand TEXT NOT NULL,
-  article TEXT NOT NULL,
-
-  make TEXT NOT NULL,
-
-  -- Текстові поля навмисно NOT NULL DEFAULT '' (а не NULL) — щоб
-  -- UNIQUE-обмеження нижче реально захищало від дублів: у Postgres
-  -- NULL ніколи "не дорівнює" іншому NULL, тому рядки з NULL замість
-  -- порожнього рядка проходили б повз ON CONFLICT DO NOTHING
-  model TEXT NOT NULL DEFAULT '',
-  generation TEXT NOT NULL DEFAULT '',
-  engine TEXT NOT NULL DEFAULT '',
-
-  year_from SMALLINT,
-  year_to SMALLINT,
-
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  UNIQUE (brand, article, make, model, generation, engine)
-);
-
--- Напрямок "дано товар — показати список авто, куди підходить" (на
--- самій сторінці товару)
-CREATE INDEX IF NOT EXISTS idx_tecdoc_compat_part ON tecdoc_compatibility (brand, article);
-
--- Зворотний напрямок "дано марку/модель — показати всі підходящі
--- запчастини" — знадобиться, якщо колись захочете доповнити SEO-
--- сторінки марок (app/marky/[make]/page.tsx) переліком за моделлю
-CREATE INDEX IF NOT EXISTS idx_tecdoc_compat_vehicle ON tecdoc_compatibility (make, model);
-
-
--- ------------------------------------------------------------
--- Супутні категорії: "цю деталь часто шукають разом з..." (напр.
--- "Гальмівний диск" -> "Гальмівні колодки"). На відміну від двох
--- таблиць вище, тут очікується не мільйони, а десятки/сотні рядків
--- (довідник товарних груп TecDoc, а не лінкування по кожному
--- окремому товару) — тому й без BIGSERIAL, звичайного SERIAL досить
--- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS tecdoc_related_categories (
-  id SERIAL PRIMARY KEY,
-
-  -- Назви категорій ТАКІ, ЯК ВОНИ Є в дампі TecDoc (зазвичай англ./
-  -- нім.) — це НЕ те саме, що slug категорій у нашому власному
-  -- каталозі (lib/categories.ts). to_category_slug нижче — місток
-  -- до нашої реальної категорії, свідомо необов'язковий і порожній
-  -- одразу після імпорту: жоден скрипт не підбере його автоматично
-  -- надійно (назви категорій TecDoc і наші власні — різні мови й
-  -- різна деталізація), це одноразова ручна звірка адміністратором
-  -- вже ПІСЛЯ імпорту, а не частина потокового скрипта
-  from_category_name TEXT NOT NULL,
-  to_category_name TEXT NOT NULL,
-  to_category_slug TEXT,
-
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  UNIQUE (from_category_name, to_category_name)
-);
-
-CREATE INDEX IF NOT EXISTS idx_tecdoc_related_from ON tecdoc_related_categories (from_category_name);

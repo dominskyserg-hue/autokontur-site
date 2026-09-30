@@ -7,8 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "tecdoc:inspect": "tsx scripts/tecdoc/inspect-dump.ts",
-    "tecdoc:import": "tsx scripts/tecdoc/import-dump.ts",
     "corpus:rebuild": "tsx scripts/rebuild-ukrainian-corpus.ts",
     "categories:rebuild": "tsx scripts/rebuild-categories.ts",
     "groups:rebuild": "tsx scripts/rebuild-groups.ts",

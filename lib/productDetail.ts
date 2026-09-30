@@ -774,11 +774,9 @@ const loadCrossReferences = cache(async function loadCrossReferences(
   return { oem, aftermarket };
 });
 
-// Аналог/OEM-номер із масового SEO-індексу TecDoc (scripts/tecdoc/,
-// таблиця tecdoc_crosses) — НЕ те саме, що CrossRefItem вище
-// (cross_reference_members — курована адміном модель, тут же —
-// мільйони рядків з дампа TecDoc, без ручної перевірки кожного
-// зв'язку, див. коментар у schema.sql біля CREATE TABLE tecdoc_crosses)
+// Аналог/OEM-номер з таблиці tecdoc_crosses — кроси з прайсів наших
+// постачальників і довідника TRW (scripts/tecdoc/schema.sql). НЕ те саме,
+// що CrossRefItem вище (cross_reference_members — курована адміном модель)
 export interface TecdocCrossItem {
   brand: string;
   article: string;
@@ -808,16 +806,12 @@ export interface TecdocCompatibilityItem {
   // при пошуку посадкової сторінки моделі для бейджа застосовності
   makeRaw: string;
   makeSlug: string | null;
-  // Реальна назва моделі (напр. "AVENSIS Liftback (_T22_)") — TecDoc
-  // зберігає її аж до конкретного кузова/шасі. Порожній рядок (не
-  // null) для тих небагатьох рядків, де назву не вдалось розпізнати
-  // (див. scripts/tecdoc/modelNames.ts) — тоді просто не показуємо її
+  // Модель або поколение ("Camry XV30") зі своєї применимости; порожній
+  // рядок — модель невідома, показується лише марка
   model: string;
   yearFrom: number | null;
   yearTo: number | null;
-  // Об'єм двигуна цієї конкретної модифікації (напр. "1.6"), з
-  // types.TYP_LITRES/TYP_CCM (див. scripts/tecdoc/import-dump.ts).
-  // Порожній рядок, якщо TecDoc для цієї модифікації його не вказав
+  // Об'єм двигуна; у своїй применимости його немає — порожній рядок
   engine: string;
   // null — звичайний рядок з офіційного дампа TecDoc для САМЕ ЦЬОГО
   // бренду/артикула. Текст (напр. "за крос-номером OPTIMAL 12192") —
@@ -853,8 +847,8 @@ type TecdocCrossItemRaw = TecdocCrossItem & { costPrice: number | null };
 // brand — бренд самого товара: строки кроссов берутся только того же
 // производителя или длинные номера без бренда (lib/crossBrandMatch.ts),
 // иначе совпадение одного артикула у разных брендов давало чужие аналоги.
-// is_valid = false — строки, заранее помеченные как ложные
-// (scripts/tecdoc/mark-invalid-crosses.ts)
+// is_valid = false — строки, помеченные как ложные или из исключённого
+// источника (invalid_reason, scripts/tecdoc/schema.sql)
 const loadTecdocCrosses = cache(async function loadTecdocCrosses(
   article: string,
   brand: string | null
