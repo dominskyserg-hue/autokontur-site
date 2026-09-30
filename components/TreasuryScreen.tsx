@@ -226,6 +226,23 @@ export default function TreasuryScreen() {
         <div className="flex flex-wrap items-end gap-3 px-5 pt-4 pb-3" style={{ borderBottom: '1px solid var(--line)' }}>
           <h2 className="text-base font-semibold mr-auto">Лента движений</h2>
 
+          {/* Выгрузка ленты в Excel — с теми же фильтрами, что выбраны
+              рядом (app/api/admin/export/route.ts). order-last ставит
+              кнопку в конец ряда, после всех фильтров */}
+          <a
+            href={`/api/admin/export?${new URLSearchParams({
+              kind: 'cash',
+              ...(filterRegisterId ? { registerId: filterRegisterId } : {}),
+              ...(filterType ? { type: filterType } : {}),
+              ...(filterDateFrom ? { dateFrom: filterDateFrom } : {}),
+              ...(filterDateTo ? { dateTo: filterDateTo } : {}),
+            }).toString()}`}
+            className="order-last px-2.5 py-1.5 text-xs rounded-md font-medium"
+            style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+          >
+            Скачать Excel
+          </a>
+
           <div>
             <label className="block text-[11px] mb-1" style={{ color: 'var(--ink-muted)' }}>
               Касса

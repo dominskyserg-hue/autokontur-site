@@ -334,6 +334,15 @@ export default function CustomersScreen() {
         >
           Сначала большие долги
         </button>
+        {/* Выгрузка должников в Excel — с учётом поиска
+            (app/api/admin/export/route.ts) */}
+        <a
+          href={`/api/admin/export?kind=debtors${search ? `&search=${encodeURIComponent(search)}` : ''}`}
+          className="text-xs px-3 py-2 rounded-full font-medium ml-auto"
+          style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+        >
+          Скачать должников (Excel)
+        </a>
       </div>
 
       {paymentMessage && (

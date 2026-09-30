@@ -164,6 +164,16 @@ export default function OrdersScreen() {
 
   const totalPages = pagination?.totalPages ?? 0;
 
+  // Ссылка на выгрузку в Excel — с теми же фильтрами, что сейчас на
+  // экране (app/api/admin/export/route.ts)
+  const exportParams = new URLSearchParams({ kind: 'orders' });
+  if (quickFilter === 'unpaid') exportParams.set('unpaid', '1');
+  else if (quickFilter) exportParams.set('status', quickFilter);
+  if (debouncedSearch) exportParams.set('search', debouncedSearch);
+  if (dateFrom) exportParams.set('dateFrom', dateFrom);
+  if (dateTo) exportParams.set('dateTo', dateTo);
+  const exportUrl = `/api/admin/export?${exportParams.toString()}`;
+
   // Кнопки быстрых фильтров: "Все", каждый статус и "Не оплачены".
   // Счётчик учитывает поиск и даты, но не сам выбранный статус — так
   // видно, сколько заказов "ждёт" в каждой колонке
@@ -196,13 +206,22 @@ export default function OrdersScreen() {
             Все заказы клиентов. Найдено: {pagination ? pagination.totalCount : '—'}.
           </p>
         </div>
-        <Link
-          href="/admin/orders/new"
-          className="shrink-0 px-4 py-2.5 rounded-md text-sm font-medium"
-          style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
-        >
-          + Новый заказ
-        </Link>
+        <div className="shrink-0 flex gap-2">
+          <a
+            href={exportUrl}
+            className="px-4 py-2.5 rounded-md text-sm font-medium"
+            style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+          >
+            Скачать Excel
+          </a>
+          <Link
+            href="/admin/orders/new"
+            className="px-4 py-2.5 rounded-md text-sm font-medium"
+            style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+          >
+            + Новый заказ
+          </Link>
+        </div>
       </header>
 
       {/* ==================== ПОИСК И ПЕРИОД ==================== */}
