@@ -76,6 +76,7 @@ export type AdminSection =
   | 'orders'
   | 'procurement'
   | 'warehouse'
+  | 'shipping'
   | 'customers'
   | 'customerDiscounts'
   | 'vinRequests'
@@ -111,6 +112,7 @@ const NAV_GROUPS: NavGroup[] = [
       { key: 'orders', label: 'Заказы', href: '/admin/orders' },
       { key: 'procurement', label: 'Закупки', href: '/admin/procurement' },
       { key: 'warehouse', label: 'Склад', href: '/admin/warehouse' },
+      { key: 'shipping', label: 'К отгрузке', href: '/admin/shipping' },
       { key: 'customers', label: 'Клиенты', href: '/admin/customers' },
       { key: 'customerDiscounts', label: 'Скидки и наценки клиентам', href: '/admin/customer-pricing-rules' },
       { key: 'vinRequests', label: 'VIN-запросы', href: '/admin/vin-requests' },
