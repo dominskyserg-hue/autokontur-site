@@ -28,10 +28,10 @@ import type { CSSProperties, ReactNode } from 'react';
 // значение по умолчанию, что и на витрине (components/StorefrontHome.tsx)
 const DEFAULT_SHOP_NAME = 'AUTOKONTUR';
 
-// Как часто проверять, не появились ли новые заказы (мс). Это лёгкий
-// запрос (status=new&pageSize=1 — берём только totalCount из
-// пагинации, ни один заказ целиком не грузится), поэтому раз в 20
-// секунд не создаёт заметной нагрузки
+// Как часто обновлять счётчики в меню (мс). Это лёгкий запрос
+// (/api/admin/nav-counters — только несколько COUNT(*), ни один заказ
+// целиком не грузится), поэтому раз в 20 секунд не создаёт заметной
+// нагрузки
 const NEW_ORDERS_POLL_INTERVAL_MS = 20_000;
 
 // Короткий двухтональный сигнал через Web Audio API — без отдельного
@@ -89,6 +89,39 @@ interface NavItem {
   key: AdminSection | 'products' | 'orders' | 'analytics';
   label: string;
   href: string | null; // null — раздел ещё не реализован, ссылка неактивна
+}
+
+// Счётчики "сколько работы ждёт" по разделам меню —
+// см. app/api/admin/nav-counters/route.ts
+interface NavCounters {
+  newOrders: number;
+  toOrder: number;
+  toReceive: number;
+  toShip: number;
+  vinRequests: number;
+}
+
+const EMPTY_COUNTERS: NavCounters = { newOrders: 0, toOrder: 0, toReceive: 0, toShip: 0, vinRequests: 0 };
+
+// Какую цифру показывать у пункта меню и каким цветом. Красный —
+// "срочно" (новые заказы), жёлтый — обычная очередь работы
+function getNavBadge(key: NavItem['key'], counters: NavCounters): { count: number; color: string; title: string } | null {
+  switch (key) {
+    case 'orders':
+      return { count: counters.newOrders, color: 'var(--bad)', title: 'Новые заказы' };
+    case 'procurement':
+      return {
+        count: counters.toOrder + counters.toReceive,
+        color: 'var(--warn)',
+        title: `Нужно заказать: ${counters.toOrder}, ждут приёмки: ${counters.toReceive}`,
+      };
+    case 'shipping':
+      return { count: counters.toShip, color: 'var(--warn)', title: 'Заказы, готовые к отгрузке' };
+    case 'vinRequests':
+      return { count: counters.vinRequests, color: 'var(--warn)', title: 'Необработанные VIN-запросы' };
+    default:
+      return null;
+  }
 }
 
 interface NavGroup {
@@ -180,31 +213,31 @@ export default function AdminLayout({
       });
   }, []);
 
-  // ---- бейдж "новые заказы" в пункте меню + звук при появлении ----
-  const [newOrdersCount, setNewOrdersCount] = useState(0);
-  // useRef, а не просто сравнение с предыдущим состоянием в замыкании:
-  // нужно знать, был ли это ПЕРВЫЙ опрос за сессию — если да, звук не
-  // играем (иначе он звучал бы при каждом открытии админки, если в ней
-  // уже накопились необработанные заказы, а не только при НОВЫХ)
-  const isFirstPollRef = useRef(true);
+  // ---- счётчики в пунктах меню + звук при появлении новых заказов ----
+  const [counters, setCounters] = useState<NavCounters>(EMPTY_COUNTERS);
+  // Сколько новых заказов было при прошлом опросе — чтобы сыграть звук
+  // только когда их стало БОЛЬШЕ. useRef, а не состояние: нужно знать,
+  // был ли это ПЕРВЫЙ опрос за сессию — если да, звук не играем (иначе
+  // он звучал бы при каждом открытии админки, если в ней уже накопились
+  // необработанные заказы, а не только при НОВЫХ)
+  const previousNewOrdersRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
 
     const poll = async () => {
       try {
-        const response = await fetch('/api/orders?status=new&pageSize=1');
+        const response = await fetch('/api/admin/nav-counters');
         const data = await response.json();
         if (cancelled || !data.success) return;
 
-        const count = data.pagination?.totalCount ?? 0;
-        setNewOrdersCount((previousCount) => {
-          if (!isFirstPollRef.current && count > previousCount) {
-            playNewOrderChime();
-          }
-          return count;
-        });
-        isFirstPollRef.current = false;
+        const next = data.counters as NavCounters;
+        const previous = previousNewOrdersRef.current;
+        if (previous !== null && next.newOrders > previous) {
+          playNewOrderChime();
+        }
+        previousNewOrdersRef.current = next.newOrders;
+        setCounters(next);
       } catch {
         // Сбой опроса — не критично, просто попробуем ещё раз через
         // обычный интервал, без отдельной обработки ошибки в UI
@@ -275,14 +308,19 @@ export default function AdminLayout({
                         }}
                       >
                         <span>{item.label}</span>
-                        {item.key === 'orders' && newOrdersCount > 0 && (
-                          <span
-                            className="flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold"
-                            style={{ background: 'var(--bad)', color: '#fff' }}
-                          >
-                            {newOrdersCount}
-                          </span>
-                        )}
+                        {(() => {
+                          const badge = getNavBadge(item.key, counters);
+                          if (!badge || badge.count <= 0) return null;
+                          return (
+                            <span
+                              title={badge.title}
+                              className="flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold"
+                              style={{ background: badge.color, color: '#fff' }}
+                            >
+                              {badge.count}
+                            </span>
+                          );
+                        })()}
                       </Link>
                     );
                   }
