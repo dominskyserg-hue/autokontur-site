@@ -6,7 +6,9 @@
 // конкретные позиции (обычно все — одного поставщика) и нажал
 // "Сформировать заказ поставщику".
 //
-//   Тело запроса: { orderItemIds: string[] }
+//   Тело запроса: { orderItemIds: string[], expectedDate?: 'YYYY-MM-DD' }
+//   expectedDate — когда поставщик обещал привезти (необязательно). По
+//   ней экран "Закупки" показывает опоздание (lib/orderItemColumns.ts)
 //
 // Что делает:
 //   1. Переводит order_items.status 'pending' -> 'ordered_from_supplier'
@@ -25,6 +27,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { autoAdvanceOrderStatus } from '@/lib/orderStatusPipeline';
 import { requireAdmin } from '@/lib/adminAuth';
+import { ensureOrderItemProcurementColumns } from '@/lib/orderItemColumns';
 
 export const runtime = 'nodejs';
 
@@ -46,7 +49,11 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 interface RequestBody {
   orderItemIds?: string[];
+  expectedDate?: string | null;
 }
+
+// Дата в формате YYYY-MM-DD (так её отдаёт <input type="date">)
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(request: NextRequest) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
@@ -68,18 +75,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Некорректный id позиции заказа.' }, { status: 400 });
   }
 
+  const expectedDate = body.expectedDate ? String(body.expectedDate) : null;
+  if (expectedDate && (!DATE_PATTERN.test(expectedDate) || Number.isNaN(Date.parse(expectedDate)))) {
+    return NextResponse.json({ error: 'Ожидаемая дата поставки должна быть в формате ГГГГ-ММ-ДД.' }, { status: 400 });
+  }
+
+  await ensureOrderItemProcurementColumns();
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
+    // Запоминаем, когда заказали у поставщика и когда он обещал привезти
     const updateResult = await client.query(
       `
       UPDATE order_items
-      SET status = 'ordered_from_supplier'
+      SET status = 'ordered_from_supplier', supplier_ordered_at = now(), expected_at = $2::date
       WHERE id = ANY($1::uuid[]) AND status = 'pending'
       RETURNING id, order_id, article, brand, name, quantity, cost_price, supplier_id, supplier_name
       `,
-      [orderItemIds]
+      [orderItemIds, expectedDate]
     );
 
     if (updateResult.rows.length === 0) {

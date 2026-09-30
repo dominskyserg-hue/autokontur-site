@@ -2769,3 +2769,15 @@ CREATE INDEX IF NOT EXISTS idx_order_history_order_id ON order_history (order_id
 -- добавляет эту колонку сам при первом обращении, если её ещё нет
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS callback_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_orders_callback_at ON orders (callback_at) WHERE callback_at IS NOT NULL;
+
+
+-- ============================================================
+-- ЗАКУПКИ: ОЖИДАЕМАЯ ДАТА ПОСТАВКИ
+-- ============================================================
+-- supplier_ordered_at — когда позицию заказали у поставщика;
+-- expected_at — когда поставщик обещал привезти. Если дата прошла, а
+-- товар ещё не принят — на экране "Закупки" пишется "запізнюється на
+-- N днів", а в меню админки горит счётчик ⏰. lib/orderItemColumns.ts
+-- добавляет эти колонки сам при первом обращении, если их ещё нет
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS supplier_ordered_at TIMESTAMPTZ;
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS expected_at DATE;

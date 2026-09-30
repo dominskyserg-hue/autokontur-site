@@ -36,6 +36,7 @@ import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import { getSeoOverride, type SeoOverride, type SeoOverrideFaqItem } from '@/data/seo-overrides';
 import { PRODUCT_GROUPS_ACTIVE } from '@/lib/productGroups';
 import { publicImageUrl } from '@/lib/imageUrl';
+import { isOwnStock } from '@/lib/ownStock';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -528,6 +529,10 @@ export interface ProductDetail {
   groupMinPrice: number | null;
   // Восстановленная / б/у деталь — бейдж "Відновлена" (products.is_refurbished)
   isRefurbished: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж
+  // "На нашому складі · відправка сьогодні". Необязательное: заполняется
+  // только в loadProductPageData
+  ownStock?: boolean;
 }
 
 // Одне ДОДАТКОВЕ фото галереї товару (не плутати з product.imageUrl —
@@ -1066,6 +1071,8 @@ export async function loadProductPageData(
   // явний, без spread), щоб оптова собівартість не потрапила в HTML,
   // відданий браузеру покупця
   const customerPricingRule = await getCustomerPricingRule(pool, await getCustomerSessionPhone());
+  // Есть ли эта деталь (бренд + артикул) на НАШЕМ складе
+  const ownStock = await isOwnStock(pool, product.article, product.brand);
 
   const personalizedProduct: ProductDetail = {
     id: product.id,
@@ -1087,6 +1094,7 @@ export async function loadProductPageData(
     hasGroupOffers: product.hasGroupOffers,
     groupMinPrice: product.groupMinPrice,
     isRefurbished: product.isRefurbished,
+    ownStock,
   };
   const otherOffers: OtherOffer[] = rawOtherOffers.map((offer) => ({
     id: offer.id,

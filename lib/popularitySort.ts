@@ -3,6 +3,7 @@
 // авто, хабы моделей, поиск.
 //
 // Порядок:
+//   0. лежит на НАШЕМ складе (lib/ownStock.ts) — отправим сегодня же;
 //   1. есть в наличии (stock > 0);
 //   2. была продажа за последние 180 дней (не отменённый заказ);
 //   3. есть фото;
@@ -65,23 +66,34 @@ const BRAND_KEY_SQL = "UPPER(regexp_replace(COALESCE(p.brand, ''), '[[:space:]-]
 const BRAND_GROUP_SQL = `(CASE WHEN ${BRAND_KEY_SQL} = ANY(${textArrayLiteral(BRAND_GROUP_1_KEYS)}) THEN 1
   WHEN ${BRAND_KEY_SQL} = ANY(${textArrayLiteral(BRAND_GROUP_2_KEYS)}) THEN 2 ELSE 3 END)`;
 
-// "ORDER BY …" для запросов, где товары — это таблица products с псевдонимом p
-export function buildPopularOrderBy(soldProductIds: string[]): string {
+// "ORDER BY …" для запросов, где товары — это таблица products с псевдонимом p.
+// ownStockKeys — ключи "артикул|БРЕНД" деталей с нашего склада
+// (getOwnStockKeys в lib/ownStock.ts); не передали — признак пропускается
+export function buildPopularOrderBy(soldProductIds: string[], ownStockKeys: string[] = []): string {
   const ids = soldProductIds.filter((id) => UUID_RE.test(id));
   // Нет продаж — всегда-ложное ВЫРАЖЕНИЕ, а не голый FALSE: константа
   // в ORDER BY даёт ошибку Postgres "non-integer constant in ORDER BY"
   const soldSql = ids.length > 0 ? `(p.id = ANY(ARRAY[${ids.map((id) => `'${id}'`).join(',')}]::uuid[]))` : '(p.id IS NULL)';
-  return `ORDER BY (p.stock > 0) DESC, ${soldSql} DESC, (p.image_url IS NOT NULL) DESC, ${BRAND_GROUP_SQL} ASC, p.retail_price ASC`;
+  // Ключи из нашей же базы (артикулы очищены до A-Z0-9, бренд — без
+  // пробелов), кавычки всё равно экранируем в textArrayLiteral
+  const ownSql =
+    ownStockKeys.length > 0
+      ? `((p.article || '|' || ${BRAND_KEY_SQL}) = ANY(${textArrayLiteral(ownStockKeys)}))`
+      : '(p.id IS NULL)';
+  return `ORDER BY ${ownSql} DESC, (p.stock > 0) DESC, ${soldSql} DESC, (p.image_url IS NOT NULL) DESC, ${BRAND_GROUP_SQL} ASC, p.retail_price ASC`;
 }
 
 // То же сравнение в JavaScript — для хабов моделей (lib/modelHubData.ts),
 // где товары сортируются уже после загрузки
+// ownStock — деталь лежит на НАШЕМ складе (lib/ownStock.ts): такие первыми,
+// как и в SQL-варианте buildPopularOrderBy выше
 export function comparePopular(
-  a: { id: string; stock: number; imageUrl: string | null; brand: string | null; retailPrice: number },
-  b: { id: string; stock: number; imageUrl: string | null; brand: string | null; retailPrice: number },
+  a: { id: string; stock: number; imageUrl: string | null; brand: string | null; retailPrice: number; ownStock?: boolean },
+  b: { id: string; stock: number; imageUrl: string | null; brand: string | null; retailPrice: number; ownStock?: boolean },
   soldIds: Set<string>
 ): number {
   return (
+    Number(Boolean(b.ownStock)) - Number(Boolean(a.ownStock)) ||
     Number(b.stock > 0) - Number(a.stock > 0) ||
     Number(soldIds.has(b.id)) - Number(soldIds.has(a.id)) ||
     Number(Boolean(b.imageUrl)) - Number(Boolean(a.imageUrl)) ||

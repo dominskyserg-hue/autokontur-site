@@ -65,6 +65,7 @@ import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
 import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
+import OwnStockBadge from '@/components/OwnStockBadge';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -97,6 +98,9 @@ interface Product {
   offerCount?: number;
   // Восстановленная / б/у деталь — бейдж "Відновлена"
   isRefurbished?: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж
+  // "На нашому складі" вместо обычного "N шт"
+  ownStock?: boolean;
 }
 
 // В корзину кладём лучшее предложение группы, а не главную страницу
@@ -2396,7 +2400,9 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                             </div>
 
                             <div>
-                              {product.stock > 0 ? (
+                              {product.ownStock ? (
+                                <OwnStockBadge compact />
+                              ) : product.stock > 0 ? (
                                 <span
                                   className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
                                   style={{ fontFamily: SANS_TECH, background: TECH_GOOD_SOFT, color: TECH_GOOD, boxShadow: `0 0 0 1px rgba(52,211,153,0.25)` }}
@@ -2510,7 +2516,9 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                           </Link>
 
                           <div className="mt-auto flex items-center justify-between gap-2">
-                            {product.stock > 0 ? (
+                            {product.ownStock ? (
+                              <OwnStockBadge compact />
+                            ) : product.stock > 0 ? (
                               <span
                                 className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
                                 style={{ fontFamily: SANS_TECH, background: TECH_GOOD_SOFT, color: TECH_GOOD, boxShadow: `0 0 0 1px rgba(52,211,153,0.25)` }}

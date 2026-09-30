@@ -14,6 +14,9 @@
 //   vinRequests — необработанные VIN-запросы
 //   callbacks   — заказы, по которым уже пора перезвонить клиенту
 //                 (напоминание "Передзвонити" наступило)
+//   lateDeliveries — заказанные у поставщика позиции, у которых прошла
+//                 обещанная дата поставки (order_items.expected_at), а
+//                 товар ещё не принят
 //
 // Условия для закупок — те же, что и в
 // app/api/admin/procurement/needed/route.ts (без отменённых и уже
@@ -24,6 +27,7 @@ import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { requireAdmin } from '@/lib/adminAuth';
 import { ensureOrderExtraColumns } from '@/lib/orderColumns';
+import { ensureOrderItemProcurementColumns, KYIV_TODAY_SQL } from '@/lib/orderItemColumns';
 
 export const runtime = 'nodejs';
 
@@ -46,7 +50,7 @@ export async function GET() {
   if (adminDenied) return adminDenied;
 
   try {
-    await ensureOrderExtraColumns();
+    await Promise.all([ensureOrderExtraColumns(), ensureOrderItemProcurementColumns()]);
     const result = await pool.query(`
       SELECT
         (SELECT COUNT(*) FROM orders WHERE status = 'new')::int AS new_orders,
@@ -56,7 +60,10 @@ export async function GET() {
           WHERE oi.status = 'ordered_from_supplier' AND o.status NOT IN ('cancelled', 'shipped'))::int AS to_receive,
         (SELECT COUNT(*) FROM orders WHERE status IN ('in_stock', 'ready_for_pickup'))::int AS to_ship,
         (SELECT COUNT(*) FROM vin_requests WHERE status = 'new')::int AS vin_requests,
-        (SELECT COUNT(*) FROM orders WHERE callback_at IS NOT NULL AND callback_at <= now())::int AS callbacks
+        (SELECT COUNT(*) FROM orders WHERE callback_at IS NOT NULL AND callback_at <= now())::int AS callbacks,
+        (SELECT COUNT(*) FROM order_items oi JOIN orders o ON o.id = oi.order_id
+          WHERE oi.status = 'ordered_from_supplier' AND o.status NOT IN ('cancelled', 'shipped')
+            AND oi.expected_at IS NOT NULL AND oi.expected_at < ${KYIV_TODAY_SQL})::int AS late_deliveries
     `);
 
     const row = result.rows[0];
@@ -69,6 +76,7 @@ export async function GET() {
         toShip: row.to_ship,
         vinRequests: row.vin_requests,
         callbacks: row.callbacks,
+        lateDeliveries: row.late_deliveries,
       },
     });
   } catch (error) {

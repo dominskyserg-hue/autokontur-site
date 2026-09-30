@@ -101,9 +101,19 @@ interface NavCounters {
   vinRequests: number;
   // Заказы, по которым наступило напоминание "Передзвонити"
   callbacks: number;
+  // Позиции, которые поставщик уже опаздывает привезти (прошла ожидаемая дата)
+  lateDeliveries: number;
 }
 
-const EMPTY_COUNTERS: NavCounters = { newOrders: 0, toOrder: 0, toReceive: 0, toShip: 0, vinRequests: 0, callbacks: 0 };
+const EMPTY_COUNTERS: NavCounters = {
+  newOrders: 0,
+  toOrder: 0,
+  toReceive: 0,
+  toShip: 0,
+  vinRequests: 0,
+  callbacks: 0,
+  lateDeliveries: 0,
+};
 
 // Какую цифру показывать у пункта меню и каким цветом. Красный —
 // "срочно" (новые заказы), жёлтый — обычная очередь работы
@@ -318,6 +328,16 @@ export default function AdminLayout({
                             style={{ background: 'var(--warn)', color: '#1a1a1a' }}
                           >
                             📞{counters.callbacks}
+                          </span>
+                        )}
+                        {/* У "Закупок" — отдельный красный значок опозданий поставщиков */}
+                        {item.key === 'procurement' && counters.lateDeliveries > 0 && (
+                          <span
+                            title="Постачальник запізнюється з поставкою"
+                            className="ml-auto flex h-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold"
+                            style={{ background: 'var(--bad)', color: '#fff' }}
+                          >
+                            ⏰{counters.lateDeliveries}
                           </span>
                         )}
                         {(() => {
