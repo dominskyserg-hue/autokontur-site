@@ -520,6 +520,8 @@ export default function ShippingScreen() {
           orderId={openOrderId}
           onClose={() => setOpenOrderId(null)}
           onOrderChanged={fetchOrders}
+          // "Повторити замовлення" — сразу открываем только что созданный заказ
+          onOpenOrder={(newOrderId) => setOpenOrderId(newOrderId)}
           navigation={(() => {
             const index = orders.findIndex((o) => o.id === openOrderId);
             if (index === -1) return undefined;
