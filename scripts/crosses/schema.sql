@@ -90,8 +90,8 @@ CREATE INDEX IF NOT EXISTS idx_part_crosses_article_a ON part_crosses (article_a
 --   autohelp      — прайс Autohelp (import-autohelp-crosses.ts)
 --   price_nippon  — прайс NMCO/Nippon (import-nippon-crosses.ts)
 --   unknown       — источник не указан
--- Бывшие источники tecdoc_2016, tecdoc_2018, price_cardon и price_va
--- удалены 30.09.2026 вместе со скриптами импорта
+-- Бывшие источники (в том числе price_cardon и price_va) удалены
+-- 30.09.2026 вместе со скриптами импорта
 -- Константный DEFAULT не переписывает таблицу — ALTER выполняется мгновенно
 ALTER TABLE part_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'unknown';
 
@@ -100,8 +100,7 @@ ALTER TABLE part_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT '
 ALTER TABLE part_crosses ADD COLUMN IF NOT EXISTS is_valid BOOLEAN NOT NULL DEFAULT true;
 
 -- Почему строка не используется (is_valid = false):
---   source_excluded — источник исключён целиком (tecdoc_2016, tecdoc_2018,
---                     price_cardon, price_va);
+--   source_excluded — источник исключён целиком (price_cardon, price_va);
 --   brand_mismatch  — ни одна сторона строки не совпала с товаром каталога
 --                     по бренду
 ALTER TABLE part_crosses ADD COLUMN IF NOT EXISTS invalid_reason TEXT;
@@ -110,7 +109,7 @@ ALTER TABLE part_crosses ADD COLUMN IF NOT EXISTS invalid_reason TEXT;
 -- пишутся помеченными и сайтом не используются
 CREATE OR REPLACE FUNCTION part_crosses_exclude_sources() RETURNS trigger AS $$
 BEGIN
-  IF NEW.source IN ('tecdoc_2016', 'tecdoc_2018', 'price_cardon', 'price_va') THEN
+  IF NEW.source IN ('price_cardon', 'price_va') THEN
     NEW.is_valid := false;
     NEW.invalid_reason := 'source_excluded';
   END IF;
