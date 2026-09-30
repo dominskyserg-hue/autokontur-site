@@ -59,6 +59,10 @@ interface OrderItem {
   supplierName: string | null;
   supplierContactName: string | null;
   status: OrderItemStatus;
+  // Товар в каталоге сейчас: фото и страница на сайте (null — товара нет)
+  productId?: string | null;
+  imageUrl?: string | null;
+  productPath?: string | null;
 }
 
 // Предложение того же артикула у одного из поставщиков — то, что
@@ -74,6 +78,13 @@ interface SupplierOffer {
   retailPrice: number;
   stock: number;
   sameBrand: boolean;
+}
+
+// Аналог с ДРУГИМ артикулом (кросс-номер), которым можно заменить деталь
+// позиции (GET /api/admin/products/offers — поле analogs)
+interface AnalogOffer extends SupplierOffer {
+  article: string;
+  relation: 'oem' | 'aftermarket';
 }
 
 // Кнопки быстрой наценки на цену продажи: +15%, +20%, +30% от закупки
@@ -234,6 +245,24 @@ function toInternationalPhone(raw: string): string | null {
   return null;
 }
 
+// Миниатюра товара в строке позиции: если картинка не загрузилась
+// (ссылка устарела, сайт-источник недоступен), вместо значка "битой
+// картинки" показываем аккуратную надпись
+function ItemThumb({ src }: { src: string | null | undefined }) {
+  const [broken, setBroken] = useState(false);
+  if (!src || broken) {
+    return (
+      <span className="text-[10px] text-center leading-tight" style={{ color: 'var(--ink-faint)' }}>
+        немає фото
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" onError={() => setBroken(true)} />
+  );
+}
+
 // Маленькая кнопка "скопировать" — после нажатия на пару секунд
 // показывает "✓", чтобы было видно, что текст уже в буфере обмена
 function CopyButton({ text, title }: { text: string; title: string }) {
@@ -363,6 +392,8 @@ export default function OrderDetailsModal({
   const [itemOffers, setItemOffers] = useState<SupplierOffer[]>([]);
   const [itemOffersLoading, setItemOffersLoading] = useState(false);
   const [itemOffersError, setItemOffersError] = useState<string | null>(null);
+  const [itemAnalogs, setItemAnalogs] = useState<AnalogOffer[]>([]);
+  const [replacingProductId, setReplacingProductId] = useState<string | null>(null);
   const [editItemSaving, setEditItemSaving] = useState(false);
   const [editItemError, setEditItemError] = useState<string | null>(null);
 
@@ -1009,6 +1040,7 @@ export default function OrderDetailsModal({
   // открытии редактирования позиции
   const loadItemOffers = async (item: OrderItem) => {
     setItemOffers([]);
+    setItemAnalogs([]);
     setItemOffersError(null);
     setItemOffersLoading(true);
     try {
@@ -1018,6 +1050,7 @@ export default function OrderDetailsModal({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось загрузить предложения');
       setItemOffers(data.offers as SupplierOffer[]);
+      setItemAnalogs((data.analogs as AnalogOffer[]) || []);
     } catch (error) {
       setItemOffersError(error instanceof Error ? error.message : 'Ошибка сети');
     } finally {
@@ -1031,6 +1064,39 @@ export default function OrderDetailsModal({
   const pickOffer = (offer: SupplierOffer) => {
     setEditItemSupplierId(offer.supplierId);
     setEditItemCostPrice(String(offer.costPrice));
+  };
+
+  // Заменить деталь позиции на аналог (другой артикул). Цену продажи
+  // оставляем ту, что сейчас в поле формы (о ней уже могли договориться
+  // с клиентом), — поменять её можно сразу после замены
+  const handleReplaceWithAnalog = async (item: OrderItem, analog: AnalogOffer) => {
+    if (!orderDetails) return;
+    const price = parseFloat(editItemPrice.replace(',', '.'));
+    const confirmed = window.confirm(
+      `Замінити ${item.brand || ''} ${item.article} на ${analog.brand || ''} ${analog.article} ` +
+        `(${analog.supplierName}, закупка ${formatMoney(analog.costPrice)} грн)?\n\n` +
+        `Ціна продажу залишиться ${Number.isFinite(price) ? formatMoney(price) : formatMoney(item.price)} грн — за потреби змініть її після заміни.`
+    );
+    if (!confirmed) return;
+    setReplacingProductId(analog.productId);
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: analog.productId, ...(Number.isFinite(price) ? { price } : {}) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося замінити позицію');
+      setEditingItemId(null);
+      // Перечитываем заказ: у позиции новый товар — новое фото и ссылка
+      await reloadOrder();
+      onOrderChanged();
+      bumpHistory();
+    } catch (error) {
+      setEditItemError(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setReplacingProductId(null);
+    }
   };
 
   const cancelItemEdit = () => {
@@ -1075,7 +1141,8 @@ export default function OrderDetailsModal({
       }
 
       const updatedItem = data.item as OrderItem;
-      const nextItems = orderDetails.items.map((item) => (item.id === updatedItem.id ? updatedItem : item));
+      // Слияние, а не замена: ответ PATCH не содержит фото и ссылку товара
+      const nextItems = orderDetails.items.map((item) => (item.id === updatedItem.id ? { ...item, ...updatedItem } : item));
       const nextTotal = nextItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
       setOrderDetails({ ...orderDetails, items: nextItems, totalAmount: nextTotal });
       setEditingItemId(null);
@@ -2487,6 +2554,30 @@ export default function OrderDetailsModal({
                               <Fragment key={item.id}>
                                 <tr style={{ borderBottom: '1px solid var(--line)' }}>
                                   <td className="px-3 py-2.5 align-top">
+                                    <div className="flex gap-2.5">
+                                    {/* Фото товара (или заглушка) — клик открывает страницу
+                                        товара на сайте, чтобы сверить деталь с клиентом */}
+                                    {item.productPath ? (
+                                      <a
+                                        href={item.productPath}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="shrink-0 w-11 h-11 rounded-md overflow-hidden flex items-center justify-center"
+                                        style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}
+                                        title="Відкрити сторінку товару на сайті"
+                                      >
+                                        <ItemThumb src={item.imageUrl} />
+                                      </a>
+                                    ) : (
+                                      <div
+                                        className="shrink-0 w-11 h-11 rounded-md flex items-center justify-center text-[10px] text-center"
+                                        style={{ background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--ink-faint)' }}
+                                        title="Товару вже немає в каталозі"
+                                      >
+                                        —
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
                                     <p className="truncate max-w-[220px]">{item.name || 'Без названия'}</p>
                                     <p className="text-xs font-mono mt-0.5" style={{ color: 'var(--ink-faint)' }}>
                                       {item.article}
@@ -2494,6 +2585,17 @@ export default function OrderDetailsModal({
                                       {item.supplierName ? ` · ${item.supplierName}` : ''}
                                       {item.supplierContactName ? ` (${item.supplierContactName})` : ''}
                                     </p>
+                                    {item.productPath && (
+                                      <a
+                                        href={item.productPath}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[11px] underline"
+                                        style={{ color: 'var(--accent)' }}
+                                      >
+                                        на сайті ↗
+                                      </a>
+                                    )}
                                     {/* Деталь уже лежить у нас на складі — можна не замовляти
                                         у постачальника, а одразу взяти з полиці */}
                                     {item.status === 'pending' &&
@@ -2526,6 +2628,8 @@ export default function OrderDetailsModal({
                                           </div>
                                         );
                                       })()}
+                                    </div>
+                                    </div>
                                   </td>
                                   <td className="px-3 py-2.5 align-top text-right font-mono whitespace-nowrap">
                                     {item.quantity}
@@ -2703,6 +2807,74 @@ export default function OrderDetailsModal({
                                           </div>
                                         )}
                                       </div>
+
+                                      {/* ==== АНАЛОГИ: ІНШІ АРТИКУЛИ (крос-номери) ====
+                                          Якщо оригіналу немає або він дорогий — можна замінити
+                                          деталь на аналог. Лише для позицій, які ще не замовляли */}
+                                      {itemAnalogs.length > 0 && item.status === 'pending' && (
+                                        <div className="mb-3">
+                                          <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                                            Аналоги (інші артикули) — {itemAnalogs.length}
+                                          </p>
+                                          <div className="rounded-md overflow-hidden max-h-56 overflow-y-auto" style={{ border: '1px solid var(--line)' }}>
+                                            <table className="w-full text-sm">
+                                              <thead>
+                                                <tr style={{ background: 'var(--surface)' }}>
+                                                  {['Деталь', 'Тип', 'Постачальник', 'Наявність', 'Закупка', 'Прайс', ''].map((h, i) => (
+                                                    <th
+                                                      key={h || i}
+                                                      className={`px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap ${
+                                                        i >= 3 && i <= 5 ? 'text-right' : 'text-left'
+                                                      }`}
+                                                      style={{ color: 'var(--ink-muted)' }}
+                                                    >
+                                                      {h}
+                                                    </th>
+                                                  ))}
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {itemAnalogs.map((analog) => (
+                                                  <tr key={analog.productId} style={{ borderTop: '1px solid var(--line)' }}>
+                                                    <td className="px-2.5 py-1.5">
+                                                      <span className="font-mono text-xs">{analog.article}</span>
+                                                      <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+                                                        {' '}
+                                                        · {analog.brand || '—'}
+                                                      </span>
+                                                    </td>
+                                                    <td className="px-2.5 py-1.5 text-[11px] whitespace-nowrap" style={{ color: analog.relation === 'oem' ? 'var(--accent)' : 'var(--ink-muted)' }}>
+                                                      {analog.relation === 'oem' ? 'оригінал' : 'аналог'}
+                                                    </td>
+                                                    <td className="px-2.5 py-1.5 text-xs whitespace-nowrap">{analog.supplierName}</td>
+                                                    <td
+                                                      className="px-2.5 py-1.5 text-right font-mono text-xs whitespace-nowrap"
+                                                      style={{ color: analog.stock > 0 ? 'var(--good)' : 'var(--ink-faint)' }}
+                                                    >
+                                                      {analog.stock > 0 ? `${analog.stock} шт` : 'немає'}
+                                                    </td>
+                                                    <td className="px-2.5 py-1.5 text-right font-mono whitespace-nowrap">{formatMoney(analog.costPrice)}</td>
+                                                    <td className="px-2.5 py-1.5 text-right font-mono whitespace-nowrap" style={{ color: 'var(--ink-muted)' }}>
+                                                      {formatMoney(analog.retailPrice)}
+                                                    </td>
+                                                    <td className="px-2.5 py-1.5 text-right whitespace-nowrap">
+                                                      <button
+                                                        type="button"
+                                                        disabled={replacingProductId !== null}
+                                                        onClick={() => handleReplaceWithAnalog(item, analog)}
+                                                        className="text-[11px] px-2 py-0.5 rounded-md disabled:opacity-50"
+                                                        style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }}
+                                                      >
+                                                        {replacingProductId === analog.productId ? '...' : 'Замінити'}
+                                                      </button>
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
 
                                       {/* Порядок полей — как думает менеджер: сначала У КОГО
                                           берём (поставщик), потом ПО ЧЁМ берём (закупка), потом
