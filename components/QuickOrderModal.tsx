@@ -76,12 +76,14 @@ interface QuickOrderModalProps {
     // решту привеземо під замовлення". Необязательный
     stock?: number;
   };
+  // compact — маленькая кнопка "1 клік" для таблицы пропозицій
+  compact?: boolean;
 }
 
 // Сколько штук максимум можно выбрать в быстром заказе (как и в корзине)
 const MAX_QUANTITY = 99;
 
-export default function QuickOrderModal({ product }: QuickOrderModalProps) {
+export default function QuickOrderModal({ product, compact = false }: QuickOrderModalProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -174,13 +176,17 @@ export default function QuickOrderModal({ product }: QuickOrderModalProps) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-colors hover:bg-[rgba(59,130,246,0.08)]"
+        className={
+          compact
+            ? 'inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors hover:bg-[rgba(59,130,246,0.08)]'
+            : 'inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-colors hover:bg-[rgba(59,130,246,0.08)]'
+        }
         style={{ fontFamily: SANS_TECH, border: '1.5px solid rgba(59,130,246,0.5)', color: TECH_ACCENT_BRIGHT }}
       >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+        <svg width={compact ? 12 : 15} height={compact ? 12 : 15} viewBox="0 0 24 24" fill="currentColor">
           <path d="M13 2 3 14h7l-1 8 11-14h-7l1-8Z" />
         </svg>
-        Купити в 1 клік
+        {compact ? '1 клік' : 'Купити в 1 клік'}
       </button>
 
       {/* Окно выносим порталом прямо в <body>: когда карточка товара
