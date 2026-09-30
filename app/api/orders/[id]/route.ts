@@ -145,6 +145,44 @@ interface OrderDetailsResponse {
   // Используется для бейджа оплаты рядом со статусом отгрузки в
   // карточке заказа (components/OrderDetailsModal.tsx)
   paidAmount: number;
+  // Внутренняя заметка менеджера — клиент её не видит (в отличие от
+  // comment, который клиент сам написал при оформлении заказа)
+  managerNote: string | null;
+  // Клиент заказа и его ОБЩИЙ баланс по всем заказам (customers.balance:
+  // + должен нам, − предоплата). null — у старых заказов до появления
+  // таблицы customers клиент не привязан
+  customer: { id: string; balance: number; orderCount: number } | null;
+}
+
+// ------------------------------------------------------------
+// АВТОМИГРАЦИЯ: колонка orders.manager_note
+// ------------------------------------------------------------
+// Колонка для внутренней заметки менеджера добавлена в конец
+// schema.sql. Чтобы не выполнять SQL в базе вручную, роут сам проверяет
+// её наличие при первом обращении и, если её нет, добавляет — тот же
+// приём, что и для stock_movements.comment в
+// app/api/admin/warehouse/[productId]/route.ts. Сначала лёгкая проверка
+// через information_schema, ALTER TABLE — только если колонки нет.
+// Результат запоминаем, чтобы проверка шла один раз на запуск функции
+let managerNoteColumnReady: Promise<void> | null = null;
+
+function ensureManagerNoteColumn(): Promise<void> {
+  if (!managerNoteColumnReady) {
+    managerNoteColumnReady = (async () => {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.columns
+         WHERE table_schema = current_schema() AND table_name = 'orders' AND column_name = 'manager_note'`
+      );
+      if (check.rows.length === 0) {
+        await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS manager_note TEXT');
+      }
+    })().catch((error) => {
+      // Не получилось — забываем результат, следующий запрос попробует снова
+      managerNoteColumnReady = null;
+      throw error;
+    });
+  }
+  return managerNoteColumnReady;
 }
 
 // ------------------------------------------------------------
@@ -165,10 +203,12 @@ export async function GET(
   }
 
   try {
+    await ensureManagerNoteColumn();
+
     const orderResult = await pool.query(
       `
       SELECT id, order_number, customer_name, customer_surname, customer_phone, city, nova_poshta_address,
-             city_ref, warehouse_ref, comment,
+             city_ref, warehouse_ref, comment, manager_note, customer_id,
              ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at
       FROM orders
       WHERE id = $1
@@ -234,6 +274,24 @@ export async function GET(
     );
     const paidAmount = parseFloat(paidResult.rows[0].paid);
 
+    // Общий баланс клиента по ВСЕМ его заказам — чтобы менеджер прямо в
+    // окне заказа видел, что клиент уже должен по другим заказам
+    let customer: OrderDetailsResponse['customer'] = null;
+    if (orderRow.customer_id) {
+      const customerResult = await pool.query(
+        `
+        SELECT c.id, c.balance, (SELECT COUNT(*) FROM orders o WHERE o.customer_id = c.id)::int AS order_count
+        FROM customers c
+        WHERE c.id = $1
+        `,
+        [orderRow.customer_id]
+      );
+      if (customerResult.rows.length > 0) {
+        const c = customerResult.rows[0];
+        customer = { id: c.id, balance: parseFloat(c.balance), orderCount: c.order_count };
+      }
+    }
+
     const order: OrderDetailsResponse = {
       id: orderRow.id,
       orderNumber: orderRow.order_number,
@@ -255,6 +313,8 @@ export async function GET(
       items,
       totalAmount,
       paidAmount,
+      managerNote: orderRow.manager_note,
+      customer,
     };
 
     return NextResponse.json({ success: true, order });
@@ -452,6 +512,8 @@ interface PatchOrderRequestBody {
   ttnNumber?: string | null;
   vin?: string | null;
   carInfo?: string | null;
+  // Внутренняя заметка менеджера (клиент не видит); пустая строка — удалить
+  managerNote?: string | null;
 }
 
 export async function PATCH(
@@ -486,7 +548,8 @@ export async function PATCH(
     body.customerName === undefined &&
     body.customerSurname === undefined &&
     body.customerPhone === undefined &&
-    body.delivery === undefined
+    body.delivery === undefined &&
+    body.managerNote === undefined
   ) {
     return NextResponse.json(
       { error: 'Укажите статус, номер ТТН, VIN, автомобиль и/или контакты клиента для обновления.' },
@@ -537,6 +600,7 @@ export async function PATCH(
   const nextTtnNumber = body.ttnNumber !== undefined ? (body.ttnNumber || '').trim() || null : undefined;
   const nextVin = body.vin !== undefined ? (body.vin || '').trim().toUpperCase() || null : undefined;
   const nextCarInfo = body.carInfo !== undefined ? (body.carInfo || '').trim() || null : undefined;
+  const nextManagerNote = body.managerNote !== undefined ? String(body.managerNote ?? '').trim() || null : undefined;
 
   // Переход в 'shipped' — не просто смена значения в колонке status:
   // это финальная отгрузка со списанием склада и начислением на баланс
@@ -549,6 +613,8 @@ export async function PATCH(
   }
 
   try {
+    await ensureManagerNoteColumn();
+
     // Старое значение ТТН — нужно ДО обновления, чтобы понять, реально
     // ли админ только что ВПЕРВЫЕ проставил номер (или изменил его), а
     // не просто повторно сохранил статус без изменения ТТН — иначе
@@ -575,10 +641,11 @@ export async function PATCH(
           nova_poshta_address = COALESCE($13, nova_poshta_address),
           city_ref = COALESCE($14, city_ref),
           warehouse_ref = COALESCE($15, warehouse_ref),
+          manager_note = CASE WHEN $16 THEN $17 ELSE manager_note END,
           updated_at = now()
       WHERE id = $1
       RETURNING id, customer_name, customer_surname, customer_phone, status, ttn_number, vin, car_info,
-                city, nova_poshta_address, city_ref, warehouse_ref, created_at, updated_at
+                city, nova_poshta_address, city_ref, warehouse_ref, manager_note, created_at, updated_at
       `,
       [
         id,
@@ -596,6 +663,8 @@ export async function PATCH(
         nextDelivery?.address ?? null,
         nextDelivery?.cityRef ?? null,
         nextDelivery?.warehouseRef ?? null,
+        nextManagerNote !== undefined,
+        nextManagerNote ?? null,
       ]
     );
 
@@ -632,6 +701,7 @@ export async function PATCH(
         novaPoshtaAddress: row.nova_poshta_address,
         cityRef: row.city_ref,
         warehouseRef: row.warehouse_ref,
+        managerNote: row.manager_note,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },

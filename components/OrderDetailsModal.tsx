@@ -100,6 +100,11 @@ interface OrderDetails {
   items: OrderItem[];
   totalAmount: number;
   paidAmount: number;
+  // Внутренняя заметка менеджера — клиент её не видит
+  managerNote: string | null;
+  // Клиент и его общий баланс по всем заказам (+ должен, − предоплата);
+  // null — у старых заказов клиент не привязан
+  customer: { id: string; balance: number; orderCount: number } | null;
 }
 
 interface SupplierOption {
@@ -127,9 +132,49 @@ interface AddItemProductOption {
   supplierName: string;
 }
 
-type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer' | 'delivery';
+type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer' | 'delivery' | 'note';
 type SaveState = { state: 'idle' | 'saving' | 'saved' | 'error'; error?: string };
 const IDLE: SaveState = { state: 'idle' };
+
+// Телефон в международном формате без "+" (380XXXXXXXXX) — нужен для
+// ссылок Viber и Telegram. Украинские номера часто вводят как
+// 0XXXXXXXXX или 80XXXXXXXXX — дописываем код страны. Если номер
+// совсем не похож на телефон — возвращаем null, и кнопки не показываем
+function toInternationalPhone(raw: string): string | null {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('380')) return digits;
+  if (digits.length === 11 && digits.startsWith('80')) return `3${digits}`;
+  if (digits.length === 10 && digits.startsWith('0')) return `38${digits}`;
+  if (digits.length >= 10 && digits.length <= 15) return digits;
+  return null;
+}
+
+// Маленькая кнопка "скопировать" — после нажатия на пару секунд
+// показывает "✓", чтобы было видно, что текст уже в буфере обмена
+function CopyButton({ text, title }: { text: string; title: string }) {
+  const [copied, setCopied] = useState(false);
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Буфер обмена недоступен (очень старый браузер или не https) —
+      // не критично, номер всё равно виден и его можно выделить руками
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={handleCopy}
+      title={title}
+      className="text-xs px-2 py-1 rounded-md shrink-0"
+      style={{ border: '1px solid var(--line)', color: copied ? 'var(--good)' : 'var(--ink-muted)' }}
+    >
+      {copied ? '✓' : '⧉'}
+    </button>
+  );
+}
 
 // Небольшой индикатор рядом с полем — заменяет отдельную кнопку
 // "Сохранить": пусто, пока поле не трогали, спиннер-текст во время
@@ -176,6 +221,7 @@ export default function OrderDetailsModal({
   const [ttnDraft, setTtnDraft] = useState('');
   const [vinDraft, setVinDraft] = useState('');
   const [carInfoDraft, setCarInfoDraft] = useState('');
+  const [managerNoteDraft, setManagerNoteDraft] = useState('');
   // Контакти клієнта — редагуються прямо в картці (особливо потрібно
   // для "Купити в 1 клік", де покупець вводить лише одне поле імені).
   // Саме ці дані йдуть отримувачем у ТТН Нової Пошти
@@ -185,7 +231,7 @@ export default function OrderDetailsModal({
   // Зміна міста/відділення прямо в картці — пошук НП з Ref'ами, тож
   // обране відділення одразу підхоплюється формою створення ТТН
   const [editingDelivery, setEditingDelivery] = useState(false);
-  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE, delivery: IDLE });
+  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE, delivery: IDLE, note: IDLE });
 
   // ---- создание ТТН через API Новой Почты ----
   const [showCreateTtn, setShowCreateTtn] = useState(false);
@@ -307,6 +353,7 @@ export default function OrderDetailsModal({
           setTtnDraft(order.ttnNumber || '');
           setVinDraft(order.vin || '');
           setCarInfoDraft(order.carInfo || '');
+          setManagerNoteDraft(order.managerNote || '');
           setCustomerNameDraft(order.customerName || '');
           setCustomerSurnameDraft(order.customerSurname || '');
           setCustomerPhoneDraft(order.customerPhone || '');
@@ -409,6 +456,14 @@ export default function OrderDetailsModal({
     const next = ttnDraft.trim();
     if (next === (orderDetails.ttnNumber || '')) return;
     savePatch('ttn', { ttnNumber: next || null });
+  };
+
+  // ---- заметка менеджера — сохраняется при потере фокуса, если изменилась ----
+  const handleManagerNoteBlur = () => {
+    if (!orderDetails) return;
+    const next = managerNoteDraft.trim();
+    if (next === (orderDetails.managerNote || '')) return;
+    savePatch('note', { managerNote: next || null });
   };
 
   // ---- авто/VIN — сохраняются вместе при потере фокуса любого из двух ----
@@ -995,7 +1050,82 @@ export default function OrderDetailsModal({
                       onChange={(e) => setCustomerPhoneDraft(e.target.value)}
                       onBlur={handleCustomerBlur}
                     />
+                    {/* Быстрые действия с телефоном: позвонить, написать в
+                        Viber/Telegram, скопировать. На компьютере ссылки
+                        открывают установленные приложения Viber/Telegram */}
+                    {(() => {
+                      const intl = toInternationalPhone(customerPhoneDraft);
+                      if (!intl) return null;
+                      const linkStyle = { border: '1px solid var(--line)', color: 'var(--ink-muted)' };
+                      return (
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          <a href={`tel:+${intl}`} className="text-xs px-2 py-1 rounded-md" style={linkStyle}>
+                            📞 Подзвонити
+                          </a>
+                          <a
+                            href={`viber://chat?number=%2B${intl}`}
+                            className="text-xs px-2 py-1 rounded-md"
+                            style={{ ...linkStyle, color: '#9B8CFF' }}
+                          >
+                            Viber
+                          </a>
+                          <a
+                            href={`https://t.me/+${intl}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs px-2 py-1 rounded-md"
+                            style={{ ...linkStyle, color: '#4FB3F0' }}
+                          >
+                            Telegram
+                          </a>
+                          <CopyButton text={customerPhoneDraft.trim()} title="Скопіювати телефон" />
+                        </div>
+                      );
+                    })()}
                   </div>
+
+                  {/* Общий баланс клиента по ВСЕМ его заказам — видно, если
+                      клиент уже должен по другим заказам */}
+                  {orderDetails.customer && (
+                    <div
+                      className="flex items-center justify-between gap-2 text-xs mt-2 px-3 py-2 rounded-md"
+                      style={{
+                        background:
+                          orderDetails.customer.balance > 0
+                            ? 'var(--bad-soft)'
+                            : orderDetails.customer.balance < 0
+                              ? 'var(--good-soft)'
+                              : 'var(--surface)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          color:
+                            orderDetails.customer.balance > 0
+                              ? 'var(--bad)'
+                              : orderDetails.customer.balance < 0
+                                ? 'var(--good)'
+                                : 'var(--ink-muted)',
+                        }}
+                      >
+                        {orderDetails.customer.balance > 0
+                          ? `Клієнт винен: ${formatMoney(orderDetails.customer.balance)} грн`
+                          : orderDetails.customer.balance < 0
+                            ? `Передоплата клієнта: ${formatMoney(-orderDetails.customer.balance)} грн`
+                            : 'Боргу немає'}
+                        <span style={{ color: 'var(--ink-faint)' }}> · замовлень: {orderDetails.customer.orderCount}</span>
+                      </span>
+                      <a
+                        href={`/admin/customers/${orderDetails.customer.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline shrink-0"
+                        style={{ color: 'var(--accent)' }}
+                      >
+                        Картка →
+                      </a>
+                    </div>
+                  )}
 
                   <div className="text-sm flex flex-col gap-1 mb-3">
                     {orderDetails.comment && (
@@ -1067,17 +1197,23 @@ export default function OrderDetailsModal({
                     </div>
 
                     {orderDetails.ttnRef ? (
-                      <p className="text-sm font-mono">{orderDetails.ttnNumber}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-mono">{orderDetails.ttnNumber}</p>
+                        {orderDetails.ttnNumber && <CopyButton text={orderDetails.ttnNumber} title="Скопіювати ТТН" />}
+                      </div>
                     ) : (
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 text-sm rounded-md font-mono"
-                        style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
-                        placeholder="Ще не вказано"
-                        value={ttnDraft}
-                        onChange={(e) => setTtnDraft(e.target.value)}
-                        onBlur={handleTtnBlur}
-                      />
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 text-sm rounded-md font-mono"
+                          style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                          placeholder="Ще не вказано"
+                          value={ttnDraft}
+                          onChange={(e) => setTtnDraft(e.target.value)}
+                          onBlur={handleTtnBlur}
+                        />
+                        {ttnDraft.trim() && <CopyButton text={ttnDraft.trim()} title="Скопіювати ТТН" />}
+                      </div>
                     )}
 
                     {!orderDetails.ttnRef && !orderDetails.ttnNumber && !showCreateTtn && (
@@ -1224,6 +1360,28 @@ export default function OrderDetailsModal({
                       </div>
                     )}
                   </div>
+                </div>
+
+                {/* ---- внутрішня замітка менеджера (клієнт її не бачить) ---- */}
+                <div className="p-4 rounded-md" style={{ background: 'var(--warn-soft)', border: '1px solid var(--line)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-semibold" style={{ color: 'var(--warn)' }}>
+                      ЗАМІТКА МЕНЕДЖЕРА
+                    </h3>
+                    <SaveIndicator save={saveState.note} />
+                  </div>
+                  <textarea
+                    rows={3}
+                    className="w-full px-3 py-2 text-sm rounded-md resize-y"
+                    style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                    placeholder="напр. «дзвонити після 18:00», «чекаємо деталь у п'ятницю»"
+                    value={managerNoteDraft}
+                    onChange={(e) => setManagerNoteDraft(e.target.value)}
+                    onBlur={handleManagerNoteBlur}
+                  />
+                  <p className="text-[11px] mt-1" style={{ color: 'var(--ink-faint)' }}>
+                    Бачать лише співробітники. Зберігається сама, коли клацнете поза полем.
+                  </p>
                 </div>
 
                 {/* ---- автомобіль клієнта ---- */}
