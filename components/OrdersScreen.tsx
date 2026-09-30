@@ -2,7 +2,8 @@
 
 // ============================================================
 // Экран "Заказы" — список всех заказов клиентов с пагинацией,
-// фильтром по статусу и поиском по клиенту. Клик по строке/кнопке
+// быстрыми фильтрами-кнопками по статусу (со счётчиками), фильтром
+// "Не оплачены", периодом дат и поиском по клиенту. Клик по строке/кнопке
 // "Детали" открывает модальное окно карточки заказа
 // (components/OrderDetailsModal.tsx) — вся логика самой карточки
 // (статус, ТТН, авто, состав заказа, оплата) вынесена туда, здесь
@@ -10,7 +11,8 @@
 //
 // Использует эндпоинт:
 //   GET /api/orders — список заказов (пагинация + фильтр по статусу
-//                      + поиск по имени/телефону)
+//                      + поиск по имени/телефону + даты + "не оплачены"
+//                      + счётчики для кнопок, withCounts=1)
 //
 // 'use client' в самом верху обязателен: компонент использует хуки
 // (useState/useEffect) и работает с браузерным fetch
@@ -52,8 +54,32 @@ interface Pagination {
   totalPages: number;
 }
 
+interface OrderCounts {
+  byStatus: Record<string, number>;
+  unpaid: number;
+  all: number;
+}
+
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
+
+// Быстрый фильтр: либо статус заказа, либо "Не оплачены", либо "Все"
+type QuickFilter = '' | OrderStatus | 'unpaid';
+
+// Дата в формате ГГГГ-ММ-ДД по местному времени браузера — именно такой
+// формат ждёт <input type="date"> и параметры dateFrom/dateTo в API
+function toDateInput(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function daysAgo(days: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return toDateInput(date);
+}
 
 function StatusBadge({ status }: { status: OrderStatus }) {
   const colors = STATUS_COLORS[status];
@@ -71,11 +97,14 @@ export default function OrdersScreen() {
   // ---- список заказов ----
   const [orders, setOrders] = useState<OrderListItem[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
+  const [counts, setCounts] = useState<OrderCounts | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   // ---- фильтры ----
-  const [statusFilter, setStatusFilter] = useState<'' | OrderStatus>('');
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -94,7 +123,7 @@ export default function OrdersScreen() {
   // Смена фильтра или поиска — возвращаемся на первую страницу
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, statusFilter]);
+  }, [debouncedSearch, quickFilter, dateFrom, dateTo]);
 
   // ------------------------------------------------------------
   // ЗАГРУЗКА СПИСКА ЗАКАЗОВ (GET /api/orders)
@@ -106,8 +135,12 @@ export default function OrdersScreen() {
       const params = new URLSearchParams();
       params.set('page', String(page));
       params.set('pageSize', String(PAGE_SIZE));
-      if (statusFilter) params.set('status', statusFilter);
+      params.set('withCounts', '1');
+      if (quickFilter === 'unpaid') params.set('unpaid', '1');
+      else if (quickFilter) params.set('status', quickFilter);
       if (debouncedSearch) params.set('search', debouncedSearch);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
 
       const response = await fetch(`/api/orders?${params.toString()}`);
       const data = await response.json();
@@ -117,18 +150,39 @@ export default function OrdersScreen() {
 
       setOrders(data.orders as OrderListItem[]);
       setPagination(data.pagination as Pagination);
+      setCounts((data.counts as OrderCounts) || null);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : 'Ошибка сети при загрузке заказов');
     } finally {
       setLoading(false);
     }
-  }, [page, statusFilter, debouncedSearch]);
+  }, [page, quickFilter, debouncedSearch, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
 
   const totalPages = pagination?.totalPages ?? 0;
+
+  // Кнопки быстрых фильтров: "Все", каждый статус и "Не оплачены".
+  // Счётчик учитывает поиск и даты, но не сам выбранный статус — так
+  // видно, сколько заказов "ждёт" в каждой колонке
+  const quickFilters: { key: QuickFilter; label: string; count: number | undefined }[] = [
+    { key: '', label: 'Все', count: counts?.all },
+    ...STATUS_OPTIONS.map((status) => ({
+      key: status as QuickFilter,
+      label: STATUS_LABELS[status],
+      count: counts ? counts.byStatus[status] || 0 : undefined,
+    })),
+    { key: 'unpaid', label: 'Не оплачены', count: counts?.unpaid },
+  ];
+
+  // Быстрый выбор периода — чтобы не щёлкать календарь каждый раз
+  const periodPresets: { label: string; from: string; to: string }[] = [
+    { label: 'Сегодня', from: daysAgo(0), to: daysAgo(0) },
+    { label: '7 дней', from: daysAgo(6), to: daysAgo(0) },
+    { label: '30 дней', from: daysAgo(29), to: daysAgo(0) },
+  ];
 
   return (
     <AdminLayout active="orders">
@@ -151,7 +205,7 @@ export default function OrdersScreen() {
         </Link>
       </header>
 
-      {/* ==================== ПОИСК И ФИЛЬТР ПО СТАТУСУ ==================== */}
+      {/* ==================== ПОИСК И ПЕРИОД ==================== */}
       <div
         className="p-4 rounded-lg mb-5 flex flex-wrap gap-3 items-end"
         style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}
@@ -170,24 +224,95 @@ export default function OrdersScreen() {
           />
         </div>
 
-        <div className="w-56">
+        <div>
           <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
-            Статус
+            С даты
           </label>
-          <select
-            className="w-full px-3 py-2 text-sm rounded-md"
-            style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as '' | OrderStatus)}
-          >
-            <option value="">Все статусы</option>
-            {STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_LABELS[status]}
-              </option>
-            ))}
-          </select>
+          <input
+            type="date"
+            className="px-3 py-2 text-sm rounded-md"
+            // colorScheme: 'dark' — иначе значок календаря чёрный на тёмном фоне
+            style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)', colorScheme: 'dark' }}
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+          />
         </div>
+        <div>
+          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+            По дату
+          </label>
+          <input
+            type="date"
+            className="px-3 py-2 text-sm rounded-md"
+            // colorScheme: 'dark' — иначе значок календаря чёрный на тёмном фоне
+            style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)', colorScheme: 'dark' }}
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          {periodPresets.map((preset) => {
+            const isActive = dateFrom === preset.from && dateTo === preset.to;
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => {
+                  setDateFrom(preset.from);
+                  setDateTo(preset.to);
+                }}
+                className="text-xs px-2.5 py-2 rounded-md"
+                style={{
+                  border: '1px solid var(--line)',
+                  background: isActive ? 'var(--accent-soft)' : 'transparent',
+                  color: isActive ? 'var(--accent)' : 'var(--ink-muted)',
+                }}
+              >
+                {preset.label}
+              </button>
+            );
+          })}
+          {(dateFrom || dateTo) && (
+            <button
+              type="button"
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+              }}
+              className="text-xs px-2.5 py-2 rounded-md underline"
+              style={{ color: 'var(--ink-faint)' }}
+            >
+              Весь период
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* ==================== БЫСТРЫЕ ФИЛЬТРЫ ПО СТАТУСУ ==================== */}
+      <div className="flex flex-wrap gap-2 mb-5">
+        {quickFilters.map((filter) => {
+          const isActive = quickFilter === filter.key;
+          return (
+            <button
+              key={filter.key || 'all'}
+              type="button"
+              onClick={() => setQuickFilter(filter.key)}
+              className="text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap"
+              style={{
+                border: '1px solid ' + (isActive ? 'var(--accent)' : 'var(--line)'),
+                background: isActive ? 'var(--accent-soft)' : 'var(--surface)',
+                color: isActive ? 'var(--accent)' : 'var(--ink-muted)',
+              }}
+            >
+              {filter.label}
+              {filter.count !== undefined && (
+                <span className="ml-1.5" style={{ color: isActive ? 'var(--accent)' : 'var(--ink-faint)' }}>
+                  {filter.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* ==================== ТАБЛИЦА ЗАКАЗОВ ==================== */}
