@@ -2744,3 +2744,20 @@ ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS comment TEXT;
 -- оформлении заказа. Роут app/api/orders/[id]/route.ts добавляет эту
 -- колонку сам при первом обращении, если её ещё нет
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS manager_note TEXT;
+
+
+-- ============================================================
+-- ИСТОРИЯ ИЗМЕНЕНИЙ ЗАКАЗА
+-- ============================================================
+-- Кто и когда что поменял в заказе: статус, ТТН, цены и состав позиций,
+-- оплаты, возвраты — по строке на событие, готовым текстом. Показывается
+-- в окне заказа админки. lib/orderHistory.ts создаёт эту таблицу сам
+-- при первом обращении, если её ещё нет
+CREATE TABLE IF NOT EXISTS order_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  created_by TEXT NOT NULL DEFAULT 'admin',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_order_history_order_id ON order_history (order_id, created_at DESC);

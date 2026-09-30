@@ -30,6 +30,7 @@ import { createInternetDocument } from '@/lib/novaPoshta/createDocument';
 import { NovaPoshtaApiError } from '@/lib/novaPoshta/api';
 import { notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
 import { requireAdmin } from '@/lib/adminAuth';
+import { logOrderEvent } from '@/lib/orderHistory';
 
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -157,6 +158,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     ]);
 
     after(() => notifyCustomerTtnAssigned(order.id, order.customer_phone, ttnNumber));
+    await logOrderEvent(order.id, `Створено ТТН через Нову Пошту: ${ttnNumber}`);
 
     return NextResponse.json({ success: true, ttnNumber, ttnRef });
   } catch (error) {

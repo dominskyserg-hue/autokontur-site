@@ -21,6 +21,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { buildTtnMessage, notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
 import { requireAdmin } from '@/lib/adminAuth';
+import { logOrderEvent } from '@/lib/orderHistory';
 
 export const runtime = 'nodejs';
 
@@ -62,6 +63,9 @@ export async function POST(_request: NextRequest, context: { params: Promise<{ i
     }
 
     const result = await notifyCustomerTtnAssigned(id, order.customer_phone, order.ttn_number);
+    if (result === 'sent') {
+      await logOrderEvent(id, `ТТН ${order.ttn_number} надіслано клієнту в Telegram`);
+    }
 
     return NextResponse.json({
       success: true,
