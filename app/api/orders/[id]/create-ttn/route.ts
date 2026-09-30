@@ -59,6 +59,8 @@ interface CreateTtnBody {
   cost?: number;
   payerType?: 'Sender' | 'Recipient';
   description?: string;
+  // Післяплата, грн (необов'язково; 0 — без післяплати)
+  codAmount?: number;
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -95,6 +97,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Оголошена вартість має бути додатним числом.' }, { status: 400 });
   }
   const payerType = body.payerType === 'Sender' ? 'Sender' : 'Recipient';
+
+  const codAmount = body.codAmount === undefined || body.codAmount === null ? 0 : Number(body.codAmount);
+  if (!Number.isFinite(codAmount) || codAmount < 0) {
+    return NextResponse.json({ error: 'Сума післяплати має бути числом не менше нуля.' }, { status: 400 });
+  }
+  // Нова Пошта не приймає післяплату, більшу за оголошену вартість
+  // посилки, — тому оголошену вартість піднімаємо до суми післяплати
+  const declaredCost = Math.max(cost, Math.ceil(codAmount));
 
   try {
     const orderResult = await pool.query(
@@ -146,9 +156,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       },
       weight,
       seatsAmount,
-      cost,
+      cost: declaredCost,
       payerType,
       description: body.description?.trim() || 'Запчастини',
+      codAmount,
     });
 
     await pool.query(`UPDATE orders SET ttn_number = $2, ttn_ref = $3, updated_at = now() WHERE id = $1`, [
@@ -158,7 +169,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     ]);
 
     after(() => notifyCustomerTtnAssigned(order.id, order.customer_phone, ttnNumber));
-    await logOrderEvent(order.id, `Створено ТТН через Нову Пошту: ${ttnNumber}`);
+    await logOrderEvent(
+      order.id,
+      `Створено ТТН через Нову Пошту: ${ttnNumber}` +
+        (codAmount > 0 ? ` (післяплата ${Math.round(codAmount)} грн)` : ' (без післяплати)')
+    );
 
     return NextResponse.json({ success: true, ttnNumber, ttnRef });
   } catch (error) {

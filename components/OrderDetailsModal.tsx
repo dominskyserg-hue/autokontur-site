@@ -110,6 +110,44 @@ interface OrderDetails {
   telegramLinked: boolean;
 }
 
+// Статус посылки от Новой Почты (GET /api/orders/[id]/ttn-status,
+// lib/novaPoshta/tracking.ts)
+interface TtnStatusInfo {
+  statusText: string;
+  statusCode: number | null;
+  kind: 'created' | 'in_transit' | 'arrived' | 'received' | 'problem' | 'unknown';
+  warehouse: string | null;
+  arrivedAt: string | null;
+  paidStorageFrom: string | null;
+  receivedAt: string | null;
+  scheduledDelivery: string | null;
+  daysAtWarehouse: number | null;
+}
+
+// Через сколько дней в отделении предупреждать, что клиент не забирает
+// посылку (после этого у Новой Почты обычно начинается платное хранение)
+const STORAGE_WARNING_DAYS = 5;
+
+// Цвет плашки статуса посылки по его смыслу
+const TTN_KIND_COLORS: Record<TtnStatusInfo['kind'], { bg: string; fg: string }> = {
+  created: { bg: 'var(--surface-2)', fg: 'var(--ink-muted)' },
+  in_transit: { bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+  arrived: { bg: 'var(--warn-soft)', fg: 'var(--warn)' },
+  received: { bg: 'var(--good-soft)', fg: 'var(--good)' },
+  problem: { bg: 'var(--bad-soft)', fg: 'var(--bad)' },
+  unknown: { bg: 'var(--surface-2)', fg: 'var(--ink-muted)' },
+};
+
+// Деталь на НАШЕМ складе под позицию заказа
+// (GET /api/orders/[id]/stock-availability, lib/warehouseStock.ts)
+interface WarehouseStockOption {
+  productId: string;
+  supplierName: string;
+  brand: string | null;
+  available: number;
+  costPrice: number;
+}
+
 // Одно событие истории изменений заказа (GET /api/orders/[id]/history)
 interface OrderHistoryEvent {
   id: string;
@@ -272,6 +310,10 @@ export default function OrderDetailsModal({
   const [ttnWeight, setTtnWeight] = useState('1');
   const [ttnSeats, setTtnSeats] = useState('1');
   const [ttnCost, setTtnCost] = useState('');
+  // Післяплата: галочка и сумма. По умолчанию включена, если заказ
+  // оплачен не полностью, а сумма = сколько клиент ещё не доплатил
+  const [ttnCodEnabled, setTtnCodEnabled] = useState(false);
+  const [ttnCodAmount, setTtnCodAmount] = useState('');
   const [ttnPayerType, setTtnPayerType] = useState<'Recipient' | 'Sender'>('Recipient');
   const [ttnDescription, setTtnDescription] = useState('Запчастини');
   const [creatingTtn, setCreatingTtn] = useState(false);
@@ -344,6 +386,92 @@ export default function OrderDetailsModal({
       cancelled = true;
     };
   }, [orderId, historyVersion]);
+
+  // ---- статус посылки от Новой Почты ----
+  // Грузим, когда у заказа есть номер ТТН (и заново — по кнопке
+  // "Оновити" или после создания ТТН)
+  const [ttnStatus, setTtnStatus] = useState<TtnStatusInfo | null>(null);
+  const [ttnStatusLoading, setTtnStatusLoading] = useState(false);
+  const [ttnStatusError, setTtnStatusError] = useState<string | null>(null);
+  const [ttnStatusVersion, setTtnStatusVersion] = useState(0);
+  const currentTtnNumber = orderDetails?.ttnNumber || null;
+
+  useEffect(() => {
+    if (!currentTtnNumber) {
+      setTtnStatus(null);
+      setTtnStatusError(null);
+      return;
+    }
+    let cancelled = false;
+    setTtnStatusLoading(true);
+    setTtnStatusError(null);
+    fetch(`/api/orders/${orderId}/ttn-status`)
+      .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+      .then(({ ok, data }) => {
+        if (cancelled) return;
+        if (!ok) throw new Error(data.error || 'Не вдалося отримати статус');
+        setTtnStatus(data.status as TtnStatusInfo);
+      })
+      .catch((error) => {
+        if (!cancelled) setTtnStatusError(error instanceof Error ? error.message : 'Помилка мережі');
+      })
+      .finally(() => {
+        if (!cancelled) setTtnStatusLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, currentTtnNumber, ttnStatusVersion]);
+
+  // ---- что из позиций заказа уже лежит на нашем складе ----
+  // Перечитываем вместе с историей (после любого изменения заказа)
+  const [stockAvailability, setStockAvailability] = useState<Record<string, WarehouseStockOption[]>>({});
+  const [takingItemId, setTakingItemId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/orders/${orderId}/stock-availability`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled && data.success) setStockAvailability(data.availability as Record<string, WarehouseStockOption[]>);
+      })
+      .catch(() => {
+        // Не критично: просто не покажем подсказку про склад
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, historyVersion]);
+
+  // "Взяти зі складу": позиция закрепляется за деталью с нашей полки и
+  // сразу становится "На складе". Статус всего заказа мог при этом
+  // сдвинуться дальше — поэтому перечитываем заказ целиком
+  const handleTakeFromStock = async (item: OrderItem, option: WarehouseStockOption) => {
+    if (!orderDetails) return;
+    setTakingItemId(item.id);
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}/items/${item.id}/take-from-stock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: option.productId }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося взяти зі складу');
+
+      const orderResponse = await fetch(`/api/orders/${orderDetails.id}`);
+      const orderData = await orderResponse.json();
+      if (orderResponse.ok && orderData.order) {
+        setOrderDetails(orderData.order as OrderDetails);
+        setStatusDraft((orderData.order as OrderDetails).status);
+      }
+      onOrderChanged();
+      bumpHistory();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setTakingItemId(null);
+    }
+  };
 
   // ---- удаление позиции из заказа ----
   const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
@@ -647,6 +775,9 @@ export default function OrderDetailsModal({
   const openCreateTtn = () => {
     setCreateTtnError(null);
     setTtnCost(orderDetails ? String(Math.ceil(orderDetails.totalAmount)) : '');
+    const unpaid = orderDetails ? Math.max(0, Math.ceil(orderDetails.totalAmount - orderDetails.paidAmount)) : 0;
+    setTtnCodEnabled(unpaid > 0);
+    setTtnCodAmount(unpaid > 0 ? String(unpaid) : '');
 
     const knownRecipient =
       orderDetails?.cityRef && orderDetails?.warehouseRef
@@ -667,6 +798,10 @@ export default function OrderDetailsModal({
       setCreateTtnError('Оберіть місто та відділення отримувача.');
       return;
     }
+    if (ttnCodEnabled && !(parseFloat(ttnCodAmount.replace(',', '.')) > 0)) {
+      setCreateTtnError('Вкажіть суму післяплати або зніміть галочку.');
+      return;
+    }
 
     setCreatingTtn(true);
     setCreateTtnError(null);
@@ -682,6 +817,7 @@ export default function OrderDetailsModal({
           cost: parseFloat(ttnCost),
           payerType: ttnPayerType,
           description: ttnDescription,
+          codAmount: ttnCodEnabled ? parseFloat(ttnCodAmount.replace(',', '.')) || 0 : 0,
         }),
       });
       const data = await response.json();
@@ -1421,6 +1557,63 @@ export default function OrderDetailsModal({
                       </div>
                     )}
 
+                    {/* ---- де зараз посилка (статус від Нової Пошти) ---- */}
+                    {orderDetails.ttnNumber && (
+                      <div className="mt-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          {ttnStatus ? (
+                            <span
+                              className="text-xs px-2 py-1 rounded-md font-medium"
+                              style={{ background: TTN_KIND_COLORS[ttnStatus.kind].bg, color: TTN_KIND_COLORS[ttnStatus.kind].fg }}
+                            >
+                              {ttnStatus.statusText}
+                            </span>
+                          ) : (
+                            <span className="text-xs" style={{ color: ttnStatusError ? 'var(--bad)' : 'var(--ink-faint)' }}>
+                              {ttnStatusLoading ? 'Перевіряю статус посилки...' : ttnStatusError || ''}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            disabled={ttnStatusLoading}
+                            onClick={() => setTtnStatusVersion((v) => v + 1)}
+                            className="text-[11px] underline shrink-0 disabled:opacity-50"
+                            style={{ color: 'var(--accent)' }}
+                          >
+                            {ttnStatusLoading ? '...' : 'Оновити'}
+                          </button>
+                        </div>
+                        {ttnStatus && (
+                          <div className="text-[11px] mt-1 flex flex-col gap-0.5" style={{ color: 'var(--ink-muted)' }}>
+                            {ttnStatus.kind === 'in_transit' && ttnStatus.scheduledDelivery && (
+                              <span>Очікувана доставка: {formatDateTime(ttnStatus.scheduledDelivery)}</span>
+                            )}
+                            {ttnStatus.kind === 'arrived' && ttnStatus.arrivedAt && (
+                              <span>
+                                У відділенні з {formatDateTime(ttnStatus.arrivedAt)}
+                                {ttnStatus.daysAtWarehouse !== null ? ` · днів: ${ttnStatus.daysAtWarehouse}` : ''}
+                              </span>
+                            )}
+                            {ttnStatus.kind === 'arrived' && ttnStatus.paidStorageFrom && (
+                              <span>Платне зберігання з: {formatDateTime(ttnStatus.paidStorageFrom)}</span>
+                            )}
+                            {ttnStatus.kind === 'received' && ttnStatus.receivedAt && (
+                              <span>Отримано: {formatDateTime(ttnStatus.receivedAt)}</span>
+                            )}
+                            {/* Клієнт давно не забирає посилку — час подзвонити,
+                                поки не почалось платне зберігання чи повернення */}
+                            {ttnStatus.kind === 'arrived' &&
+                              ttnStatus.daysAtWarehouse !== null &&
+                              ttnStatus.daysAtWarehouse >= STORAGE_WARNING_DAYS && (
+                                <span className="font-medium" style={{ color: 'var(--bad)' }}>
+                                  ⚠ Посилка лежить у відділенні {ttnStatus.daysAtWarehouse} дн. — зателефонуйте клієнту
+                                </span>
+                              )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {/* ---- повідомлення клієнту про ТТН ----
                         Автоматично воно йде в Telegram, як тільки з'являється
                         номер, — але лише тим, хто підключив бота магазину.
@@ -1604,6 +1797,50 @@ export default function OrderDetailsModal({
                           value={ttnDescription}
                           onChange={(e) => setTtnDescription(e.target.value)}
                         />
+
+                        {/* ---- післяплата: Нова Пошта візьме гроші з клієнта при
+                            отриманні й перекаже нам (комісію платить отримувач) ---- */}
+                        <div className="p-2.5 rounded-md" style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}>
+                          <label className="flex items-center gap-2 text-sm cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={ttnCodEnabled}
+                              onChange={(e) => setTtnCodEnabled(e.target.checked)}
+                            />
+                            З післяплатою
+                          </label>
+                          {ttnCodEnabled && (
+                            <div className="flex items-center gap-2 mt-2">
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-32 px-3 py-2 text-sm rounded-md font-mono text-right"
+                                style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)' }}
+                                value={ttnCodAmount}
+                                onChange={(e) => setTtnCodAmount(e.target.value)}
+                              />
+                              <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+                                грн
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setTtnCodAmount(
+                                    String(Math.max(0, Math.ceil(orderDetails.totalAmount - orderDetails.paidAmount)))
+                                  )
+                                }
+                                className="text-[11px] underline"
+                                style={{ color: 'var(--accent)' }}
+                              >
+                                = недоплата ({formatMoney(Math.max(0, orderDetails.totalAmount - orderDetails.paidAmount))} грн)
+                              </button>
+                            </div>
+                          )}
+                          <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                            Клієнт заплатить при отриманні. Оголошена вартість автоматично буде не меншою за суму
+                            післяплати.
+                          </p>
+                        </div>
 
                         {createTtnError && (
                           <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
@@ -1823,6 +2060,38 @@ export default function OrderDetailsModal({
                                       {item.supplierName ? ` · ${item.supplierName}` : ''}
                                       {item.supplierContactName ? ` (${item.supplierContactName})` : ''}
                                     </p>
+                                    {/* Деталь уже лежить у нас на складі — можна не замовляти
+                                        у постачальника, а одразу взяти з полиці */}
+                                    {item.status === 'pending' &&
+                                      (stockAvailability[item.id] || []).length > 0 &&
+                                      (() => {
+                                        const options = stockAvailability[item.id];
+                                        const enough = options.find((o) => o.available >= item.quantity);
+                                        const total = options.reduce((sum, o) => sum + o.available, 0);
+                                        return (
+                                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                            <span className="text-xs" style={{ color: 'var(--good)' }}>
+                                              ● У нас на складі: {total} шт
+                                            </span>
+                                            {enough ? (
+                                              <button
+                                                type="button"
+                                                disabled={takingItemId === item.id}
+                                                onClick={() => handleTakeFromStock(item, enough)}
+                                                className="text-[11px] px-2 py-0.5 rounded-md disabled:opacity-50"
+                                                style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
+                                                title={`Взяти ${item.quantity} шт з нашого складу (${enough.supplierName}, закупка ${formatMoney(enough.costPrice)} грн)`}
+                                              >
+                                                {takingItemId === item.id ? 'Беру...' : 'Взяти зі складу'}
+                                              </button>
+                                            ) : (
+                                              <span className="text-[11px]" style={{ color: 'var(--warn)' }}>
+                                                (потрібно {item.quantity} шт — не вистачає)
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
                                   </td>
                                   <td className="px-3 py-2.5 align-top text-right font-mono whitespace-nowrap">
                                     {item.quantity}
