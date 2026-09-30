@@ -879,7 +879,7 @@ export default function OrderDetailsModal({
                       </label>
                       <input
                         type="text"
-                        className="w-full px-2.5 py-1.5 text-sm rounded-md"
+                        className="w-full px-3 py-2 text-sm rounded-md"
                         style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                         value={customerNameDraft}
                         onChange={(e) => setCustomerNameDraft(e.target.value)}
@@ -892,7 +892,7 @@ export default function OrderDetailsModal({
                       </label>
                       <input
                         type="text"
-                        className="w-full px-2.5 py-1.5 text-sm rounded-md"
+                        className="w-full px-3 py-2 text-sm rounded-md"
                         style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                         value={customerSurnameDraft}
                         onChange={(e) => setCustomerSurnameDraft(e.target.value)}
@@ -906,7 +906,7 @@ export default function OrderDetailsModal({
                     </label>
                     <input
                       type="tel"
-                      className="w-full px-2.5 py-1.5 text-sm rounded-md font-mono"
+                      className="w-full px-3 py-2 text-sm rounded-md font-mono"
                       style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                       value={customerPhoneDraft}
                       onChange={(e) => setCustomerPhoneDraft(e.target.value)}
@@ -988,7 +988,7 @@ export default function OrderDetailsModal({
                     ) : (
                       <input
                         type="text"
-                        className="w-full px-3 py-1.5 text-sm rounded-md font-mono"
+                        className="w-full px-3 py-2 text-sm rounded-md font-mono"
                         style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                         placeholder="Ще не вказано"
                         value={ttnDraft}
@@ -1051,42 +1051,42 @@ export default function OrderDetailsModal({
 
                         <div className="grid grid-cols-3 gap-2">
                           <div>
-                            <label className="block text-[11px] mb-1" style={{ color: 'var(--ink-muted)' }}>
+                            <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>
                               Вага, кг
                             </label>
                             <input
                               type="number"
                               min={0.1}
                               step="0.1"
-                              className="w-full px-2 py-1.5 text-xs rounded-md font-mono"
+                              className="w-full px-3 py-2 text-sm rounded-md font-mono"
                               style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                               value={ttnWeight}
                               onChange={(e) => setTtnWeight(e.target.value)}
                             />
                           </div>
                           <div>
-                            <label className="block text-[11px] mb-1" style={{ color: 'var(--ink-muted)' }}>
+                            <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>
                               Місць
                             </label>
                             <input
                               type="number"
                               min={1}
                               step={1}
-                              className="w-full px-2 py-1.5 text-xs rounded-md font-mono"
+                              className="w-full px-3 py-2 text-sm rounded-md font-mono"
                               style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                               value={ttnSeats}
                               onChange={(e) => setTtnSeats(e.target.value)}
                             />
                           </div>
                           <div>
-                            <label className="block text-[11px] mb-1" style={{ color: 'var(--ink-muted)' }}>
+                            <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>
                               Оцінка, грн
                             </label>
                             <input
                               type="number"
                               min={1}
                               step="1"
-                              className="w-full px-2 py-1.5 text-xs rounded-md font-mono"
+                              className="w-full px-3 py-2 text-sm rounded-md font-mono"
                               style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                               value={ttnCost}
                               onChange={(e) => setTtnCost(e.target.value)}
@@ -1095,7 +1095,7 @@ export default function OrderDetailsModal({
                         </div>
 
                         <select
-                          className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                          className="w-full px-3 py-2 text-sm rounded-md"
                           style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                           value={ttnPayerType}
                           onChange={(e) => setTtnPayerType(e.target.value as 'Recipient' | 'Sender')}
@@ -1107,7 +1107,7 @@ export default function OrderDetailsModal({
                         <input
                           type="text"
                           placeholder="Опис відправлення"
-                          className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                          className="w-full px-3 py-2 text-sm rounded-md"
                           style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                           value={ttnDescription}
                           onChange={(e) => setTtnDescription(e.target.value)}
@@ -1151,10 +1151,12 @@ export default function OrderDetailsModal({
                     </h3>
                     <SaveIndicator save={saveState.vehicle} />
                   </div>
-                  <div className="flex gap-2">
+                  {/* Авто и VIN — в две строки: VIN из 17 символов в узком поле
+                      рядом с авто не помещался и цифры обрезались */}
+                  <div className="flex flex-col gap-2">
                     <input
                       type="text"
-                      className="flex-1 min-w-0 px-3 py-1.5 text-sm rounded-md"
+                      className="w-full px-3 py-2 text-sm rounded-md"
                       style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                       placeholder="напр. Volkswagen Golf 2015"
                       value={carInfoDraft}
@@ -1163,7 +1165,8 @@ export default function OrderDetailsModal({
                     />
                     <input
                       type="text"
-                      className="w-28 shrink-0 px-3 py-1.5 text-sm rounded-md font-mono uppercase"
+                      maxLength={17}
+                      className="w-full px-3 py-2 text-sm rounded-md font-mono uppercase tracking-wide"
                       style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                       placeholder="VIN"
                       value={vinDraft}
@@ -1354,59 +1357,21 @@ export default function OrderDetailsModal({
                                 {isEditing && (
                                   <tr style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
                                     <td colSpan={6} className="px-3 py-3">
-                                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-2.5">
+                                      {/* Порядок полей — как думает менеджер: сначала У КОГО
+                                          берём (поставщик), потом ПО ЧЁМ берём (закупка), потом
+                                          ЗА СКОЛЬКО продаём и сколько штук. Поля крупные (text-sm,
+                                          py-2), чтобы цифры целиком помещались и легко читались */}
+                                      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,0.7fr)] gap-3 mb-3">
                                         <div>
-                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
-                                            Кількість
-                                          </label>
-                                          <input
-                                            type="number"
-                                            min={1}
-                                            step={1}
-                                            className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
-                                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
-                                            value={editItemQuantity}
-                                            onChange={(e) => setEditItemQuantity(e.target.value)}
-                                            autoFocus
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
-                                            Ціна продажу
-                                          </label>
-                                          <input
-                                            type="number"
-                                            min={0}
-                                            step="any"
-                                            className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
-                                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
-                                            value={editItemPrice}
-                                            onChange={(e) => setEditItemPrice(e.target.value)}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
-                                            Ціна закупки
-                                          </label>
-                                          <input
-                                            type="number"
-                                            min={0}
-                                            step="any"
-                                            className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
-                                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
-                                            value={editItemCostPrice}
-                                            onChange={(e) => setEditItemCostPrice(e.target.value)}
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
                                             Поставщик
                                           </label>
                                           <select
-                                            className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                                            className="w-full px-3 py-2 text-sm rounded-md"
                                             style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                                             value={editItemSupplierId}
                                             onChange={(e) => setEditItemSupplierId(e.target.value)}
+                                            autoFocus
                                           >
                                             <option value="">Выберите поставщика</option>
                                             {suppliers.map((s) => (
@@ -1416,7 +1381,66 @@ export default function OrderDetailsModal({
                                             ))}
                                           </select>
                                         </div>
+                                        <div>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                            Ціна закупки, грн
+                                          </label>
+                                          <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            className="w-full min-w-[7rem] px-3 py-2 text-sm rounded-md font-mono text-right"
+                                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                            value={editItemCostPrice}
+                                            onChange={(e) => setEditItemCostPrice(e.target.value)}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                            Ціна продажу, грн
+                                          </label>
+                                          <input
+                                            type="text"
+                                            inputMode="decimal"
+                                            className="w-full min-w-[7rem] px-3 py-2 text-sm rounded-md font-mono text-right"
+                                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                            value={editItemPrice}
+                                            onChange={(e) => setEditItemPrice(e.target.value)}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                            Кількість
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            step={1}
+                                            className="w-full min-w-[4.5rem] px-3 py-2 text-sm rounded-md font-mono text-right"
+                                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                                            value={editItemQuantity}
+                                            onChange={(e) => setEditItemQuantity(e.target.value)}
+                                          />
+                                        </div>
                                       </div>
+
+                                      {/* Подсказка "сколько зарабатываем" — считается сразу при
+                                          вводе цен, до сохранения, чтобы не продать в минус */}
+                                      {(() => {
+                                        const cost = parseFloat(editItemCostPrice.replace(',', '.'));
+                                        const sale = parseFloat(editItemPrice.replace(',', '.'));
+                                        const qty = parseInt(editItemQuantity, 10) || 0;
+                                        if (!Number.isFinite(cost) || !Number.isFinite(sale) || cost <= 0) return null;
+                                        const markupPercent = ((sale - cost) / cost) * 100;
+                                        const profit = (sale - cost) * qty;
+                                        const isLoss = sale < cost;
+                                        return (
+                                          <p className="text-xs mb-3" style={{ color: isLoss ? 'var(--bad)' : 'var(--ink-muted)' }}>
+                                            {isLoss ? 'Продаж у мінус! ' : ''}
+                                            Націнка: <b>{markupPercent.toFixed(1)}%</b> · Прибуток з позиції:{' '}
+                                            <b>{formatMoney(profit)} грн</b>
+                                          </p>
+                                        );
+                                      })()}
 
                                       {editItemError && (
                                         <p className="text-[11px] mb-2" style={{ color: 'var(--bad)' }}>
@@ -1429,7 +1453,7 @@ export default function OrderDetailsModal({
                                           type="button"
                                           disabled={editItemSaving}
                                           onClick={handleSaveItem}
-                                          className="px-4 py-1.5 rounded-md text-xs font-medium disabled:opacity-50"
+                                          className="px-5 py-2 rounded-md text-sm font-medium disabled:opacity-50"
                                           style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
                                         >
                                           {editItemSaving ? 'Сохранение...' : 'Сохранить'}
@@ -1437,7 +1461,7 @@ export default function OrderDetailsModal({
                                         <button
                                           type="button"
                                           onClick={cancelItemEdit}
-                                          className="px-3 py-1.5 rounded-md text-xs"
+                                          className="px-4 py-2 rounded-md text-sm"
                                           style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
                                         >
                                           Отмена
@@ -1452,7 +1476,7 @@ export default function OrderDetailsModal({
                                     <td colSpan={6} className="px-3 py-3">
                                       <div className="grid grid-cols-2 gap-2.5 mb-2.5">
                                         <div>
-                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
                                             Количество (из {item.quantity})
                                           </label>
                                           <input
@@ -1460,7 +1484,7 @@ export default function OrderDetailsModal({
                                             min={1}
                                             max={item.quantity}
                                             step={1}
-                                            className="w-full px-2.5 py-1.5 text-xs rounded-md font-mono"
+                                            className="w-full px-3 py-2 text-sm rounded-md font-mono"
                                             style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                                             value={returnQuantity}
                                             onChange={(e) => setReturnQuantity(e.target.value)}
@@ -1468,11 +1492,11 @@ export default function OrderDetailsModal({
                                           />
                                         </div>
                                         <div>
-                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
                                             Причина
                                           </label>
                                           <select
-                                            className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                                            className="w-full px-3 py-2 text-sm rounded-md"
                                             style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                                             value={returnReason}
                                             onChange={(e) => setReturnReason(e.target.value as typeof returnReason)}
@@ -1484,11 +1508,11 @@ export default function OrderDetailsModal({
                                           </select>
                                         </div>
                                         <div>
-                                          <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                          <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
                                             Возврат денег
                                           </label>
                                           <select
-                                            className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                                            className="w-full px-3 py-2 text-sm rounded-md"
                                             style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                                             value={returnRefundMethod}
                                             onChange={(e) => setReturnRefundMethod(e.target.value as typeof returnRefundMethod)}
@@ -1500,11 +1524,11 @@ export default function OrderDetailsModal({
                                         </div>
                                         {returnRefundMethod !== 'balance' && (
                                           <div>
-                                            <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                                            <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
                                               Касса выдачи
                                             </label>
                                             <select
-                                              className="w-full px-2.5 py-1.5 text-xs rounded-md"
+                                              className="w-full px-3 py-2 text-sm rounded-md"
                                               style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                                               value={returnCashRegisterId}
                                               onChange={(e) => setReturnCashRegisterId(e.target.value)}
@@ -1523,7 +1547,7 @@ export default function OrderDetailsModal({
                                       <input
                                         type="text"
                                         placeholder="Комментарий (необязательно)"
-                                        className="w-full px-2.5 py-1.5 text-xs rounded-md mb-2.5"
+                                        className="w-full px-3 py-2 text-sm rounded-md mb-2.5"
                                         style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
                                         value={returnComment}
                                         onChange={(e) => setReturnComment(e.target.value)}
