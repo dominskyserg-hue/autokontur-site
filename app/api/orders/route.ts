@@ -15,6 +15,15 @@
 //               если не передан — показываются заказы всех статусов
 //   search    — ищет совпадение по имени клиента, фамилии ИЛИ по
 //               телефону (регистронезависимо, по подстроке)
+//   dateFrom  — YYYY-MM-DD: заказы, созданные в этот день или позже
+//   dateTo    — YYYY-MM-DD: заказы, созданные в этот день или раньше
+//               (день считается по киевскому времени)
+//   unpaid    — "1": только заказы, оплаченные не полностью (без
+//               отменённых — там платить уже нечего)
+//   withCounts — "1": дополнительно вернуть counts — сколько заказов
+//               в каждом статусе и сколько неоплаченных (с учётом
+//               поиска и дат, но БЕЗ фильтра по статусу) — для кнопок
+//               быстрых фильтров над списком (components/OrdersScreen.tsx)
 //
 // Сумма заказа и количество позиций в нём — НЕ отдельные колонки в
 // таблице orders, а считаются "на лету" агрегатными функциями
@@ -81,6 +90,22 @@ function isValidStatus(value: string): value is OrderStatus {
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+// Оплаченная сумма заказа — отдельным коррелированным подзапросом, а
+// не через JOIN с cash_movements: JOIN вместе с уже имеющимся JOIN
+// order_items размножил бы строки (одна на каждую пару позиция×движение
+// кассы) и испортил бы SUM(). Вынесено в константу, потому что нужно
+// в трёх местах: в списке, в фильтре "Не оплачены" и в счётчике
+const PAID_AMOUNT_SQL = `COALESCE(
+  (SELECT SUM(cm.amount) FROM cash_movements cm
+   WHERE cm.order_id = o.id AND cm.type IN ('customer_payment', 'customer_prepayment', 'customer_refund')),
+  0
+)`;
+
+// Сумма заказа — тоже в трёх местах, поэтому тоже константа
+const ORDER_TOTAL_SQL = `COALESCE((SELECT SUM(oi2.price * oi2.quantity) FROM order_items oi2 WHERE oi2.order_id = o.id), 0)`;
+
 // Один заказ в списке — БЕЗ состава товаров (полный состав отдаётся
 // только для одного конкретного заказа через GET /api/orders/[id])
 interface OrderListItem {
@@ -124,6 +149,14 @@ export async function GET(request: NextRequest) {
     // ---- фильтры ----
     const statusFilter = (searchParams.get('status') || '').trim();
     const search = (searchParams.get('search') || '').trim();
+    const dateFrom = (searchParams.get('dateFrom') || '').trim();
+    const dateTo = (searchParams.get('dateTo') || '').trim();
+    const unpaidOnly = searchParams.get('unpaid') === '1';
+    const withCounts = searchParams.get('withCounts') === '1';
+
+    if ((dateFrom && !DATE_PATTERN.test(dateFrom)) || (dateTo && !DATE_PATTERN.test(dateTo))) {
+      return NextResponse.json({ error: 'Дата должна быть в формате ГГГГ-ММ-ДД.' }, { status: 400 });
+    }
 
     if (statusFilter && !isValidStatus(statusFilter)) {
       return NextResponse.json(
@@ -133,13 +166,11 @@ export async function GET(request: NextRequest) {
     }
 
     // ---- собираем WHERE-условие и параметры динамически ----
+    // Сначала общие условия (поиск и даты) — они же нужны счётчикам
+    // быстрых фильтров. Статус и "Не оплачены" добавляем после, только
+    // для самого списка
     const conditions: string[] = [];
     const values: unknown[] = [];
-
-    if (statusFilter) {
-      values.push(statusFilter);
-      conditions.push(`o.status = $${values.length}`);
-    }
 
     if (search) {
       // Один и тот же текст ищем в имени, фамилии и телефоне — так поле
@@ -148,6 +179,30 @@ export async function GET(request: NextRequest) {
       conditions.push(
         `(o.customer_name ILIKE $${values.length} OR o.customer_surname ILIKE $${values.length} OR o.customer_phone ILIKE $${values.length})`
       );
+    }
+
+    // День заказа считаем по киевскому времени — иначе заказ, сделанный
+    // в 01:00 ночи, по UTC попал бы во вчерашний день
+    if (dateFrom) {
+      values.push(dateFrom);
+      conditions.push(`(o.created_at AT TIME ZONE 'Europe/Kyiv')::date >= $${values.length}::date`);
+    }
+    if (dateTo) {
+      values.push(dateTo);
+      conditions.push(`(o.created_at AT TIME ZONE 'Europe/Kyiv')::date <= $${values.length}::date`);
+    }
+
+    // Копия общих условий и параметров — для счётчиков (без статуса)
+    const commonConditions = [...conditions];
+    const commonValues = [...values];
+
+    if (statusFilter) {
+      values.push(statusFilter);
+      conditions.push(`o.status = $${values.length}`);
+    }
+
+    if (unpaidOnly) {
+      conditions.push(`o.status <> 'cancelled' AND ${PAID_AMOUNT_SQL} < ${ORDER_TOTAL_SQL}`);
     }
 
     const whereSql = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -175,15 +230,7 @@ export async function GET(request: NextRequest) {
         o.updated_at,
         COUNT(oi.id) AS items_count,
         COALESCE(SUM(oi.price * oi.quantity), 0) AS total_amount,
-        -- Оплаченная сумма — отдельным коррелированным подзапросом, а
-        -- не через JOIN с cash_movements: JOIN вместе с уже имеющимся
-        -- JOIN order_items размножил бы строки (одна на каждую пару
-        -- позиция×движение кассы) и испортил бы оба SUM() выше
-        COALESCE(
-          (SELECT SUM(cm.amount) FROM cash_movements cm
-           WHERE cm.order_id = o.id AND cm.type IN ('customer_payment', 'customer_prepayment', 'customer_refund')),
-          0
-        ) AS paid_amount,
+        ${PAID_AMOUNT_SQL} AS paid_amount,
         COUNT(*) OVER() AS total_count
       FROM orders o
       LEFT JOIN order_items oi ON oi.order_id = o.id
@@ -217,10 +264,39 @@ export async function GET(request: NextRequest) {
       updatedAt: row.updated_at,
     }));
 
+    // ---- счётчики для кнопок быстрых фильтров ----
+    let counts: { byStatus: Record<string, number>; unpaid: number; all: number } | undefined;
+    if (withCounts) {
+      const commonWhere = commonConditions.length > 0 ? `WHERE ${commonConditions.join(' AND ')}` : '';
+      const countsResult = await pool.query(
+        `
+        SELECT
+          o.status,
+          COUNT(*)::int AS total,
+          COUNT(*) FILTER (WHERE o.status <> 'cancelled' AND ${PAID_AMOUNT_SQL} < ${ORDER_TOTAL_SQL})::int AS unpaid
+        FROM orders o
+        ${commonWhere}
+        GROUP BY o.status
+        `,
+        commonValues
+      );
+
+      const byStatus: Record<string, number> = {};
+      let unpaid = 0;
+      let all = 0;
+      for (const row of countsResult.rows) {
+        byStatus[row.status] = row.total;
+        unpaid += row.unpaid;
+        all += row.total;
+      }
+      counts = { byStatus, unpaid, all };
+    }
+
     return NextResponse.json({
       success: true,
       orders,
       pagination: { page, pageSize, totalCount, totalPages },
+      ...(counts ? { counts } : {}),
     });
   } catch (error) {
     console.error('Ошибка при получении списка заказов:', error);

@@ -95,6 +95,13 @@ export default function CustomerDetailScreen({ customerId }: { customerId: strin
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // ---- акт сверки: период по умолчанию — с начала года по сегодня ----
+  const [actFrom, setActFrom] = useState(() => `${new Date().getFullYear()}-01-01`);
+  const [actTo, setActTo] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  });
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
@@ -218,6 +225,62 @@ export default function CustomerDetailScreen({ customerId }: { customerId: strin
               </p>
             </div>
           </div>
+
+          {/* ==================== АКТ СВЕРКИ ==================== */}
+          {/* Документ для клиента: сальдо на начало, все операции за
+              период и сальдо на конец (app/api/admin/customers/[id]/reconciliation) */}
+          <section
+            className="p-4 rounded-lg mb-6 flex flex-wrap items-end gap-3"
+            style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}
+          >
+            <div className="mr-2">
+              <h2 className="text-base font-semibold">Акт сверки</h2>
+              <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+                Для клиента, если он сомневается в сумме долга
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                С
+              </label>
+              <input
+                type="date"
+                className="px-3 py-2 text-sm rounded-md"
+                // colorScheme: 'dark' — иначе значок календаря чёрный на тёмном фоне
+                style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)', colorScheme: 'dark' }}
+                value={actFrom}
+                onChange={(e) => setActFrom(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
+                По
+              </label>
+              <input
+                type="date"
+                className="px-3 py-2 text-sm rounded-md"
+                style={{ border: '1px solid var(--line)', background: 'var(--surface-2)', color: 'var(--ink)', colorScheme: 'dark' }}
+                value={actTo}
+                onChange={(e) => setActTo(e.target.value)}
+              />
+            </div>
+            <a
+              href={`/api/admin/customers/${customerId}/reconciliation?from=${actFrom}&to=${actTo}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-md text-sm font-medium"
+              style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+            >
+              Открыть для печати
+            </a>
+            <a
+              href={`/api/admin/customers/${customerId}/reconciliation?from=${actFrom}&to=${actTo}&format=pdf`}
+              className="px-4 py-2 rounded-md text-sm font-medium"
+              style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+            >
+              Скачать PDF
+            </a>
+          </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-[22rem_1fr] gap-6 items-start">
             {/* ==================== ФОРМА НОВОЙ ОПЕРАЦИИ ==================== */}
