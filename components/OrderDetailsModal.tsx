@@ -61,6 +61,24 @@ interface OrderItem {
   status: OrderItemStatus;
 }
 
+// Предложение того же артикула у одного из поставщиков — то, что
+// отдаёт GET /api/admin/products/offers (варианты при редактировании
+// позиции: у кого ещё есть деталь, почём и сколько)
+interface SupplierOffer {
+  productId: string;
+  supplierId: string;
+  supplierName: string;
+  brand: string | null;
+  name: string | null;
+  costPrice: number;
+  retailPrice: number;
+  stock: number;
+  sameBrand: boolean;
+}
+
+// Кнопки быстрой наценки на цену продажи: +15%, +20%, +30% от закупки
+const QUICK_MARKUPS = [15, 20, 30];
+
 interface OrderDetails {
   id: string;
   orderNumber: number;
@@ -200,6 +218,10 @@ export default function OrderDetailsModal({
   const [editItemCostPrice, setEditItemCostPrice] = useState('');
   const [editItemSupplierId, setEditItemSupplierId] = useState('');
   const [editItemQuantity, setEditItemQuantity] = useState('');
+  // ---- предложения всех поставщиков по артикулу редактируемой позиции ----
+  const [itemOffers, setItemOffers] = useState<SupplierOffer[]>([]);
+  const [itemOffersLoading, setItemOffersLoading] = useState(false);
+  const [itemOffersError, setItemOffersError] = useState<string | null>(null);
   const [editItemSaving, setEditItemSaving] = useState(false);
   const [editItemError, setEditItemError] = useState<string | null>(null);
 
@@ -509,6 +531,35 @@ export default function OrderDetailsModal({
     setEditItemSupplierId(item.supplierId || '');
     setEditItemQuantity(String(item.quantity));
     setEditItemError(null);
+    loadItemOffers(item);
+  };
+
+  // Предложения того же артикула у всех поставщиков — грузим при
+  // открытии редактирования позиции
+  const loadItemOffers = async (item: OrderItem) => {
+    setItemOffers([]);
+    setItemOffersError(null);
+    setItemOffersLoading(true);
+    try {
+      const params = new URLSearchParams({ article: item.article });
+      if (item.brand) params.set('brand', item.brand);
+      const response = await fetch(`/api/admin/products/offers?${params.toString()}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не удалось загрузить предложения');
+      setItemOffers(data.offers as SupplierOffer[]);
+    } catch (error) {
+      setItemOffersError(error instanceof Error ? error.message : 'Ошибка сети');
+    } finally {
+      setItemOffersLoading(false);
+    }
+  };
+
+  // Выбор предложения — подставляем поставщика и его цену закупки.
+  // Цену продажи НЕ трогаем: её менеджер решает сам (или кнопками
+  // быстрой цены под полем)
+  const pickOffer = (offer: SupplierOffer) => {
+    setEditItemSupplierId(offer.supplierId);
+    setEditItemCostPrice(String(offer.costPrice));
   };
 
   const cancelItemEdit = () => {
@@ -810,6 +861,38 @@ export default function OrderDetailsModal({
                 <p className="text-lg font-semibold font-mono">{formatMoney(orderDetails.totalAmount)} грн</p>
               </div>
             )}
+            {/* Закупка и прибыль по заказу — только по живым позициям
+                (отменённые и возвращённые не считаем: их уже не продаём) */}
+            {orderDetails &&
+              (() => {
+                const activeItems = orderDetails.items.filter(
+                  (item) => item.status !== 'cancelled' && item.status !== 'returned'
+                );
+                const revenue = activeItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+                const cost = activeItems.reduce((sum, item) => sum + item.costPrice * item.quantity, 0);
+                const profit = revenue - cost;
+                const markupPercent = cost > 0 ? (profit / cost) * 100 : null;
+                return (
+                  <div className="text-right pl-3" style={{ borderLeft: '1px solid var(--line)' }}>
+                    <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                      Закупка {formatMoney(cost)} грн
+                    </p>
+                    <p
+                      className="text-lg font-semibold font-mono"
+                      style={{ color: profit < 0 ? 'var(--bad)' : 'var(--good)' }}
+                      title="Прибуток = продаж − закупка"
+                    >
+                      {profit < 0 ? '−' : '+'}
+                      {formatMoney(Math.abs(profit))} грн
+                      {markupPercent !== null && (
+                        <span className="text-xs font-normal ml-1" style={{ color: 'var(--ink-muted)' }}>
+                          ({markupPercent.toFixed(0)}%)
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                );
+              })()}
             {orderDetails && (
               <div className="flex items-center gap-2">
                 <button
@@ -1357,6 +1440,106 @@ export default function OrderDetailsModal({
                                 {isEditing && (
                                   <tr style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
                                     <td colSpan={6} className="px-3 py-3">
+                                      {/* ==== ПРЕДЛОЖЕНИЯ ВСЕХ ПОСТАВЩИКОВ ПО ЭТОМУ АРТИКУЛУ ==== */}
+                                      <div className="mb-3">
+                                        <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                                          Хто ще має цей артикул
+                                        </p>
+                                        {itemOffersLoading && (
+                                          <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                                            Пошук пропозицій...
+                                          </p>
+                                        )}
+                                        {itemOffersError && (
+                                          <p className="text-xs" style={{ color: 'var(--bad)' }}>
+                                            {itemOffersError}
+                                          </p>
+                                        )}
+                                        {!itemOffersLoading && !itemOffersError && itemOffers.length === 0 && (
+                                          <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                                            Інших пропозицій у прайсах не знайдено.
+                                          </p>
+                                        )}
+                                        {itemOffers.length > 0 && (
+                                          <div
+                                            className="rounded-md overflow-hidden max-h-56 overflow-y-auto"
+                                            style={{ border: '1px solid var(--line)' }}
+                                          >
+                                            <table className="w-full text-sm">
+                                              <thead>
+                                                <tr style={{ background: 'var(--surface)' }}>
+                                                  {['Постачальник', 'Бренд', 'Наявність', 'Закупка', 'Прайс', ''].map((h, i) => (
+                                                    <th
+                                                      key={h || i}
+                                                      className={`px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap ${
+                                                        i >= 2 && i <= 4 ? 'text-right' : 'text-left'
+                                                      }`}
+                                                      style={{ color: 'var(--ink-muted)' }}
+                                                    >
+                                                      {h}
+                                                    </th>
+                                                  ))}
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {itemOffers.map((offer) => {
+                                                  // Подсвечиваем строку того поставщика, который сейчас
+                                                  // выбран в поле "Поставщик" ниже
+                                                  const isSelected = offer.supplierId === editItemSupplierId;
+                                                  return (
+                                                    <tr
+                                                      key={offer.productId}
+                                                      onClick={() => pickOffer(offer)}
+                                                      className="cursor-pointer"
+                                                      style={{
+                                                        borderTop: '1px solid var(--line)',
+                                                        background: isSelected ? 'var(--accent-soft)' : 'transparent',
+                                                      }}
+                                                    >
+                                                      <td className="px-2.5 py-1.5 whitespace-nowrap">{offer.supplierName}</td>
+                                                      <td
+                                                        className="px-2.5 py-1.5 whitespace-nowrap"
+                                                        style={{ color: offer.sameBrand ? 'var(--ink)' : 'var(--warn)' }}
+                                                        title={offer.sameBrand ? '' : 'Інший бренд — можливо, інша деталь'}
+                                                      >
+                                                        {offer.brand || '—'}
+                                                      </td>
+                                                      <td
+                                                        className="px-2.5 py-1.5 text-right font-mono whitespace-nowrap"
+                                                        style={{ color: offer.stock > 0 ? 'var(--good)' : 'var(--ink-faint)' }}
+                                                      >
+                                                        {offer.stock > 0 ? `${offer.stock} шт` : 'немає'}
+                                                      </td>
+                                                      <td className="px-2.5 py-1.5 text-right font-mono whitespace-nowrap">
+                                                        {formatMoney(offer.costPrice)}
+                                                      </td>
+                                                      <td
+                                                        className="px-2.5 py-1.5 text-right font-mono whitespace-nowrap"
+                                                        style={{ color: 'var(--ink-muted)' }}
+                                                      >
+                                                        {formatMoney(offer.retailPrice)}
+                                                      </td>
+                                                      <td className="px-2.5 py-1.5 text-right whitespace-nowrap">
+                                                        <span
+                                                          className="text-[11px] px-2 py-0.5 rounded-md"
+                                                          style={{
+                                                            color: isSelected ? 'var(--accent-ink)' : 'var(--accent)',
+                                                            background: isSelected ? 'var(--accent)' : 'transparent',
+                                                            border: '1px solid var(--accent)',
+                                                          }}
+                                                        >
+                                                          {isSelected ? 'Обрано' : 'Обрати'}
+                                                        </span>
+                                                      </td>
+                                                    </tr>
+                                                  );
+                                                })}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        )}
+                                      </div>
+
                                       {/* Порядок полей — как думает менеджер: сначала У КОГО
                                           берём (поставщик), потом ПО ЧЁМ берём (закупка), потом
                                           ЗА СКОЛЬКО продаём и сколько штук. Поля крупные (text-sm,
@@ -1406,6 +1589,43 @@ export default function OrderDetailsModal({
                                             value={editItemPrice}
                                             onChange={(e) => setEditItemPrice(e.target.value)}
                                           />
+                                          {/* Быстрая цена продажи: из прайса выбранного поставщика
+                                              или наценка от закупки. Округляем вверх до целой гривны —
+                                              так цены выглядят аккуратно и точно не ниже расчёта */}
+                                          {(() => {
+                                            const cost = parseFloat(editItemCostPrice.replace(',', '.'));
+                                            const selectedOffer = itemOffers.find((o) => o.supplierId === editItemSupplierId);
+                                            const hasCost = Number.isFinite(cost) && cost > 0;
+                                            if (!selectedOffer && !hasCost) return null;
+                                            return (
+                                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                                {selectedOffer && selectedOffer.retailPrice > 0 && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => setEditItemPrice(String(Math.ceil(selectedOffer.retailPrice)))}
+                                                    className="text-[11px] px-1.5 py-0.5 rounded"
+                                                    style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                                                    title="Ціна з прайсу обраного постачальника"
+                                                  >
+                                                    Прайс
+                                                  </button>
+                                                )}
+                                                {hasCost &&
+                                                  QUICK_MARKUPS.map((percent) => (
+                                                    <button
+                                                      key={percent}
+                                                      type="button"
+                                                      onClick={() => setEditItemPrice(String(Math.ceil(cost * (1 + percent / 100))))}
+                                                      className="text-[11px] px-1.5 py-0.5 rounded"
+                                                      style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                                                      title={`Закупка + ${percent}%`}
+                                                    >
+                                                      +{percent}%
+                                                    </button>
+                                                  ))}
+                                              </div>
+                                            );
+                                          })()}
                                         </div>
                                         <div>
                                           <label className="block text-xs font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>
