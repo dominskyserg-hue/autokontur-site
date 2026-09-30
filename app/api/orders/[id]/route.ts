@@ -18,6 +18,7 @@ import { isCustomerTelegramLinked, notifyCustomerTtnAssigned } from '@/lib/order
 import { logOrderEvent, historyValue } from '@/lib/orderHistory';
 import { ensureOrderExtraColumns } from '@/lib/orderColumns';
 import { describeOrderSource, type OrderSource } from '@/lib/orderSource';
+import { buildProductPath } from '@/lib/slug';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { STATUS_LABELS } from '@/lib/orderUi';
 import { requireAdmin } from '@/lib/adminAuth';
@@ -111,6 +112,12 @@ interface OrderItemResponse {
   // (поставщика видалили — ON DELETE SET NULL, schema.sql)
   supplierContactName: string | null;
   status: OrderItemStatus;
+  // Товар в каталоге СЕЙЧАС (если его ещё не удалили): фото и адрес
+  // страницы на сайте — чтобы сверить деталь с клиентом прямо в окне
+  // заказа. null — товара в каталоге уже нет
+  productId: string | null;
+  imageUrl: string | null;
+  productPath: string | null;
 }
 
 interface OrderDetailsResponse {
@@ -214,9 +221,12 @@ export async function GET(
       `
       SELECT oi.id, oi.article, oi.brand, oi.name, oi.price, oi.cost_price, oi.quantity,
              oi.supplier_id, oi.supplier_name, oi.status,
-             s.contact_name AS supplier_contact_name
+             s.contact_name AS supplier_contact_name,
+             p.id AS product_id, p.image_url, p.brand AS product_brand, p.article AS product_article,
+             p.name AS product_name
       FROM order_items oi
       LEFT JOIN suppliers s ON s.id = oi.supplier_id
+      LEFT JOIN products p ON p.id = oi.product_id
       WHERE oi.order_id = $1
       ORDER BY oi.created_at ASC
       `,
@@ -237,6 +247,15 @@ export async function GET(
       supplierName: row.supplier_name,
       supplierContactName: row.supplier_contact_name,
       status: row.status,
+      productId: row.product_id,
+      imageUrl: row.image_url,
+      productPath: row.product_id
+        ? buildProductPath(row.product_id, {
+            brand: row.product_brand,
+            article: row.product_article,
+            name: row.product_name,
+          })
+        : null,
     }));
 
     // Общая сумма считается здесь же, в коде, из уже полученных
