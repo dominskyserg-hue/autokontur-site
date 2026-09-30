@@ -57,6 +57,10 @@ export interface CreateTtnParams {
   cost: number;
   payerType: 'Sender' | 'Recipient';
   description: string;
+  // Наложенный платёж (післяплата), грн: сколько Нова Пошта возьмёт с
+  // клиента при получении и переведёт нам. 0 или не передано — без
+  // післяплати. Комиссию за перевод денег платит получатель
+  codAmount?: number;
 }
 
 async function findOrCreateRecipientContact(recipient: RecipientInfo): Promise<{ recipientRef: string; contactRecipientRef: string }> {
@@ -133,6 +137,18 @@ export async function createInternetDocument(
     Description: params.description,
     // Нова Пошта хоче дату у форматі dd.MM.yyyy
     DateTime: new Date().toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+    // ---- післяплата (зворотна доставка грошей) ----
+    // Звичайна післяплата для ФОП без окремого договору: CargoType
+    // 'Money', сума — рядком, комісію за переказ платить отримувач.
+    // (AfterpaymentOnGoodsCost — інша послуга, "контроль оплати", вона
+    // потребує окремого договору з Новою Поштою, тому її не використовуємо)
+    ...(params.codAmount && params.codAmount > 0
+      ? {
+          BackwardDeliveryData: [
+            { PayerType: 'Recipient', CargoType: 'Money', RedeliveryString: String(Math.round(params.codAmount)) },
+          ],
+        }
+      : {}),
   });
 
   if (!document) {

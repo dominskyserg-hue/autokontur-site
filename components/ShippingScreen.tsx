@@ -71,6 +71,10 @@ export default function ShippingScreen() {
   const [ttnSeats, setTtnSeats] = useState('1');
   const [ttnPayerType, setTtnPayerType] = useState<'Recipient' | 'Sender'>('Recipient');
   const [ttnDescription, setTtnDescription] = useState('Запчастини');
+  // Післяплата при пакетном создании ТТН: сумма у каждого заказа своя —
+  // ровно сколько клиент ещё не доплатил (полностью оплаченным заказам
+  // післяплата не ставится)
+  const [ttnCod, setTtnCod] = useState(true);
 
   // ---- выполнение пакетной операции ----
   const [running, setRunning] = useState<string | null>(null); // текст "что сейчас делаем"
@@ -162,11 +166,17 @@ export default function ShippingScreen() {
             cost: Math.ceil(order.totalAmount),
             payerType: ttnPayerType,
             description: ttnDescription,
+            codAmount: ttnCod ? Math.max(0, Math.ceil(order.totalAmount - order.paidAmount)) : 0,
           }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Не удалось создать ТТН');
-        batch.push({ orderNumber: order.orderNumber, ok: true, message: `ТТН создана: ${data.ttnNumber}` });
+        const cod = ttnCod ? Math.max(0, Math.ceil(order.totalAmount - order.paidAmount)) : 0;
+        batch.push({
+          orderNumber: order.orderNumber,
+          ok: true,
+          message: `ТТН создана: ${data.ttnNumber}` + (cod > 0 ? ` (післяплата ${formatMoney(cod)} грн)` : ''),
+        });
       } catch (error) {
         batch.push({
           orderNumber: order.orderNumber,
@@ -318,6 +328,10 @@ export default function ShippingScreen() {
             />
           </div>
         </div>
+        <label className="flex items-center gap-2 text-sm mt-3 cursor-pointer" style={{ color: 'var(--ink-muted)' }}>
+          <input type="checkbox" checked={ttnCod} onChange={(e) => setTtnCod(e.target.checked)} />
+          З післяплатою — сума у кожного заказу своя: скільки клієнт ще не доплатив (оплаченим — без післяплати)
+        </label>
       </div>
 
       {/* ==================== КНОПКИ ПАКЕТНЫХ ДЕЙСТВИЙ ==================== */}
