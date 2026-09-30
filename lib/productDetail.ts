@@ -556,6 +556,9 @@ export interface OtherOffer {
   retailPrice: number;
   stock: number;
   isRefurbished: boolean;
+  // Срок отгрузки поставщиком этого предложения (suppliers.delivery_time),
+  // показывается в раскрытой строке, если товара нет в наличии
+  deliveryTime: string | null;
 }
 
 export interface CrossRefItem {
@@ -685,7 +688,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
 ): Promise<OtherOfferRaw[]> {
   const result = await pool.query(
     `
-    SELECT p2.id, p2.cost_price, p2.retail_price, p2.stock, p2.is_refurbished, s2.name AS supplier_name
+    SELECT p2.id, p2.cost_price, p2.retail_price, p2.stock, p2.is_refurbished, s2.name AS supplier_name, s2.delivery_time
     FROM products p2
     JOIN suppliers s2 ON s2.id = p2.supplier_id
     WHERE p2.article = $1
@@ -705,6 +708,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
     stock: row.stock,
     isRefurbished: row.is_refurbished,
     supplierName: row.supplier_name,
+    deliveryTime: row.delivery_time,
   }));
 });
 
@@ -1101,6 +1105,7 @@ export async function loadProductPageData(
     retailPrice: computeCustomerPrice(offer.costPrice, offer.retailPrice, customerPricingRule),
     stock: offer.stock,
     isRefurbished: offer.isRefurbished,
+    deliveryTime: offer.deliveryTime,
   }));
   const toPublicCrossRef = (item: CrossRefItemRaw): CrossRefItem => ({
     brand: item.brand,
