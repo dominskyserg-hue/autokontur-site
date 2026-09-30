@@ -129,6 +129,36 @@ export async function sendTelegramMessageTo(
   }
 }
 
+// Надіслати покупцю ФАЙЛ (PDF рахунку/накладної) — Telegram сам
+// завантажить його за публічним посиланням (Vercel Blob), тому байти
+// файлу через наш сервер не передаються. caption — підпис під файлом.
+// Повертає message_id або null, якщо Telegram не прийняв (немає токена,
+// покупець заблокував бота, посилання недоступне)
+export async function sendTelegramDocumentTo(
+  chatId: string | number,
+  documentUrl: string,
+  caption: string
+): Promise<number | null> {
+  if (!TELEGRAM_BOT_TOKEN) return null;
+
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: chatId, document: documentUrl, caption }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      console.error('Telegram API повернув помилку при відправці файлу:', response.status, JSON.stringify(data));
+      return null;
+    }
+    return data?.result?.message_id ?? null;
+  } catch (error) {
+    console.error('Не вдалося відправити файл у Telegram:', error);
+    return null;
+  }
+}
+
 // Створює нову тему форуму (Topic) у supergroup з увімкненими Topics —
 // один customer_chat_id отримує РІВНО одну тему, щоб листування з
 // різними покупцями не змішувалось в один потік (telegram_support_topics,

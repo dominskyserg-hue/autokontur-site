@@ -99,9 +99,11 @@ interface NavCounters {
   toReceive: number;
   toShip: number;
   vinRequests: number;
+  // Заказы, по которым наступило напоминание "Передзвонити"
+  callbacks: number;
 }
 
-const EMPTY_COUNTERS: NavCounters = { newOrders: 0, toOrder: 0, toReceive: 0, toShip: 0, vinRequests: 0 };
+const EMPTY_COUNTERS: NavCounters = { newOrders: 0, toOrder: 0, toReceive: 0, toShip: 0, vinRequests: 0, callbacks: 0 };
 
 // Какую цифру показывать у пункта меню и каким цветом. Красный —
 // "срочно" (новые заказы), жёлтый — обычная очередь работы
@@ -308,6 +310,16 @@ export default function AdminLayout({
                         }}
                       >
                         <span>{item.label}</span>
+                        {/* У "Заказов" — отдельный значок напоминаний "Передзвонити" */}
+                        {item.key === 'orders' && counters.callbacks > 0 && (
+                          <span
+                            title="Пора передзвонити клієнтам"
+                            className="ml-auto flex h-5 items-center justify-center rounded-full px-1.5 text-[11px] font-semibold"
+                            style={{ background: 'var(--warn)', color: '#1a1a1a' }}
+                          >
+                            📞{counters.callbacks}
+                          </span>
+                        )}
                         {(() => {
                           const badge = getNavBadge(item.key, counters);
                           if (!badge || badge.count <= 0) return null;

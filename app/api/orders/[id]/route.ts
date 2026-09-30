@@ -16,6 +16,7 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { isCustomerTelegramLinked, notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
 import { logOrderEvent, historyValue } from '@/lib/orderHistory';
+import { ensureOrderExtraColumns } from '@/lib/orderColumns';
 import { describeOrderSource, type OrderSource } from '@/lib/orderSource';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { STATUS_LABELS } from '@/lib/orderUi';
@@ -165,37 +166,8 @@ interface OrderDetailsResponse {
   // Персональное правило цены клиента (раздел "Скидки и наценки
   // клиентам"): скидка/наценка в % от закупки. null — правила нет
   pricingRule: { ruleType: 'discount' | 'markup'; percent: number } | null;
-}
-
-// ------------------------------------------------------------
-// АВТОМИГРАЦИЯ: колонка orders.manager_note
-// ------------------------------------------------------------
-// Колонка для внутренней заметки менеджера добавлена в конец
-// schema.sql. Чтобы не выполнять SQL в базе вручную, роут сам проверяет
-// её наличие при первом обращении и, если её нет, добавляет — тот же
-// приём, что и для stock_movements.comment в
-// app/api/admin/warehouse/[productId]/route.ts. Сначала лёгкая проверка
-// через information_schema, ALTER TABLE — только если колонки нет.
-// Результат запоминаем, чтобы проверка шла один раз на запуск функции
-let managerNoteColumnReady: Promise<void> | null = null;
-
-function ensureManagerNoteColumn(): Promise<void> {
-  if (!managerNoteColumnReady) {
-    managerNoteColumnReady = (async () => {
-      const check = await pool.query(
-        `SELECT 1 FROM information_schema.columns
-         WHERE table_schema = current_schema() AND table_name = 'orders' AND column_name = 'manager_note'`
-      );
-      if (check.rows.length === 0) {
-        await pool.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS manager_note TEXT');
-      }
-    })().catch((error) => {
-      // Не получилось — забываем результат, следующий запрос попробует снова
-      managerNoteColumnReady = null;
-      throw error;
-    });
-  }
-  return managerNoteColumnReady;
+  // Напоминание "Передзвонити" (ISO-дата) или null
+  callbackAt: string | null;
 }
 
 // ------------------------------------------------------------
@@ -216,12 +188,12 @@ export async function GET(
   }
 
   try {
-    await ensureManagerNoteColumn();
+    await ensureOrderExtraColumns();
 
     const orderResult = await pool.query(
       `
       SELECT id, order_number, customer_name, customer_surname, customer_phone, city, nova_poshta_address,
-             city_ref, warehouse_ref, comment, manager_note, customer_id,
+             city_ref, warehouse_ref, comment, manager_note, callback_at, customer_id,
              utm_source, utm_medium, utm_campaign, utm_term, gclid, referrer,
              ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at
       FROM orders
@@ -328,6 +300,7 @@ export async function GET(
       totalAmount,
       paidAmount,
       managerNote: orderRow.manager_note,
+      callbackAt: orderRow.callback_at,
       customer,
       telegramLinked: await isCustomerTelegramLinked(orderRow.customer_phone),
       source: describeOrderSource({
@@ -553,6 +526,8 @@ interface PatchOrderRequestBody {
   carInfo?: string | null;
   // Внутренняя заметка менеджера (клиент не видит); пустая строка — удалить
   managerNote?: string | null;
+  // Напоминание "Передзвонити": дата-время ISO; null — снять напоминание
+  callbackAt?: string | null;
 }
 
 export async function PATCH(
@@ -588,7 +563,8 @@ export async function PATCH(
     body.customerSurname === undefined &&
     body.customerPhone === undefined &&
     body.delivery === undefined &&
-    body.managerNote === undefined
+    body.managerNote === undefined &&
+    body.callbackAt === undefined
   ) {
     return NextResponse.json(
       { error: 'Укажите статус, номер ТТН, VIN, автомобиль и/или контакты клиента для обновления.' },
@@ -641,6 +617,19 @@ export async function PATCH(
   const nextCarInfo = body.carInfo !== undefined ? (body.carInfo || '').trim() || null : undefined;
   const nextManagerNote = body.managerNote !== undefined ? String(body.managerNote ?? '').trim() || null : undefined;
 
+  let nextCallbackAt: string | null | undefined;
+  if (body.callbackAt !== undefined) {
+    if (body.callbackAt === null || body.callbackAt === '') {
+      nextCallbackAt = null;
+    } else {
+      const date = new Date(String(body.callbackAt));
+      if (Number.isNaN(date.getTime())) {
+        return NextResponse.json({ error: 'Некоректна дата нагадування.' }, { status: 400 });
+      }
+      nextCallbackAt = date.toISOString();
+    }
+  }
+
   // Переход в 'shipped' — не просто смена значения в колонке status:
   // это финальная отгрузка со списанием склада и начислением на баланс
   // клиента, со своими проверками (см. shipOrder выше). ttnNumber в
@@ -652,7 +641,7 @@ export async function PATCH(
   }
 
   try {
-    await ensureManagerNoteColumn();
+    await ensureOrderExtraColumns();
 
     // Старое значение ТТН — нужно ДО обновления, чтобы понять, реально
     // ли админ только что ВПЕРВЫЕ проставил номер (или изменил его), а
@@ -663,7 +652,7 @@ export async function PATCH(
     // (lib/orderHistory.ts): пишем туда только то, что реально изменилось
     const previousResult = await pool.query(
       `SELECT ttn_number, status, customer_name, customer_surname, customer_phone, city, nova_poshta_address,
-              vin, car_info, manager_note
+              vin, car_info, manager_note, callback_at
        FROM orders WHERE id = $1`,
       [id]
     );
@@ -689,10 +678,11 @@ export async function PATCH(
           city_ref = COALESCE($14, city_ref),
           warehouse_ref = COALESCE($15, warehouse_ref),
           manager_note = CASE WHEN $16 THEN $17 ELSE manager_note END,
+          callback_at = CASE WHEN $18 THEN $19::timestamptz ELSE callback_at END,
           updated_at = now()
       WHERE id = $1
       RETURNING id, customer_name, customer_surname, customer_phone, status, ttn_number, vin, car_info,
-                city, nova_poshta_address, city_ref, warehouse_ref, manager_note, created_at, updated_at
+                city, nova_poshta_address, city_ref, warehouse_ref, manager_note, callback_at, created_at, updated_at
       `,
       [
         id,
@@ -712,6 +702,8 @@ export async function PATCH(
         nextDelivery?.warehouseRef ?? null,
         nextManagerNote !== undefined,
         nextManagerNote ?? null,
+        nextCallbackAt !== undefined,
+        nextCallbackAt ?? null,
       ]
     );
 
@@ -754,6 +746,17 @@ export async function PATCH(
           ? `Авто: ${historyValue(row.car_info)}, VIN ${historyValue(row.vin)}`
           : null,
         row.manager_note !== previous.manager_note ? `Замітка менеджера: ${historyValue(row.manager_note)}` : null,
+        String(row.callback_at ?? '') !== String(previous.callback_at ?? '')
+          ? row.callback_at
+            ? `Нагадування: передзвонити ${new Date(row.callback_at).toLocaleString('uk-UA', {
+                timeZone: 'Europe/Kyiv',
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}`
+            : 'Нагадування «Передзвонити» знято (виконано)'
+          : null,
       ];
       await logOrderEvent(row.id, changes);
     }
@@ -774,6 +777,7 @@ export async function PATCH(
         cityRef: row.city_ref,
         warehouseRef: row.warehouse_ref,
         managerNote: row.manager_note,
+        callbackAt: row.callback_at,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       },
