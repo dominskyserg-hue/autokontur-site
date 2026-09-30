@@ -24,6 +24,7 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type VehicleCompatibilityItem, type PartCrossItem } from '@/lib/productDetail';
 import AddToCartButton from '@/components/AddToCartButton';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
+import OfferAccordion from '@/components/OfferAccordion';
 import OwnStockBadge from '@/components/OwnStockBadge';
 import FavoriteButton from '@/components/FavoriteButton';
 import QuickOrderModal from '@/components/QuickOrderModal';
@@ -449,21 +450,63 @@ export default function ProductDetailContent({
           <div className="flex flex-col gap-2">
             {/* Название поставщика покупателю НЕ показываем (аудит
                 безопасности) — только номер предложения, наличие и цену */}
+            {/* По нажатию строка раскрывается: подробности и кнопки заказа
+                именно этого предложения (components/OfferAccordion.tsx) */}
             {otherOffers.map((offer, index) => (
-              <Link
+              <OfferAccordion
                 key={offer.id}
-                href={buildProductPath(offer.id, product)}
-                prefetch={false}
-                className="flex items-center justify-between rounded-xl p-3.5 text-sm transition-colors hover:bg-[rgba(59,130,246,0.07)]"
-                style={{ fontFamily: BODY_FONT, background: SURFACE_GLASS, border: `1px solid ${BORDER_SOFT}`, color: PAPER }}
+                background={SURFACE_GLASS}
+                border={BORDER_SOFT}
+                color={PAPER}
+                fontFamily={BODY_FONT}
+                summary={
+                  <span className="flex flex-1 flex-wrap items-center justify-between gap-3">
+                    <span>Пропозиція {index + 2}</span>
+                    <span className="flex items-center gap-3">
+                      {offer.isRefurbished && <RefurbishedBadge />}
+                      <StockBadge stock={offer.stock} />
+                      <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>
+                        {formatMoney(offer.retailPrice)} грн
+                      </span>
+                    </span>
+                  </span>
+                }
               >
-                <span>Пропозиція {index + 2}</span>
-                <span className="flex items-center gap-3">
-                  {offer.isRefurbished && <RefurbishedBadge />}
-                  <StockBadge stock={offer.stock} />
-                  <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>{formatMoney(offer.retailPrice)} грн</span>
-                </span>
-              </Link>
+                <div className="mb-3 flex flex-col gap-1 text-xs" style={{ color: MUTED }}>
+                  <span>{displayName}</span>
+                  <span>Стан: {offer.isRefurbished ? 'відновлена' : 'нова'}</span>
+                  {offer.stock > 0 ? (
+                    <span>В наявності: {offer.stock} шт · відправка в день замовлення</span>
+                  ) : (
+                    <span>
+                      Під замовлення
+                      {offer.deliveryTime ? ` · очікуваний термін відвантаження постачальником: ${offer.deliveryTime}` : ''}
+                    </span>
+                  )}
+                  <span>Оплата при отриманні · 14 днів на повернення</span>
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <AddToCartButton
+                    product={{
+                      id: offer.id,
+                      article: product.article,
+                      brand: product.brand,
+                      name: product.name,
+                      retailPrice: offer.retailPrice,
+                      stock: offer.stock,
+                    }}
+                  />
+                  <QuickOrderModal
+                    product={{
+                      id: offer.id,
+                      article: product.article,
+                      brand: product.brand,
+                      name: product.name,
+                      retailPrice: offer.retailPrice,
+                    }}
+                  />
+                </div>
+              </OfferAccordion>
             ))}
           </div>
         </section>
