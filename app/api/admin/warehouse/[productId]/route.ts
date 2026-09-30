@@ -48,15 +48,37 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 // детали их единицы, у ходовой за год могут быть сотни
 const HISTORY_LIMIT = 200;
 
-// Код ошибки PostgreSQL "колонка не существует" — значит, миграцию
-// с колонкой stock_movements.comment ещё не применили (конец schema.sql)
-const UNDEFINED_COLUMN = '42703';
-const MIGRATION_HINT =
-  'В базе нет колонки stock_movements.comment. Откройте Supabase → SQL Editor и выполните: ' +
-  'ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS comment TEXT;';
+// ------------------------------------------------------------
+// АВТОМИГРАЦИЯ: колонка stock_movements.comment
+// ------------------------------------------------------------
+// Колонка для причины ручной операции добавлена в конец schema.sql.
+// Чтобы не нужно было отдельно заходить в базу и выполнять SQL руками,
+// роут сам проверяет её наличие при первом обращении и, если её нет,
+// добавляет. Сначала — лёгкая проверка через information_schema, и
+// только если колонки нет — ALTER TABLE (он на мгновение блокирует
+// таблицу, поэтому не запускаем его каждый раз "на всякий случай").
+// Результат запоминаем в памяти, чтобы проверка шла один раз на запуск
+// функции, а не на каждый запрос
+let commentColumnReady: Promise<void> | null = null;
 
-function isUndefinedColumnError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: string }).code === UNDEFINED_COLUMN;
+function ensureCommentColumn(): Promise<void> {
+  if (!commentColumnReady) {
+    commentColumnReady = (async () => {
+      const check = await pool.query(
+        `SELECT 1 FROM information_schema.columns
+         WHERE table_schema = current_schema() AND table_name = 'stock_movements' AND column_name = 'comment'`
+      );
+      if (check.rows.length === 0) {
+        await pool.query('ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS comment TEXT');
+      }
+    })().catch((error) => {
+      // Не получилось — забываем результат, чтобы следующий запрос
+      // попробовал ещё раз, а не упирался в одну и ту же ошибку вечно
+      commentColumnReady = null;
+      throw error;
+    });
+  }
+  return commentColumnReady;
 }
 
 async function getBalance(productId: string): Promise<number> {
@@ -80,6 +102,7 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ pr
   }
 
   try {
+    await ensureCommentColumn();
     const productResult = await pool.query(
       `
       SELECT p.id, p.article, p.brand, p.name, s.name AS supplier_name
@@ -144,9 +167,6 @@ export async function GET(_request: NextRequest, context: { params: Promise<{ pr
       })),
     });
   } catch (error) {
-    if (isUndefinedColumnError(error)) {
-      return NextResponse.json({ error: MIGRATION_HINT }, { status: 500 });
-    }
     console.error('Ошибка при получении истории склада:', error);
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
     return NextResponse.json({ error: 'Не удалось получить историю товара: ' + message }, { status: 500 });
@@ -198,6 +218,14 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
     );
   }
 
+  try {
+    await ensureCommentColumn();
+  } catch (error) {
+    console.error('Не удалось добавить колонку stock_movements.comment:', error);
+    const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+    return NextResponse.json({ error: 'Не удалось подготовить таблицу склада: ' + message }, { status: 500 });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -245,9 +273,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ pr
     return NextResponse.json({ success: true, balance: currentBalance + (quantityChange as number) }, { status: 201 });
   } catch (error) {
     await client.query('ROLLBACK');
-    if (isUndefinedColumnError(error)) {
-      return NextResponse.json({ error: MIGRATION_HINT }, { status: 500 });
-    }
     console.error('Ошибка при ручной операции со складом:', error);
     const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
     return NextResponse.json({ error: 'Не удалось сохранить операцию: ' + message }, { status: 500 });
