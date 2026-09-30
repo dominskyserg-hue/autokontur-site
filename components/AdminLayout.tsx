@@ -75,6 +75,7 @@ export type AdminSection =
   | 'searchSynonyms'
   | 'orders'
   | 'procurement'
+  | 'warehouse'
   | 'customers'
   | 'customerDiscounts'
   | 'vinRequests'
@@ -109,6 +110,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { key: 'orders', label: 'Заказы', href: '/admin/orders' },
       { key: 'procurement', label: 'Закупки', href: '/admin/procurement' },
+      { key: 'warehouse', label: 'Склад', href: '/admin/warehouse' },
       { key: 'customers', label: 'Клиенты', href: '/admin/customers' },
       { key: 'customerDiscounts', label: 'Скидки и наценки клиентам', href: '/admin/customer-pricing-rules' },
       { key: 'vinRequests', label: 'VIN-запросы', href: '/admin/vin-requests' },

@@ -2799,3 +2799,16 @@ CREATE TABLE IF NOT EXISTS product_vehicles_own (
 CREATE INDEX IF NOT EXISTS idx_pvo_product ON product_vehicles_own (product_id);
 CREATE INDEX IF NOT EXISTS idx_pvo_make ON product_vehicles_own (make);
 CREATE INDEX IF NOT EXISTS idx_pvo_generation ON product_vehicles_own (generation) WHERE generation IS NOT NULL;
+
+
+-- ============================================================
+-- СКЛАД: КОММЕНТАРИЙ К ДВИЖЕНИЮ ТОВАРА
+-- ============================================================
+-- Раздел "Склад" в админке (/admin/warehouse) позволяет вручную
+-- исправить остаток после пересчёта (reason='adjustment') или списать
+-- брак (reason='defect_writeoff'). Для таких ручных операций важно
+-- записать, ПОЧЕМУ остаток изменился ("пересчёт 30.09", "треснул
+-- корпус") — иначе через месяц уже никто не вспомнит. Для
+-- автоматических движений (продажа, приход, возврат) комментарий
+-- остаётся пустым — там причина и так видна по ссылке на документ
+ALTER TABLE stock_movements ADD COLUMN IF NOT EXISTS comment TEXT;
