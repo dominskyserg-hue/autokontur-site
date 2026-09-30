@@ -1,6 +1,6 @@
 // ============================================================
 // Імпорт кросс-номерів з прайс-листа постачальника Autohelp (Excel-файл
-// "Прайс лист Autohelp DD.MM.YY.xls", лист "TDSheet") у tecdoc_crosses.
+// "Прайс лист Autohelp DD.MM.YY.xls", лист "TDSheet") у part_crosses.
 //
 // НА ВІДМІНУ від файлу Nippon (import-nippon-crosses.ts), тут колонка
 // "Номера аналогов" (індекс 4) ВЖЕ вказує бренд для кожного номера:
@@ -89,11 +89,11 @@ async function main() {
   console.log(`  Усього рядків у файлі: ${rows.length.toLocaleString('uk-UA')}\n`);
 
   console.log('Крок 3/3: зіставляємо з каталогом і записуємо нові кроси...');
-  // Источник строк для tecdoc_crosses.source (см. scripts/tecdoc/schema.sql)
+  // Источник строк для part_crosses.source (см. scripts/tecdoc/schema.sql)
   const CROSSES_SOURCE = 'autohelp';
   const inserter = new BatchInserter(
     pool,
-    'tecdoc_crosses',
+    'part_crosses',
     ['brand_a', 'article_a', 'brand_b', 'article_b', 'relation_type', 'source'],
     BATCH_SIZE
   );
@@ -156,7 +156,7 @@ async function main() {
   console.log(`Рядків з артикулом, якого НЕМА в каталозі постачальника: ${notFoundRows}`);
   console.log(`Різних брендів серед зіставлених рядків:                ${brandsUsed.size}`);
   console.log(`Знайдено пар "наш артикул <-> кросс-номер":             ${pairsFound}`);
-  console.log(`Рядків вставлено в tecdoc_crosses (з двонапрямними):    ${inserter.getTotalInserted()}`);
+  console.log(`Рядків вставлено в part_crosses (з двонапрямними):    ${inserter.getTotalInserted()}`);
   console.log('\nПриклади:');
   console.log(examples.join('\n'));
   console.log('============================================================\n');

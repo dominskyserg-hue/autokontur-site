@@ -373,7 +373,7 @@ export default async function CategoryPage({
   // применимость осталось меньше 5 деталей (lib/narrowCategoryStatus.ts) —
   // постоянный редирект на родительскую (или широкую) категорию, не 404
   const thin = await loadThinNarrowCategories();
-  if (category.tecdocVehicle && thin.has(slug)) permanentRedirect(narrowRedirectTarget(category));
+  if (category.catalogVehicle && thin.has(slug)) permanentRedirect(narrowRedirectTarget(category));
 
   // Хаби моделі для вузької сторінки (за modelGroup), лише видимі (>= 30 товарів)
   const visibleHubs = category.modelGroup ? await loadVisibleHubs() : [];

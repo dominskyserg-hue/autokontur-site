@@ -131,17 +131,17 @@ export interface CategoryDef {
   // Хвиля 6 (Autohelp/HLOD) — постачальник моделі в назві НЕ пише
   // ("Колодки гальмівні дискові передні STELLOX ...", без слова
   // "Passat" чи "Golf"), тому підрядком у назві такі товари підібрати
-  // неможливо. tecdocVehicle — альтернативний спосіб: товар підходить,
+  // неможливо. catalogVehicle — альтернативний спосіб: товар підходить,
   // якщо для його бренду+артикула своя застосовність (product_vehicles_own)
   // підтверджує машину цієї категорії (відповідність — у
   // lib/narrowCategoryVehicles.ts за modelGroup). make+models — ключ
   // категорії: за ним фільтр марка/модель на широких сторінках знаходить
   // вузьку сторінку (findNarrowPageForVehicle) і звіряється модель товару
-  // (narrowCategoryMatchesVehicle). Назва поля історична.
+  // (narrowCategoryMatchesVehicle).
   // matchGroups при цьому лишається — він і далі визначає лише ТИП
   // деталі (колодки/прокладки/...), а не марку авто. Обидва фільтри
   // діють одночасно (І) — див. buildCategoryWhereClause нижче
-  tecdocVehicle?: { make: string; models: string[] };
+  catalogVehicle?: { make: string; models: string[] };
 }
 
 // Одне правило: хоча б одне слово з КОЖНОЇ групи all, жодного з exclude,
@@ -560,7 +560,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Передні гальмівні колодки для Daewoo Lanos (і Matiz з тим самим кріпленням) — в наявності декілька варіантів різних виробників, від бюджетних до преміальних.',
     matchGroups: [['колодк'], ['перед'], ['lanos', 'ланос']],
-    tecdocVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
+    catalogVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
     hideFromIndex: true,
     modelGroup: 'daewoo-lanos',
     modelLabel: 'Daewoo Lanos',
@@ -575,7 +575,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Амортизатор передній Daewoo Lanos, Nexia в наявності від 1035 грн (Magnum Technology). Доставка по Україні, оплата при отриманні.',
     intro: 'Передній амортизатор для Daewoo Lanos — газо-масляний, підходить і для Nexia з тією ж платформою.',
     matchGroups: [['амортизатор'], ['перед'], ['lanos', 'ланос']],
-    tecdocVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
+    catalogVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
     hideFromIndex: true,
     modelGroup: 'daewoo-lanos',
     modelLabel: 'Daewoo Lanos',
@@ -590,7 +590,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Амортизатор задній Daewoo Lanos, Nexia, Sens в наявності від 602 грн (RAISO). Оригінал і аналоги, доставка по Україні.',
     intro: 'Задній амортизатор для Daewoo Lanos — газовий, в наявності декілька виробників на вибір.',
     matchGroups: [['амортизатор'], ['зад'], ['lanos', 'ланос']],
-    tecdocVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
+    catalogVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
     hideFromIndex: true,
     modelGroup: 'daewoo-lanos',
     modelLabel: 'Daewoo Lanos',
@@ -606,7 +606,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Недорога, але часто зношувана деталь — стук і "гуляння" керма на нерівностях зазвичай означає, що втулки стабілізатора Lanos пора міняти.',
     matchGroups: [['втулк'], ['стабіліз', 'стабилиз'], ['lanos', 'ланос']],
-    tecdocVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
+    catalogVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
     hideFromIndex: true,
     modelGroup: 'daewoo-lanos',
     modelLabel: 'Daewoo Lanos',
@@ -621,7 +621,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Комплект ГРМ (ремінь + ролики) для Daewoo Lanos в наявності від 1968 грн (Michelin). Доставка по Україні, оплата при отриманні.',
     intro: 'Комплект ГРМ для Daewoo Lanos — ремінь і ролики одразу, за регламентом виробника міняються разом.',
     matchGroups: [['грм'], ['lanos', 'ланос']],
-    tecdocVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
+    catalogVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
     hideFromIndex: true,
     modelGroup: 'daewoo-lanos',
     modelLabel: 'Daewoo Lanos',
@@ -636,7 +636,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Комплект зчеплення (диск + кошик + вижимний) Daewoo Lanos 1.5 в наявності від 2970 грн (KONNER). Доставка по Україні.',
     intro: 'Повний комплект зчеплення для Daewoo Lanos 1.5 — диск, кошик і вижимний підшипник одним набором.',
     matchGroups: [['зчеплен'], ['lanos', 'ланос']],
-    tecdocVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
+    catalogVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
     hideFromIndex: true,
     modelGroup: 'daewoo-lanos',
     modelLabel: 'Daewoo Lanos',
@@ -652,7 +652,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки дискові передні Toyota Camry в наявності від 1242 грн (TASHIKO). Оригінал і аналоги, доставка по Україні.',
     intro: 'Передні гальмівні колодки для Toyota Camry різних поколінь — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед'], ['camry', 'камрі', 'камри']],
-    tecdocVehicle: { make: 'TOYOTA', models: ['CAMRY Stufenheck (AVV5_, XV5_)', 'CAMRY Stufenheck (MCV3_, ACV3_, _XV3_)', 'CAMRY Stufenheck (_CV2_, _XV2_)', 'CAMRY Stufenheck (_V1_)', 'CAMRY Stufenheck (_V2_)', 'CAMRY Stufenheck (_XV4_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['CAMRY Stufenheck (AVV5_, XV5_)', 'CAMRY Stufenheck (MCV3_, ACV3_, _XV3_)', 'CAMRY Stufenheck (_CV2_, _XV2_)', 'CAMRY Stufenheck (_V1_)', 'CAMRY Stufenheck (_V2_)', 'CAMRY Stufenheck (_XV4_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-camry',
     modelLabel: 'Toyota Camry',
@@ -671,7 +671,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       ['повітр', 'воздушн'],
       ['camry', 'камрі', 'камри'],
     ],
-    tecdocVehicle: { make: 'TOYOTA', models: ['CAMRY Stufenheck (AVV5_, XV5_)', 'CAMRY Stufenheck (MCV3_, ACV3_, _XV3_)', 'CAMRY Stufenheck (_CV2_, _XV2_)', 'CAMRY Stufenheck (_V1_)', 'CAMRY Stufenheck (_V2_)', 'CAMRY Stufenheck (_XV4_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['CAMRY Stufenheck (AVV5_, XV5_)', 'CAMRY Stufenheck (MCV3_, ACV3_, _XV3_)', 'CAMRY Stufenheck (_CV2_, _XV2_)', 'CAMRY Stufenheck (_V1_)', 'CAMRY Stufenheck (_V2_)', 'CAMRY Stufenheck (_XV4_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-camry',
     modelLabel: 'Toyota Camry',
@@ -688,7 +688,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Решітка бампера передня права VW Passat B5 в наявності від 445 грн (POLCAR). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Решітка переднього бампера для VW Passat B5 (до 2000 р.) — права сторона, в наявності.',
     matchGroups: [['решітк'], ['бампер'], ['passat b5', 'пассат б5']],
-    tecdocVehicle: { make: 'VW', models: ['PASSAT Stufenheck (3B2)', 'PASSAT Stufenheck (3B3)', 'PASSAT Variant (3B5)', 'PASSAT Variant (3B6)'] },
+    catalogVehicle: { make: 'VW', models: ['PASSAT Stufenheck (3B2)', 'PASSAT Stufenheck (3B3)', 'PASSAT Variant (3B5)', 'PASSAT Variant (3B6)'] },
     hideFromIndex: true,
     modelGroup: 'vw-passat-b5',
     modelLabel: 'VW Passat B5',
@@ -702,7 +702,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Рейка кермова в зборі з наконечниками VW Golf 4 в наявності від 10708 грн (Kimiko). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Рульова (кермова) рейка в зборі з наконечниками для VW Golf 4 — в наявності від Kimiko.',
     matchGroups: [['рейк'], ['керм'], ['golf 4', 'golf iv', 'гольф 4']],
-    tecdocVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
+    catalogVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
     hideFromIndex: true,
     modelGroup: 'vw-golf-4',
     modelLabel: 'VW Golf 4',
@@ -747,7 +747,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       ['зад'],
       ['corolla 2.2d 07-', '1.33-1.8vvti 01.07-', 'corolla sedan 1.4,1.6 06.11-'],
     ],
-    tecdocVehicle: { make: 'TOYOTA', models: ['ALTIS Stufenheck (E15_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['ALTIS Stufenheck (E15_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-corolla-e150',
     modelLabel: 'Toyota Corolla E150',
@@ -762,7 +762,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки дискові задні Toyota Corolla E120 (2002-2007) в наявності від 428 грн (DENCKERMANN). Доставка по Україні.',
     intro: 'Задні гальмівні колодки для Toyota Corolla покоління E120 (2002-2007 р.) — в наявності.',
     matchGroups: [['колодк'], ['зад'], ['corolla 02-07', 'corolla 02-']],
-    tecdocVehicle: { make: 'TOYOTA', models: ['AXIO/ALTIS Stufenheck (_E12J_, _E12T_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['AXIO/ALTIS Stufenheck (_E12J_, _E12T_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-corolla-e120',
     modelLabel: 'Toyota Corolla E120',
@@ -777,7 +777,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Повітряний фільтр Suzuki SX4 в наявності від 118 грн. Декілька варіантів різних виробників, доставка по всій Україні, оплата при отриманні.',
     intro: 'Повітряний фільтр для Suzuki SX4 — недорога деталь планового ТО, в наявності одразу декілька виробників.',
     matchGroups: [['фільтр', 'фильтр'], ['повітр', 'воздушн'], ['sx4', 'sx-4']],
-    tecdocVehicle: { make: 'SUZUKI', models: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'] },
+    catalogVehicle: { make: 'SUZUKI', models: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'] },
     hideFromIndex: true,
     modelGroup: 'suzuki-sx4',
     modelLabel: 'Suzuki SX4',
@@ -792,7 +792,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки задні Suzuki SX4 в наявності від 353 грн (RAISO). Оригінал і аналоги, доставка по всій Україні, оплата при отриманні.',
     intro: 'Гальмівні колодки для Suzuki SX4 — в наявності, підходять і для Suzuki Swift з тією ж платформою.',
     matchGroups: [['колодк'], ['sx4', 'sx-4']],
-    tecdocVehicle: { make: 'SUZUKI', models: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'] },
+    catalogVehicle: { make: 'SUZUKI', models: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'] },
     hideFromIndex: true,
     modelGroup: 'suzuki-sx4',
     modelLabel: 'Suzuki SX4',
@@ -814,7 +814,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     // Accord VII у Європі/Україні = седан CL (у каталогах — 'ACCORD EURO VIII (CL)') +
     // універсал CM. Американський Mk VII (CG), а також CF/CH (європейське
     // 6-те покоління) сюди НЕ входять
-    tecdocVehicle: { make: 'HONDA', models: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'] },
+    catalogVehicle: { make: 'HONDA', models: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'] },
     hideFromIndex: true,
     modelGroup: 'honda-accord-7',
     modelLabel: 'Honda Accord VII',
@@ -836,7 +836,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     // Accord VII у Європі/Україні = седан CL (у каталогах — 'ACCORD EURO VIII (CL)') +
     // універсал CM. Американський Mk VII (CG), а також CF/CH (європейське
     // 6-те покоління) сюди НЕ входять
-    tecdocVehicle: { make: 'HONDA', models: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'] },
+    catalogVehicle: { make: 'HONDA', models: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'] },
     hideFromIndex: true,
     modelGroup: 'honda-accord-7',
     modelLabel: 'Honda Accord VII',
@@ -860,14 +860,14 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Кульові опори для рамного позашляховика Mitsubishi Pajero II — деталь, яка часто зношується через навантаження позашляхового ходу підвіски.',
     matchGroups: [['куль', 'шаров'], ['опор'], ['pajero ii ', 'pajero ii,']],
-    // tecdocVehicle тут НЕ впливає на добір товарів (сторінка й далі
+    // catalogVehicle тут НЕ впливає на добір товарів (сторінка й далі
     // працює через matchGroups вище, це підтверджено робочим рішенням) —
     // додано ЛИШЕ як ідентифікатор для дедуплікації фільтра марка/
     // модель/рік/двигун на широких сторінках категорій (findNarrowPageForVehicle
     // нижче): якщо покупець на /category/kulovi-opory обере Mitsubishi +
     // цю саму модель у фільтрі, його переспрямує сюди, а не покаже ті ж
     // товари вдруге за іншою адресою
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'MITSUBISHI',
       models: ['SHOGUN II (V3_W, V2_W, V4_W)', 'SHOGUN II Geländewagen offen (V2_W, V4_W)', 'PAJERO/SHOGUN CLASSIC (V2_W)'],
     },
@@ -891,7 +891,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     // моделі; з пробілом ловиться лише "Амортизатор ..." на початку
     // назви товару
     matchGroups: [['амортизатор '], ['pajero ii ', 'pajero ii,']],
-    tecdocVehicle: { make: 'MITSUBISHI', models: ['SHOGUN II Stufenheck (V3_W, V2_W)', 'SHOGUN II (V3_W, V2_W)', 'SHOGUN II Schrägheck (V2_W)'] },
+    catalogVehicle: { make: 'MITSUBISHI', models: ['SHOGUN II Stufenheck (V3_W, V2_W)', 'SHOGUN II (V3_W, V2_W)', 'SHOGUN II Schrägheck (V2_W)'] },
     hideFromIndex: true,
     modelGroup: 'mitsubishi-pajero-2',
     modelLabel: 'Mitsubishi Pajero II',
@@ -906,7 +906,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки дискові передні Mazda 6 (кузов GG, 2002-2007) в наявності від 468 грн (RAISO). Доставка по всій Україні.',
     intro: 'Передні гальмівні колодки для Mazda 6 першого поколінна (кузов GG, 2002-2007) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед'], ['mazda 6', 'mazda6'], ['02-07']],
-    tecdocVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
+    catalogVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
     hideFromIndex: true,
     modelGroup: 'mazda6-gg',
     modelLabel: 'Mazda 6 (GG)',
@@ -923,7 +923,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     // "амортизатор " з пробілом — див. коментар біля Pajero II вище:
     // без пробілу підрядок збігається і з "опора стійки АМОРТИЗАТОРА"
     matchGroups: [['амортизатор '], ['mazda 6', 'mazda6'], ['02-07', 'gg, gy']],
-    tecdocVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
+    catalogVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
     hideFromIndex: true,
     modelGroup: 'mazda6-gg',
     modelLabel: 'Mazda 6 (GG)',
@@ -938,7 +938,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Пружини підвіски Mazda 6 (кузов GG, 2002-2007) в наявності від 673 грн (RAISO). Доставка по всій Україні.',
     intro: 'Пружини підвіски для Mazda 6 GG (2002-2007) — в наявності.',
     matchGroups: [['пружин'], ['mazda 6', 'mazda6'], ['02-07']],
-    tecdocVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
+    catalogVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
     hideFromIndex: true,
     modelGroup: 'mazda6-gg',
     modelLabel: 'Mazda 6 (GG)',
@@ -957,7 +957,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     // пружина підвіски) — вона теж згадує "Prado 120", але не містить
     // слова "зад"/"передн", тому в підбірку не потрапляє
     matchGroups: [['пружин'], ['зад', 'передн'], ['prado 120', '(j120)']],
-    tecdocVehicle: { make: 'TOYOTA', models: ['LAND CRUISER PRADO (KDJ12_, GRJ12_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['LAND CRUISER PRADO (KDJ12_, GRJ12_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-prado-120',
     modelLabel: 'Toyota Land Cruiser Prado 120',
@@ -971,7 +971,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки дискові передні Mazda CX-5 в наявності від 614 грн (Q-TOP). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Передні гальмівні колодки для Mazda CX-5 — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед'], ['cx-5', 'cx5', 'cx 5']],
-    tecdocVehicle: { make: 'MAZDA', models: ['CX-5 (KE, GH)'] },
+    catalogVehicle: { make: 'MAZDA', models: ['CX-5 (KE, GH)'] },
     hideFromIndex: true,
     modelGroup: 'mazda-cx5',
     modelLabel: 'Mazda CX-5',
@@ -986,7 +986,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Кільця поршневі (комплект на мотор) Mazda CX-5 в наявності від 817 грн. Доставка по всій Україні, оплата при отриманні.',
     intro: 'Комплект поршневих кілець для двигуна Mazda CX-5 — стандартний та ремонтний розмір, в наявності.',
     matchGroups: [['кільц', 'кольц'], ['порш'], ['cx-5', 'cx5']],
-    tecdocVehicle: { make: 'MAZDA', models: ['CX-5 (KE, GH)'] },
+    catalogVehicle: { make: 'MAZDA', models: ['CX-5 (KE, GH)'] },
     hideFromIndex: true,
     modelGroup: 'mazda-cx5',
     modelLabel: 'Mazda CX-5',
@@ -1000,7 +1000,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки переднього важеля Mazda CX-5 в наявності від 321 грн (APLUS). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Сайлентблоки переднього важеля підвіски для Mazda CX-5 — типова причина стуку в передній підвісці при зношуванні.',
     matchGroups: [['сайлентблок'], ['cx-5', 'cx5']],
-    tecdocVehicle: { make: 'MAZDA', models: ['CX-5 (KE, GH)'] },
+    catalogVehicle: { make: 'MAZDA', models: ['CX-5 (KE, GH)'] },
     hideFromIndex: true,
     modelGroup: 'mazda-cx5',
     modelLabel: 'Mazda CX-5',
@@ -1014,7 +1014,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
   // визначає ЛИШЕ ТИП деталі ("колодк"/"прокладк") — модель авто НЕ
   // шукається підрядком у назві (постачальники цих товарів модель у
   // назві не пишуть, напр. "Колодки гальмівні дискові передні STELLOX"
-  // без слова "Passat"), а підбирається через tecdocVehicle — своя
+  // без слова "Passat"), а підбирається через catalogVehicle — своя
   // застосовність за брендом+артикулом (див. buildCategoryWhereClause
   // в кінці цього файлу). Перелік товарів під кожною сторінкою
   // перевірено вручну прямим запитом до бойової бази перед деплоєм.
@@ -1031,7 +1031,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Гальмівні колодки для VW Passat B5 — передні та задні варіанти різних виробників; сумісність за каталогами виробників та OEM-номерами.',
     matchGroups: [['колодк']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'VW',
       models: ['PASSAT Stufenheck (3B2)', 'PASSAT Stufenheck (3B3)', 'PASSAT Variant (3B5)', 'PASSAT Variant (3B6)'],
     },
@@ -1050,7 +1050,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Гальмівні колодки для VW Golf 4 — передні та задні варіанти різних виробників; сумісність за каталогами виробників та OEM-номерами.',
     matchGroups: [['колодк']],
-    tecdocVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
+    catalogVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
     hideFromIndex: true,
     modelGroup: 'vw-golf-4',
     modelLabel: 'VW Golf 4',
@@ -1066,7 +1066,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Гальмівні колодки для Mitsubishi Pajero II — дискові (передні/задні) та барабанні варіанти; сумісність за каталогами виробників та OEM-номерами.',
     matchGroups: [['колодк']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'MITSUBISHI',
       models: ['SHOGUN II (V3_W, V2_W, V4_W)', 'SHOGUN II Geländewagen offen (V2_W, V4_W)', 'PAJERO/SHOGUN CLASSIC (V2_W)'],
     },
@@ -1085,7 +1085,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Гальмівні колодки для Honda Civic 4D (седан, кузов FD/FA) — дискові та барабанні варіанти; сумісність за каталогами виробників та OEM-номерами.',
     matchGroups: [['колодк']],
-    tecdocVehicle: { make: 'HONDA', models: ['BALLADE VIII Stufenheck (FD, FA)'] },
+    catalogVehicle: { make: 'HONDA', models: ['BALLADE VIII Stufenheck (FD, FA)'] },
     hideFromIndex: true,
     modelGroup: 'honda-civic-4d',
     modelLabel: 'Honda Civic 4D',
@@ -1101,7 +1101,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Гальмівні колодки для Lexus RX350 — в наявності декілька виробників; сумісність за каталогами виробників та OEM-номерами.',
     matchGroups: [['колодк']],
-    tecdocVehicle: { make: 'LEXUS', models: ['RX (MHU3_, GSU3_, MCU3_)', 'RX (GYL1_, GGL15, AGL10)'] },
+    catalogVehicle: { make: 'LEXUS', models: ['RX (MHU3_, GSU3_, MCU3_)', 'RX (GYL1_, GGL15, AGL10)'] },
     hideFromIndex: true,
     modelGroup: 'lexus-rx350',
     modelLabel: 'Lexus RX350',
@@ -1127,7 +1127,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Прокладки двигуна для Daewoo Lanos — головки блоку циліндрів, випускного колектора та інших вузлів, в наявності декілька виробників.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
+    catalogVehicle: { make: 'DAEWOO', models: ['LANOS / SENS (KLAT)', 'Lanos / Sens Stufenheck (KLAT)'] },
     hideFromIndex: true,
     modelGroup: 'daewoo-lanos',
     modelLabel: 'Daewoo Lanos',
@@ -1144,7 +1144,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Прокладки двигуна для Toyota Camry — впускний і випускний колектор, клапанна кришка та інші вузли, в наявності декілька виробників.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'TOYOTA',
       models: [
         'CAMRY Stufenheck (AVV5_, XV5_)',
@@ -1171,7 +1171,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Прокладки двигуна для VW Passat B5 — головка блоку циліндрів, впускний/випускний колектор, термостат та інші вузли двигуна.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'VW',
       models: ['PASSAT Stufenheck (3B2)', 'PASSAT Stufenheck (3B3)', 'PASSAT Variant (3B5)', 'PASSAT Variant (3B6)'],
     },
@@ -1191,7 +1191,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Прокладки двигуна для VW Golf 4 — головка блоку циліндрів, колектори, піддон картера та інші вузли двигуна.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
+    catalogVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
     hideFromIndex: true,
     modelGroup: 'vw-golf-4',
     modelLabel: 'VW Golf 4',
@@ -1208,7 +1208,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Прокладки двигуна для Toyota Corolla покоління E120 (2001-2007) — клапанна кришка, колектори та інші вузли, декілька виробників.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: { make: 'TOYOTA', models: ['AXIO/ALTIS Stufenheck (_E12J_, _E12T_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['AXIO/ALTIS Stufenheck (_E12J_, _E12T_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-corolla-e120',
     modelLabel: 'Toyota Corolla E120',
@@ -1225,7 +1225,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Прокладки двигуна для Toyota Corolla покоління E150 (2006-2013) — впускний/випускний колектор, клапанна кришка та інші вузли.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: { make: 'TOYOTA', models: ['ALTIS Stufenheck (E15_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['ALTIS Stufenheck (E15_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-corolla-e150',
     modelLabel: 'Toyota Corolla E150',
@@ -1241,7 +1241,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Прокладки двигуна Suzuki SX4 в наявності від 27 грн (ELRING): зливної пробки, впускного колектора, клапанної кришки. Доставка по Україні.',
     intro: 'Прокладки двигуна для Suzuki SX4 — впускний колектор, клапанна кришка та інші вузли, декілька виробників.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: { make: 'SUZUKI', models: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'] },
+    catalogVehicle: { make: 'SUZUKI', models: ['SX4 (EY, GY)', 'SX4 Stufenheck (GY)'] },
     hideFromIndex: true,
     modelGroup: 'suzuki-sx4',
     modelLabel: 'Suzuki SX4',
@@ -1257,7 +1257,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Прокладки двигуна Honda Accord VII в наявності від 47 грн (FA1): колекторів, клапанної кришки, вихлопної труби. Доставка по Україні.',
     intro: 'Прокладки двигуна для Honda Accord 7-го покоління — колектори, клапанна кришка, вихлопна труба та інші вузли.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'HONDA',
       // Accord VII = CL + CM (див. accord-7-kolodky-peredni)
       models: ['ACCORD EURO VIII (CL)', 'ACCORD VII Tourer (CM)'],
@@ -1277,7 +1277,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Прокладки двигуна Mitsubishi Pajero II в наявності від 99 грн (AJUSA): головки блоку, впускного колектора та інші. Доставка по Україні.',
     intro: 'Прокладки двигуна для Mitsubishi Pajero II — головка блоку циліндрів, впускний колектор та інші вузли двигуна.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'MITSUBISHI',
       models: ['SHOGUN II (V3_W, V2_W, V4_W)', 'SHOGUN II Geländewagen offen (V2_W, V4_W)', 'PAJERO/SHOGUN CLASSIC (V2_W)'],
     },
@@ -1296,7 +1296,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Прокладки двигуна Mazda 6 (кузов GG) в наявності від 194 грн. Впускного колектора, клапанної кришки та інші. Доставка по Україні.',
     intro: 'Прокладки двигуна для Mazda 6 першого покоління (GG, 2002-2007) — впускний колектор, клапанна кришка та інші вузли.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
+    catalogVehicle: { make: 'MAZDA', models: ['ATENZA (GG)', 'ATENZA Schrägheck (GG)'] },
     hideFromIndex: true,
     modelGroup: 'mazda6-gg',
     modelLabel: 'Mazda 6 (GG)',
@@ -1312,7 +1312,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Прокладки двигуна Honda Civic 4D (седан) в наявності від 92 грн (FA1): головки блоку, колектора, клапанної кришки. Доставка по Україні.',
     intro: 'Прокладки двигуна для Honda Civic 4D (седан, кузов FD/FA) — головка блоку, колектор, клапанна кришка та інші вузли.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: { make: 'HONDA', models: ['BALLADE VIII Stufenheck (FD, FA)'] },
+    catalogVehicle: { make: 'HONDA', models: ['BALLADE VIII Stufenheck (FD, FA)'] },
     hideFromIndex: true,
     modelGroup: 'honda-civic-4d',
     modelLabel: 'Honda Civic 4D',
@@ -1328,7 +1328,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Прокладки двигуна Toyota Land Cruiser Prado 120 в наявності від 198 грн (AJUSA): колекторів, клапанної кришки. Доставка по Україні.',
     intro: 'Прокладки двигуна для Toyota Land Cruiser Prado 120 — випускний колектор, клапанна кришка та інші вузли двигуна.',
     matchGroups: [['прокладк']],
-    tecdocVehicle: { make: 'TOYOTA', models: ['LAND CRUISER PRADO (KDJ12_, GRJ12_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['LAND CRUISER PRADO (KDJ12_, GRJ12_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-prado-120',
     modelLabel: 'Toyota Land Cruiser Prado 120',
@@ -1339,9 +1339,9 @@ const BASE_CATEGORIES: CategoryDef[] = [
   // T31, Mazda 3. Як і в хвилях 1-4 (і на відміну від хвилі 6), тут
   // постачальники САМІ пишуть модель прямо в назві товару ("Mitsubishi
   // Lancer 10", "Qashqai (J10)", "Mazda 3 BK") — тому модель шукається
-  // підрядком у matchGroups, а не через tecdocVehicle: даних
+  // підрядком у matchGroups, а не через catalogVehicle: даних
   // сумісності по цих конкретних товарах майже не було, з
-  // tecdocVehicle сторінки вийшли б порожніми. Перелік товарів під
+  // catalogVehicle сторінки вийшли б порожніми. Перелік товарів під
   // кожною сторінкою перевірено вручну прямим запитом до бойової бази
   // перед деплоєм.
   //
@@ -1490,10 +1490,10 @@ const BASE_CATEGORIES: CategoryDef[] = [
   //
   // Qashqai J11: на відміну від J10 (хвиля 7, де даних сумісності
   // взагалі не було), для J11 вони є — тому тут, як і в хвилі 6,
-  // модель підбирається через tecdocVehicle (за брендом+артикулом),
+  // модель підбирається через catalogVehicle (за брендом+артикулом),
   // а matchGroups визначає лише тип деталі. Це навмисно ловить і
   // товари з порожньою/загальною назвою на кшталт "Тормозные колодки,
-  // задние" — без tecdocVehicle такі товари взагалі не потрапили б на
+  // задние" — без catalogVehicle такі товари взагалі не потрапили б на
   // сторінку.
   //
   // Primera P11: навпаки, постачальники самі пишуть "Nissan Primera"
@@ -1527,7 +1527,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Задні гальмівні колодки для Nissan Qashqai II (J11, 2013-2021) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['зад']],
-    tecdocVehicle: { make: 'NISSAN', models: ['QASHQAI (J11, J11_)'] },
+    catalogVehicle: { make: 'NISSAN', models: ['QASHQAI (J11, J11_)'] },
     hideFromIndex: true,
     modelGroup: 'nissan-qashqai-j11',
     modelLabel: 'Nissan Qashqai J11',
@@ -1550,7 +1550,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
   // Обидва товари в основному приходять від постачальника з
   // загальними назвами на кшталт "Тормозные колодки, дисковые" (без
   // моделі авто в тексті) — тому, як і в хвилі 6/Qashqai J11,
-  // модель підбирається через tecdocVehicle, а не підрядком.
+  // модель підбирається через catalogVehicle, а не підрядком.
   // ============================================================
   {
     slug: 'carina-e-halmivni-kolodky',
@@ -1562,7 +1562,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Гальмівні колодки для Toyota Carina E (T19, 1992-1997) — дискові передні/задні та барабанні варіанти; сумісність за каталогами виробників та OEM-номерами.',
     matchGroups: [['колодк']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'TOYOTA',
       models: ['CARINA E Schrägheck (_T19_)', 'CARINA E Stufenheck (_T19_)', 'CARINA E Sportswagon (_T19_)'],
     },
@@ -1581,7 +1581,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Гальмівні колодки для Mitsubishi Carisma (DA_, 1995-2004) — передні та задні варіанти різних виробників, підходять і для Volvo S40/V40 з тією ж платформою.',
     matchGroups: [['колодк']],
-    tecdocVehicle: { make: 'MITSUBISHI', models: ['CARISMA (DA_)', 'CARISMA Stufenheck (DA_)'] },
+    catalogVehicle: { make: 'MITSUBISHI', models: ['CARISMA (DA_)', 'CARISMA Stufenheck (DA_)'] },
     hideFromIndex: true,
     modelGroup: 'mitsubishi-carisma',
     modelLabel: 'Mitsubishi Carisma',
@@ -1603,7 +1603,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
   // тому, на відміну від деяких попередніх хвиль, тут НЕ зроблено
   // окремих сторінок на кожен кузов (це був би дублікат контенту
   // з однаковим списком товарів під різним H1). Замість цього —
-  // один tecdocVehicle.models з обома кузовами разом, той самий
+  // один catalogVehicle.models з обома кузовами разом, той самий
   // підхід, що вже використано для CAMRY Stufenheck вище (кілька
   // поколінь в одному масиві на одній сторінці).
   {
@@ -1616,7 +1616,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Передні гальмівні колодки для Audi A4 B5 (1994-2001) — підходять і на седан (Stufenheck), і на універсал (Avant), в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'AUDI', models: ['A4 Stufenheck (8D2, B5)', 'A4 Avant (8D5, B5)'] },
+    catalogVehicle: { make: 'AUDI', models: ['A4 Stufenheck (8D2, B5)', 'A4 Avant (8D5, B5)'] },
     hideFromIndex: true,
     modelGroup: 'audi-a4-b5',
     modelLabel: 'Audi A4 (B5)',
@@ -1632,7 +1632,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Передні гальмівні колодки для Audi A6 C5 (1997-2005) — підходять і на седан (Stufenheck), і на універсал (Avant), в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'AUDI', models: ['A6 Stufenheck (4B2, C5)', 'A6 Avant (4B5, C5)'] },
+    catalogVehicle: { make: 'AUDI', models: ['A6 Stufenheck (4B2, C5)', 'A6 Avant (4B5, C5)'] },
     hideFromIndex: true,
     modelGroup: 'audi-a6-c5',
     modelLabel: 'Audi A6 (C5)',
@@ -1648,7 +1648,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Передні гальмівні колодки для Škoda Octavia 1U (1996-2010) — підходять і на седан/хетчбек, і на Combi, в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'SKODA', models: ['OCTAVIA (1U2)', 'OCTAVIA Combi (1U5)'] },
+    catalogVehicle: { make: 'SKODA', models: ['OCTAVIA (1U2)', 'OCTAVIA Combi (1U5)'] },
     hideFromIndex: true,
     modelGroup: 'skoda-octavia-1u',
     modelLabel: 'Škoda Octavia (1U)',
@@ -1664,7 +1664,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Передні гальмівні колодки для Škoda Fabia 6Y (1999-2008) — підходять і на хетчбек, і на Combi, в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'SKODA', models: ['FABIA (6Y2)', 'FABIA Combi (6Y5)'] },
+    catalogVehicle: { make: 'SKODA', models: ['FABIA (6Y2)', 'FABIA Combi (6Y5)'] },
     hideFromIndex: true,
     modelGroup: 'skoda-fabia-6y',
     modelLabel: 'Škoda Fabia (6Y)',
@@ -1679,7 +1679,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки передні VW Polo 9N (2001-2012) в наявності від 438 грн (STELLOX). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Передні гальмівні колодки для VW Polo 9N (2001-2012) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'VW', models: ['POLO (9N_)'] },
+    catalogVehicle: { make: 'VW', models: ['POLO (9N_)'] },
     hideFromIndex: true,
     modelGroup: 'vw-polo-9n',
     modelLabel: 'VW Polo (9N)',
@@ -1694,7 +1694,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки передні VW Jetta IV (1998-2005) в наявності від 880 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Передні гальмівні колодки для VW Jetta IV (1998-2005) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'VW', models: ['JETTA IV (1J2)'] },
+    catalogVehicle: { make: 'VW', models: ['JETTA IV (1J2)'] },
     hideFromIndex: true,
     modelGroup: 'vw-jetta-4',
     modelLabel: 'VW Jetta IV',
@@ -1709,7 +1709,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки передні Citroën Berlingo MF (1996-2005) в наявності від 530 грн (STELLOX). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Передні гальмівні колодки для Citroën Berlingo MF (1996-2005) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'CITROËN', models: ['BERLINGO (MF)'] },
+    catalogVehicle: { make: 'CITROËN', models: ['BERLINGO (MF)'] },
     hideFromIndex: true,
     modelGroup: 'citroen-berlingo-mf',
     modelLabel: 'Citroën Berlingo (MF)',
@@ -1724,7 +1724,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки передні Citroën Xsara N1 (1997-2005) в наявності від 530 грн (STELLOX). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Передні гальмівні колодки для Citroën Xsara N1 (1997-2005) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'CITROËN', models: ['XSARA (N1)'] },
+    catalogVehicle: { make: 'CITROËN', models: ['XSARA (N1)'] },
     hideFromIndex: true,
     modelGroup: 'citroen-xsara-n1',
     modelLabel: 'Citroën Xsara (N1)',
@@ -1754,7 +1754,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Передні гальмівні колодки для Subaru Impreza GC/GF (1992-2000) — підходять і на седан, і на універсал, в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'SUBARU', models: ['IMPREZA Stufenheck (GC)', 'IMPREZA Station Wagon (GF)'] },
+    catalogVehicle: { make: 'SUBARU', models: ['IMPREZA Stufenheck (GC)', 'IMPREZA Station Wagon (GF)'] },
     hideFromIndex: true,
     modelGroup: 'subaru-impreza-gc-gf',
     modelLabel: 'Subaru Impreza (GC/GF)',
@@ -1770,7 +1770,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Передні гальмівні колодки для мікроавтобуса Mitsubishi L400 / Space Gear (1995-2005) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'MITSUBISHI',
       models: ['L 400 / SPACE GEAR Bus (PD_W, PC_W, PA_V, PB_V)', 'L 400 Kasten (PD_W, PC_W, PB_V, PA_W, PA_V)'],
     },
@@ -1788,7 +1788,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки передні Ford Sierra (1982-1987) в наявності від 414 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Передні гальмівні колодки для Ford Sierra (1982-1987) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'FORD', models: ['SIERRA Schrägheck (GBC)'] },
+    catalogVehicle: { make: 'FORD', models: ['SIERRA Schrägheck (GBC)'] },
     hideFromIndex: true,
     modelGroup: 'ford-sierra',
     modelLabel: 'Ford Sierra',
@@ -1804,7 +1804,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Задні гальмівні колодки для Mercedes-Benz E-Class Coupe C124 (1993-1997) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['зад']],
-    tecdocVehicle: { make: 'MERCEDES-BENZ', models: ['E-CLASS Coupe (C124)'] },
+    catalogVehicle: { make: 'MERCEDES-BENZ', models: ['E-CLASS Coupe (C124)'] },
     hideFromIndex: true,
     modelGroup: 'mercedes-e-class-c124',
     modelLabel: 'Mercedes-Benz E-Class Coupe (C124)',
@@ -1820,7 +1820,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Задні гальмівні колодки для Mazda 626 Mk III (1987-1997) — підходять на купе (GD) і комбі (GV), в наявності декілька виробників.',
     matchGroups: [['колодк'], ['зад']],
-    tecdocVehicle: { make: 'MAZDA', models: ['626 Mk III Coupe (GD)', '626 Mk III Kombi (GV)'] },
+    catalogVehicle: { make: 'MAZDA', models: ['626 Mk III Coupe (GD)', '626 Mk III Kombi (GV)'] },
     hideFromIndex: true,
     modelGroup: 'mazda-626-mk3',
     modelLabel: 'Mazda 626 Mk III',
@@ -1835,7 +1835,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки задні Opel Vectra C (2002-2008) в наявності від 739 грн. Доставка по всій Україні, оплата при отриманні.',
     intro: 'Задні гальмівні колодки для Opel Vectra C (2002-2008) — в наявності декілька постачальників.',
     matchGroups: [['колодк'], ['зад']],
-    tecdocVehicle: { make: 'OPEL', models: ['VECTRA C'] },
+    catalogVehicle: { make: 'OPEL', models: ['VECTRA C'] },
     hideFromIndex: true,
     modelGroup: 'opel-vectra-c',
     modelLabel: 'Opel Vectra C',
@@ -1862,7 +1862,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки передні Nissan Sentra N15 в наявності від 621 грн (BENDIX). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Передні гальмівні колодки для Nissan Sentra N15 — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'NISSAN', models: ['SENTRA I (N15)'] },
+    catalogVehicle: { make: 'NISSAN', models: ['SENTRA I (N15)'] },
     hideFromIndex: true,
     modelGroup: 'nissan-sentra-n15',
     modelLabel: 'Nissan Sentra (N15)',
@@ -1877,7 +1877,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки передні Nissan Sentra N16 в наявності від 673 грн. Доставка по всій Україні, оплата при отриманні.',
     intro: 'Передні гальмівні колодки для Nissan Sentra N16 — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'NISSAN', models: ['SENTRA II (N16)'] },
+    catalogVehicle: { make: 'NISSAN', models: ['SENTRA II (N16)'] },
     hideFromIndex: true,
     modelGroup: 'nissan-sentra-n16',
     modelLabel: 'Nissan Sentra (N16)',
@@ -1892,7 +1892,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Гальмівні колодки задні VW Touareg (перше покоління) в наявності від 1139 грн (BENDIX). Доставка по всій Україні.',
     intro: 'Задні гальмівні колодки для VW Touareg (7L) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['зад']],
-    tecdocVehicle: { make: 'VW', models: ['TOUAREG (7LA, 7L6, 7L7)'] },
+    catalogVehicle: { make: 'VW', models: ['TOUAREG (7LA, 7L6, 7L7)'] },
     hideFromIndex: true,
     modelGroup: 'vw-touareg',
     modelLabel: 'VW Touareg',
@@ -1908,7 +1908,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Задні гальмівні колодки для Mercedes-Benz Sprinter та VW LT (1995-2006) — обидва фургони збудовані на одній платформі й використовують ті самі колодки, незалежно від вантажопідйомності (2-4т) чи кузова (Bus/Kasten/Pritsche).',
     matchGroups: [['колодк'], ['зад']],
-    tecdocVehicle: {
+    catalogVehicle: {
       make: 'MERCEDES-BENZ',
       models: [
         'SPRINTER 2-t Bus (901, 902)', 'SPRINTER 2-t Kasten (901, 902)', 'SPRINTER 2-t Pritsche/Fahrgestell (901, 902)',
@@ -1963,7 +1963,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Передні гальмівні колодки для Seat Ibiza Mk II та Cordoba (1993-1999, спільна платформа) — в наявності декілька виробників.',
     matchGroups: [['колодк'], ['перед']],
-    tecdocVehicle: { make: 'SEAT', models: ['IBIZA Mk II (6K1)', 'CORDOBA Stufenheck (6K1, 6K2)'] },
+    catalogVehicle: { make: 'SEAT', models: ['IBIZA Mk II (6K1)', 'CORDOBA Stufenheck (6K1, 6K2)'] },
     hideFromIndex: true,
     modelGroup: 'seat-ibiza-2-cordoba',
     modelLabel: 'Seat Ibiza Mk II / Cordoba',
@@ -2008,7 +2008,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Nissan Micra / March K12 (2003-2010, одна й та сама модель під різними назвами) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'NISSAN', models: ['MICRA C+C (K12)', 'MARCH III (K12)'] },
+    catalogVehicle: { make: 'NISSAN', models: ['MICRA C+C (K12)', 'MARCH III (K12)'] },
     hideFromIndex: true,
     modelGroup: 'nissan-micra-march-k12',
     modelLabel: 'Nissan Micra / March (K12)',
@@ -2024,7 +2024,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Renault Clio III (2005-2010) — підходять і на хетчбек, і на універсал (Grandtour), в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'RENAULT', models: ['EURO CLIO III (BR0/1, CR0/1)', 'CLIO Grandtour (KR0/1_)'] },
+    catalogVehicle: { make: 'RENAULT', models: ['EURO CLIO III (BR0/1, CR0/1)', 'CLIO Grandtour (KR0/1_)'] },
     hideFromIndex: true,
     modelGroup: 'renault-clio-3',
     modelLabel: 'Renault Clio III',
@@ -2039,7 +2039,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски Renault Modus / Grand Modus (з 2004) в наявності від 192 грн (DELPHI). Доставка по всій Україні.',
     intro: 'Сайлентблоки важеля підвіски для Renault Modus / Grand Modus (з 2004) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'RENAULT', models: ['MODUS / GRAND MODUS (F/JP0_)'] },
+    catalogVehicle: { make: 'RENAULT', models: ['MODUS / GRAND MODUS (F/JP0_)'] },
     hideFromIndex: true,
     modelGroup: 'renault-modus',
     modelLabel: 'Renault Modus',
@@ -2054,7 +2054,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски Nissan Murano Z51 (з 2007) в наявності від 326 грн (FEBEST). Доставка по всій Україні.',
     intro: 'Сайлентблоки важеля підвіски для Nissan Murano Z51 (з 2007) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'NISSAN', models: ['MURANO (Z51)'] },
+    catalogVehicle: { make: 'NISSAN', models: ['MURANO (Z51)'] },
     hideFromIndex: true,
     modelGroup: 'nissan-murano-z51',
     modelLabel: 'Nissan Murano (Z51)',
@@ -2069,7 +2069,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски Nissan Quest E52 (з 2010) в наявності від 326 грн (FEBEST). Доставка по всій Україні.',
     intro: 'Сайлентблоки важеля підвіски для Nissan Quest E52 (з 2010) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'NISSAN', models: ['QUEST (E52)'] },
+    catalogVehicle: { make: 'NISSAN', models: ['QUEST (E52)'] },
     hideFromIndex: true,
     modelGroup: 'nissan-quest-e52',
     modelLabel: 'Nissan Quest (E52)',
@@ -2085,7 +2085,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Nissan Maxima J32 (з 2008; той самий кузов на деяких ринках продавався як Nissan Teana) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'NISSAN', models: ['MAXIMA V (J32)'] },
+    catalogVehicle: { make: 'NISSAN', models: ['MAXIMA V (J32)'] },
     hideFromIndex: true,
     modelGroup: 'nissan-maxima-j32',
     modelLabel: 'Nissan Maxima (J32)',
@@ -2101,7 +2101,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Mitsubishi Galant Mk IV (1987-1992, той самий кузов продавався в Японії і як Mitsubishi Eterna) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'MITSUBISHI', models: ['GALANT Mk IV Stufenheck (E3_A)', 'ETERNA IV (E3_A)'] },
+    catalogVehicle: { make: 'MITSUBISHI', models: ['GALANT Mk IV Stufenheck (E3_A)', 'ETERNA IV (E3_A)'] },
     hideFromIndex: true,
     modelGroup: 'mitsubishi-galant-4',
     modelLabel: 'Mitsubishi Galant Mk IV',
@@ -2117,7 +2117,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Втулки стабілізатора поперечної стійкості для Toyota Vitz / Echo Verso (1999-2005, спільна платформа) — в наявності декілька виробників.',
     matchGroups: [['втулк'], ['стабіліз', 'стабилиз']],
-    tecdocVehicle: { make: 'TOYOTA', models: ['VITZ (SCP1_, NLP1_, NCP1_)', 'ECHO VERSO (_NLP2_, _NCP2_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['VITZ (SCP1_, NLP1_, NCP1_)', 'ECHO VERSO (_NLP2_, _NCP2_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-vitz-echo-verso',
     modelLabel: 'Toyota Vitz / Echo Verso',
@@ -2132,7 +2132,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Втулки стабілізатора Toyota Vitz 2 покоління (з 2005) в наявності від 62 грн (YAMATO). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Втулки стабілізатора поперечної стійкості для Toyota Vitz 2 покоління (з 2005) — в наявності декілька виробників.',
     matchGroups: [['втулк'], ['стабіліз', 'стабилиз']],
-    tecdocVehicle: { make: 'TOYOTA', models: ['VITZ (SCP9_, NSP9_, KSP9_, NCP9_, ZSP9_)'] },
+    catalogVehicle: { make: 'TOYOTA', models: ['VITZ (SCP9_, NSP9_, KSP9_, NCP9_, ZSP9_)'] },
     hideFromIndex: true,
     modelGroup: 'toyota-vitz-2',
     modelLabel: 'Toyota Vitz (2 покоління)',
@@ -2148,7 +2148,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Втулки стабілізатора поперечної стійкості для Mitsubishi Legnum / Aspire (1996-2003, той самий кузов під різними бейджами) — в наявності декілька виробників.',
     matchGroups: [['втулк'], ['стабіліз', 'стабилиз']],
-    tecdocVehicle: { make: 'MITSUBISHI', models: ['LEGNUM VI Station Wagon (EA_)', 'ASPIRE VI (EA_)'] },
+    catalogVehicle: { make: 'MITSUBISHI', models: ['LEGNUM VI Station Wagon (EA_)', 'ASPIRE VI (EA_)'] },
     hideFromIndex: true,
     modelGroup: 'mitsubishi-legnum-aspire',
     modelLabel: 'Mitsubishi Legnum / Aspire',
@@ -2163,7 +2163,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Втулки стабілізатора Honda Edix (2004-2006) в наявності від 69 грн (GSP). Доставка по всій Україні, оплата при отриманні.',
     intro: 'Втулки стабілізатора поперечної стійкості для Honda Edix (2004-2006) — в наявності декілька виробників.',
     matchGroups: [['втулк'], ['стабіліз', 'стабилиз']],
-    tecdocVehicle: { make: 'HONDA', models: ['EDIX (BE)'] },
+    catalogVehicle: { make: 'HONDA', models: ['EDIX (BE)'] },
     hideFromIndex: true,
     modelGroup: 'honda-edix',
     modelLabel: 'Honda Edix',
@@ -2182,7 +2182,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       ['куль', 'шаров'],
       ['опор'],
     ],
-    tecdocVehicle: { make: 'NISSAN', models: ['CAMIONES / FRONTIER (D40)', 'NP300 Pritsche/Fahrgestell (D40)'] },
+    catalogVehicle: { make: 'NISSAN', models: ['CAMIONES / FRONTIER (D40)', 'NP300 Pritsche/Fahrgestell (D40)'] },
     hideFromIndex: true,
     modelGroup: 'nissan-frontier-d40',
     modelLabel: 'Nissan Frontier (D40)',
@@ -2200,7 +2200,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       ['куль', 'шаров'],
       ['опор'],
     ],
-    tecdocVehicle: { make: 'LEXUS', models: ['LS Stufenheck (UVF4_, USF4_)'] },
+    catalogVehicle: { make: 'LEXUS', models: ['LS Stufenheck (UVF4_, USF4_)'] },
     hideFromIndex: true,
     modelGroup: 'lexus-ls',
     modelLabel: 'Lexus LS',
@@ -2231,7 +2231,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Volkswagen Golf IV (1997-2006) — підходять і на хетчбек, і на універсал, в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
+    catalogVehicle: { make: 'VW', models: ['GOLF Mk IV (1J1)', 'GOLF Mk IV Estate (1J5)'] },
     hideFromIndex: true,
     modelGroup: 'vw-golf-4',
     modelLabel: 'VW Golf IV',
@@ -2247,7 +2247,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Volkswagen Jetta IV / Bora (1998-2005) — підходять і на седан, і на універсал, в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'VW', models: ['JETTA IV (1J2)', 'JETTA IV Wagon (1J6)'] },
+    catalogVehicle: { make: 'VW', models: ['JETTA IV (1J2)', 'JETTA IV Wagon (1J6)'] },
     hideFromIndex: true,
     modelGroup: 'vw-jetta-4',
     modelLabel: 'VW Jetta IV',
@@ -2262,7 +2262,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски VW Golf III (1991-1997) в наявності від 157 грн (LEMFORDER). Доставка по всій Україні.',
     intro: 'Сайлентблоки важеля підвіски для Volkswagen Golf III (1991-1997) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'VW', models: ['GOLF Mk III (1H1)'] },
+    catalogVehicle: { make: 'VW', models: ['GOLF Mk III (1H1)'] },
     hideFromIndex: true,
     modelGroup: 'vw-golf-3',
     modelLabel: 'VW Golf III',
@@ -2278,7 +2278,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Volkswagen Polo Classic седан (1995-2002, кузов 6KV2) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'VW', models: ['POLO Stufenheck (6KV2)'] },
+    catalogVehicle: { make: 'VW', models: ['POLO Stufenheck (6KV2)'] },
     hideFromIndex: true,
     modelGroup: 'vw-polo-sedan',
     modelLabel: 'VW Polo Classic (седан)',
@@ -2293,7 +2293,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски VW Touareg (2002-2010) в наявності від 321 грн (LEMFORDER). Доставка по всій Україні.',
     intro: 'Сайлентблоки важеля підвіски для Volkswagen Touareg (2002-2010) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'VW', models: ['TOUAREG (7LA, 7L6, 7L7)'] },
+    catalogVehicle: { make: 'VW', models: ['TOUAREG (7LA, 7L6, 7L7)'] },
     hideFromIndex: true,
     modelGroup: 'vw-touareg',
     modelLabel: 'VW Touareg',
@@ -2309,7 +2309,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Seat Ibiza Mk II та Cordoba (1993-2002, спільна платформа) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'SEAT', models: ['IBIZA Mk II (6K1)', 'IBIZA Mk III (6K1)', 'CORDOBA Stufenheck (6K1, 6K2)', 'CORDOBA (6K2)'] },
+    catalogVehicle: { make: 'SEAT', models: ['IBIZA Mk II (6K1)', 'IBIZA Mk III (6K1)', 'CORDOBA Stufenheck (6K1, 6K2)', 'CORDOBA (6K2)'] },
     hideFromIndex: true,
     modelGroup: 'seat-ibiza-2-cordoba',
     modelLabel: 'Seat Ibiza Mk II / Cordoba',
@@ -2324,7 +2324,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски Seat Leon I (1999-2006) в наявності від 157 грн. Доставка по всій Україні, оплата при отриманні.',
     intro: 'Сайлентблоки важеля підвіски для Seat Leon I (1999-2006) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'SEAT', models: ['LEON (1M1)'] },
+    catalogVehicle: { make: 'SEAT', models: ['LEON (1M1)'] },
     hideFromIndex: true,
     modelGroup: 'seat-leon-1',
     modelLabel: 'Seat Leon I',
@@ -2339,7 +2339,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски Seat Toledo II (1998-2006) в наявності від 157 грн. Доставка по всій Україні, оплата при отриманні.',
     intro: 'Сайлентблоки важеля підвіски для Seat Toledo II (1998-2006) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'SEAT', models: ['TOLEDO Mk II (1M2)'] },
+    catalogVehicle: { make: 'SEAT', models: ['TOLEDO Mk II (1M2)'] },
     hideFromIndex: true,
     modelGroup: 'seat-toledo-2',
     modelLabel: 'Seat Toledo II',
@@ -2355,7 +2355,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для BMW 5-Series E39 (1995-2004) — підходять і на седан, і на універсал Touring, в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'BMW', models: ['5 Stufenheck (E39)', '5 Touring (E39)'] },
+    catalogVehicle: { make: 'BMW', models: ['5 Stufenheck (E39)', '5 Touring (E39)'] },
     hideFromIndex: true,
     modelGroup: 'bmw-5-e39',
     modelLabel: 'BMW 5-Series (E39)',
@@ -2370,7 +2370,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски BMW 7-Series E38 (1994-2001) в наявності від 530 грн (DELPHI). Доставка по всій Україні.',
     intro: 'Сайлентблоки важеля підвіски для BMW 7-Series E38 (1994-2001) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'BMW', models: ['7 Stufenheck (E38)'] },
+    catalogVehicle: { make: 'BMW', models: ['7 Stufenheck (E38)'] },
     hideFromIndex: true,
     modelGroup: 'bmw-7-e38',
     modelLabel: 'BMW 7-Series (E38)',
@@ -2386,7 +2386,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для BMW 5-Series E60/E61 (2003-2010) — підходять і на седан, і на універсал Touring, в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'BMW', models: ['5 Stufenheck (E60)', '5 Touring (E61)'] },
+    catalogVehicle: { make: 'BMW', models: ['5 Stufenheck (E60)', '5 Touring (E61)'] },
     hideFromIndex: true,
     modelGroup: 'bmw-5-e60',
     modelLabel: 'BMW 5-Series (E60/E61)',
@@ -2401,7 +2401,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски BMW 7-Series E65/E66/E67 (2001-2008) в наявності від 530 грн. Доставка по всій Україні.',
     intro: 'Сайлентблоки важеля підвіски для BMW 7-Series E65/E66/E67 (2001-2008) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'BMW', models: ['7 Stufenheck (E65, E66, E67)'] },
+    catalogVehicle: { make: 'BMW', models: ['7 Stufenheck (E65, E66, E67)'] },
     hideFromIndex: true,
     modelGroup: 'bmw-7-e65',
     modelLabel: 'BMW 7-Series (E65/E66)',
@@ -2416,7 +2416,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски BMW X5 E53 (1999-2006) в наявності від 244 грн. Доставка по всій Україні, оплата при отриманні.',
     intro: 'Сайлентблоки важеля підвіски для BMW X5 E53 (1999-2006) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'BMW', models: ['X5 (E53)'] },
+    catalogVehicle: { make: 'BMW', models: ['X5 (E53)'] },
     hideFromIndex: true,
     modelGroup: 'bmw-x5-e53',
     modelLabel: 'BMW X5 (E53)',
@@ -2432,7 +2432,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Audi A3 8P (2003-2012) — підходять на всі кузови покоління: хетчбек, Sportback і кабріолет, в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'AUDI', models: ['A3 Sportback (8PA)', 'A3 (8P1)', 'A3 Cabriolet (8P7)'] },
+    catalogVehicle: { make: 'AUDI', models: ['A3 Sportback (8PA)', 'A3 (8P1)', 'A3 Cabriolet (8P7)'] },
     hideFromIndex: true,
     modelGroup: 'audi-a3-8p',
     modelLabel: 'Audi A3 (8P)',
@@ -2447,7 +2447,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски Audi Q7 4L (2005-2015) в наявності від 321 грн (LEMFORDER). Доставка по всій Україні.',
     intro: 'Сайлентблоки важеля підвіски для Audi Q7 4L (2005-2015) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'AUDI', models: ['Q7 (4L)'] },
+    catalogVehicle: { make: 'AUDI', models: ['Q7 (4L)'] },
     hideFromIndex: true,
     modelGroup: 'audi-q7-4l',
     modelLabel: 'Audi Q7 (4L)',
@@ -2463,7 +2463,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Audi A1 (2010-2018) — підходять і на 3-дверний хетчбек, і на Sportback, в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'AUDI', models: ['A1 (8X1, 8XF)', 'A1 Sportback (8XA, 8XK)'] },
+    catalogVehicle: { make: 'AUDI', models: ['A1 (8X1, 8XF)', 'A1 Sportback (8XA, 8XK)'] },
     hideFromIndex: true,
     modelGroup: 'audi-a1',
     modelLabel: 'Audi A1',
@@ -2479,7 +2479,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Skoda Octavia I (1996-2010) — підходять і на хетчбек, і на універсал Combi, в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'SKODA', models: ['OCTAVIA Combi (1U5)', 'OCTAVIA (1U2)'] },
+    catalogVehicle: { make: 'SKODA', models: ['OCTAVIA Combi (1U5)', 'OCTAVIA (1U2)'] },
     hideFromIndex: true,
     modelGroup: 'skoda-octavia-1',
     modelLabel: 'Skoda Octavia I',
@@ -2495,7 +2495,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Skoda Octavia II Combi (2004-2013; на деяких ринках продавалась як Skoda Laura) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'SKODA', models: ['OCTAVIA Combi (1Z5)'] },
+    catalogVehicle: { make: 'SKODA', models: ['OCTAVIA Combi (1Z5)'] },
     hideFromIndex: true,
     modelGroup: 'skoda-octavia-2',
     modelLabel: 'Skoda Octavia II',
@@ -2510,7 +2510,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
       'Сайлентблоки важеля підвіски Skoda Superb II (2008-2015) в наявності від 245 грн. Доставка по всій Україні, оплата при отриманні.',
     intro: 'Сайлентблоки важеля підвіски для Skoda Superb II (2008-2015) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'SKODA', models: ['SUPERB (3T4)'] },
+    catalogVehicle: { make: 'SKODA', models: ['SUPERB (3T4)'] },
     hideFromIndex: true,
     modelGroup: 'skoda-superb-2',
     modelLabel: 'Skoda Superb II',
@@ -2526,7 +2526,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Skoda Fabia та фургона Praktik на її базі (2000-2014, спільна платформа) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'SKODA', models: ['FABIA', 'PRAKTIK (5J)'] },
+    catalogVehicle: { make: 'SKODA', models: ['FABIA', 'PRAKTIK (5J)'] },
     hideFromIndex: true,
     modelGroup: 'skoda-fabia-praktik',
     modelLabel: 'Skoda Fabia / Praktik',
@@ -2542,7 +2542,7 @@ const BASE_CATEGORIES: CategoryDef[] = [
     intro:
       'Сайлентблоки важеля підвіски для Ford Focus II (хетчбек, універсал) та компактвена C-MAX на його базі (2004-2011) — в наявності декілька виробників.',
     matchGroups: [['сайлентблок']],
-    tecdocVehicle: { make: 'FORD', models: ['FOCUS II (DA_)', 'FOCUS II Station Wagon (DA_)', 'FOCUS C-MAX', 'C-MAX (DM2)'] },
+    catalogVehicle: { make: 'FORD', models: ['FOCUS II (DA_)', 'FOCUS II Station Wagon (DA_)', 'FOCUS C-MAX', 'C-MAX (DM2)'] },
     hideFromIndex: true,
     modelGroup: 'ford-focus-2-cmax',
     modelLabel: 'Ford Focus II / C-MAX',
@@ -2819,13 +2819,13 @@ export function detectCategoryForProductName(name: string | null | undefined): C
 //      лише широкі категорії — !c.parentCategorySlug), як і всі інші
 //      вузькі категорії "по машині" у файлі.
 //   2. detectCategoryForProductH1() нижче — окрема функція САМЕ для
-//      H1/title: спершу пробує вузькі категорії (з tecdocVehicle), але
+//      H1/title: спершу пробує вузькі категорії (з catalogVehicle), але
 //      ЛИШЕ якщо марка/модель ТОВАРУ (car_make/car_model) реально
 //      збігаються з нею (narrowCategoryMatchesVehicle) — інакше
 //      відкат на звичайну широку категорію через
 //      detectCategoryForProductName() вище.
 
-// Перше "слово" моделі з tecdocVehicle.models (напр. "LANOS /
+// Перше "слово" моделі з catalogVehicle.models (напр. "LANOS /
 // SENS (KLAT)" -> "LANOS", "CAMRY Stufenheck (AVV5_, XV5_)" ->
 // "CAMRY") — наближений ключ для зіставлення з вільним текстом
 // car_model постачальника, який рідко співпадає з ним дослівно
@@ -2843,7 +2843,7 @@ function containsWholeWord(text: string, keyword: string): boolean {
   return pattern.test(text);
 }
 
-// Марка — ТОЧНИЙ збіг (car_make у базі й tecdocVehicle.make — той
+// Марка — ТОЧНИЙ збіг (car_make у базі й catalogVehicle.make — той
 // самий "сирий" код постачальника, напр. "TOYOTA", "VW", "CITROEN").
 // Модель — НАБЛИЖЕНИЙ збіг (ключове слово з запису models як ціле
 // слово десь у сирому car_model) — це не 100%-точна перевірка (каталоги
@@ -2855,10 +2855,10 @@ export function narrowCategoryMatchesVehicle(
   carMake: string | null | undefined,
   carModel: string | null | undefined
 ): boolean {
-  if (!category.tecdocVehicle || !carMake || !carModel) return false;
-  if (category.tecdocVehicle.make.toUpperCase() !== carMake.trim().toUpperCase()) return false;
+  if (!category.catalogVehicle || !carMake || !carModel) return false;
+  if (category.catalogVehicle.make.toUpperCase() !== carMake.trim().toUpperCase()) return false;
   const upperModel = carModel.toUpperCase();
-  return category.tecdocVehicle.models.some((m) => containsWholeWord(upperModel, tecdocModelKeyword(m)));
+  return category.catalogVehicle.models.some((m) => containsWholeWord(upperModel, tecdocModelKeyword(m)));
 }
 
 export function detectCategoryForProductH1(
@@ -2869,7 +2869,7 @@ export function detectCategoryForProductH1(
   if (!name) return undefined;
   if (nameStartsWithBoot(name)) return undefined;
   const narrow = CATEGORIES.find(
-    (c) => c.tecdocVehicle && categoryMatchesName(c, name) && narrowCategoryMatchesVehicle(c, carMake, carModel)
+    (c) => c.catalogVehicle && categoryMatchesName(c, name) && narrowCategoryMatchesVehicle(c, carMake, carModel)
   );
   if (narrow) return narrow;
 
@@ -2914,10 +2914,10 @@ export function getSubcategories(parentSlug: string): CategoryDef[] {
 // іншою адресою (/category/kulovi-opory?marka=...&model=...) означало
 // б дублювати контент для Google. Замість цього сторінка категорії
 // (app/category/[slug]/page.tsx) робить permanentRedirect() на готову
-// вузьку сторінку. Зіставлення йде ЛИШЕ по tecdocVehicle (make + точне
+// вузьку сторінку. Зіставлення йде ЛИШЕ по catalogVehicle (make + точне
 // значення з models — його ж підставляють посилання хабів моделей,
 // lib/modelHubs.ts, у параметр ?model=) — старі вузькі сторінки хвиль 1-4 без
-// tecdocVehicle у дедуплікації участі не беруть (для них це поле
+// catalogVehicle у дедуплікації участі не беруть (для них це поле
 // просто не заповнене й не обов'язкове)
 export function findNarrowPageForVehicle(
   parentSlug: string,
@@ -2928,9 +2928,9 @@ export function findNarrowPageForVehicle(
   return CATEGORIES.find(
     (c) =>
       c.parentCategorySlug === parentSlug &&
-      c.tecdocVehicle !== undefined &&
-      c.tecdocVehicle.make.toUpperCase() === makeUpper &&
-      c.tecdocVehicle.models.includes(model)
+      c.catalogVehicle !== undefined &&
+      c.catalogVehicle.make.toUpperCase() === makeUpper &&
+      c.catalogVehicle.models.includes(model)
   );
 }
 
@@ -2947,9 +2947,9 @@ export function findAnyNarrowPageForVehicle(make: string, model: string): Catego
   const makeUpper = make.trim().toUpperCase();
   return CATEGORIES.find(
     (c) =>
-      c.tecdocVehicle !== undefined &&
-      c.tecdocVehicle.make.toUpperCase() === makeUpper &&
-      c.tecdocVehicle.models.includes(model)
+      c.catalogVehicle !== undefined &&
+      c.catalogVehicle.make.toUpperCase() === makeUpper &&
+      c.catalogVehicle.models.includes(model)
   );
 }
 
@@ -2957,7 +2957,7 @@ export function findAnyNarrowPageForVehicle(make: string, model: string): Catego
 // МОДЕЛІ МАРКИ (для блоку "Моделі {марка}" на /marky/[make])
 // ------------------------------------------------------------
 // Курований список моделей, для яких уже є готові вузькі SEO-сторінки
-// (tecdocVehicle+modelGroup) під цю марку — по одній посадковій
+// (catalogVehicle+modelGroup) під цю марку — по одній посадковій
 // сторінці на модель (перша категорія в її modelGroup). Раніше на
 // /marky/[make] не було ЖОДНОГО посилання на ці вже готові сторінки
 // моделей — Google міг знайти їх лише через sitemap, а не через
@@ -2973,8 +2973,8 @@ export function getModelLandingsForMake(makeDbValues: string[]): ModelLanding[] 
   const seen = new Map<string, ModelLanding>();
 
   for (const category of CATEGORIES) {
-    if (!category.tecdocVehicle || !category.modelGroup || !category.modelLabel) continue;
-    if (!upperValues.includes(category.tecdocVehicle.make.toUpperCase())) continue;
+    if (!category.catalogVehicle || !category.modelGroup || !category.modelLabel) continue;
+    if (!upperValues.includes(category.catalogVehicle.make.toUpperCase())) continue;
     if (seen.has(category.modelGroup)) continue;
 
     seen.set(category.modelGroup, {
@@ -3022,13 +3022,13 @@ export function getToCategories(): CategoryDef[] {
 // (щоб не було неоднозначності з products.name/suppliers.name, коли
 // сторінка ще й приєднує JOIN suppliers за delivery_time)
 //
-// Якщо в категорії задано tecdocVehicle — додається ЩЕ ОДНА умова
+// Якщо в категорії задано catalogVehicle — додається ЩЕ ОДНА умова
 // (через AND) — своя применимость:
 // у товара (или другого предложения той же детали — бренд + артикул) в
 // product_vehicles_own должна быть марка + модель (+ поколение, если оно
 // указано) из lib/narrowCategoryVehicles.ts. Категория без такого
 // соответствия товаров не получает. params після цього — вже не суто string[][], а суміш
-// (string[] для ILIKE ANY, string і string[] для самого tecdocVehicle),
+// (string[] для ILIKE ANY, string і string[] для самого catalogVehicle),
 // тому тип params розширено до unknown[]; кожен виклик, що далі робить
 // ...params у pool.query(...), як і раніше, просто розкладає їх по
 // порядку в позиційні $1, $2... — сумісність зі старими викликами не
@@ -3086,7 +3086,7 @@ export function buildCategoryRuleClause(
   });
   conditions.push(ruleSql.length === 1 ? ruleSql[0] : `(${ruleSql.join(' OR ')})`);
 
-  if (category.tecdocVehicle) {
+  if (category.catalogVehicle) {
     const vehicles = narrowCategoryVehicles(category);
     if (vehicles.length === 0) {
       conditions.push('false');

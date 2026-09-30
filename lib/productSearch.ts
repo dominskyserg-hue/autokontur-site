@@ -77,7 +77,7 @@ export async function buildTextSearchClause(
     // строки — тот же производитель или это длинный номер без бренда
     // (то же правило, что в блоке "Аналоги", lib/crossBrandMatch.ts)
     `SELECT p.id
-       FROM tecdoc_crosses tc
+       FROM part_crosses tc
        JOIN products p ON p.article = tc.article_b
        WHERE tc.article_a = ${exactArticlePlaceholder} AND tc.is_valid
          AND ${crossSideMatchesSql('tc.brand_b', 'tc.article_b', 'p.brand')}`,

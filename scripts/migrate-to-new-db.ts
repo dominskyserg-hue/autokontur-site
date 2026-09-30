@@ -19,7 +19,7 @@
 //   2. Копіює дані з КОЖНОЇ таблиці SOURCE -> TARGET пачками по 500
 //      рядків (COPY тут не використовується — pg-copy-streams не є
 //      залежністю проєкту, а пачкові INSERT достатньо швидкі навіть
-//      для мільйонів рядків tecdoc_crosses/tecdoc_compatibility).
+//      для сотень тисяч рядків part_crosses).
 //   3. Звіряє кількість рядків у SOURCE і TARGET по кожній таблиці й
 //      виводить підсумок — якщо десь розбіжність, це видно одразу.
 //
@@ -61,7 +61,7 @@ const TABLES_IN_ORDER = [
   'vin_requests',
   'site_pages',
   'search_synonym_groups',
-  'tecdoc_crosses',
+  'part_crosses',
 ];
 
 const BATCH_SIZE = 500;

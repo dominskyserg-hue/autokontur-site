@@ -1,5 +1,5 @@
 // ============================================================
-// "Тонкие" узкие категории "деталь + модель" (CategoryDef.tecdocVehicle):
+// "Тонкие" узкие категории "деталь + модель" (CategoryDef.catalogVehicle):
 // в них остаются только товары,
 // подтверждённые своей применимостью (lib/narrowCategoryVehicles.ts).
 // Категория, где осталось меньше MIN_NARROW_PRODUCTS деталей, отдаёт 301
@@ -37,7 +37,7 @@ let cache: { expires: number; thin: Set<string> } | null = null;
 
 export async function loadThinNarrowCategories(): Promise<Set<string>> {
   if (cache && cache.expires > Date.now()) return cache.thin;
-  const narrowSlugs = CATEGORIES.filter((c) => c.tecdocVehicle).map((c) => c.slug);
+  const narrowSlugs = CATEGORIES.filter((c) => c.catalogVehicle).map((c) => c.slug);
   const result = await pool.query(
     `SELECT pc.category_id AS slug, COUNT(DISTINCT (UPPER(COALESCE(p.brand, '')), p.article))::int AS n
        FROM product_categories pc
@@ -58,7 +58,7 @@ export async function loadThinNarrowCategories(): Promise<Set<string>> {
 export function narrowRedirectTarget(category: CategoryDef): string {
   if (category.parentCategorySlug) return `/category/${category.parentCategorySlug}`;
   const broad = CATEGORIES.find(
-    (c) => !c.tecdocVehicle && !c.modelGroup && !c.parentCategorySlug && categoryMatchesName(c, category.name)
+    (c) => !c.catalogVehicle && !c.modelGroup && !c.parentCategorySlug && categoryMatchesName(c, category.name)
   );
   return broad ? `/category/${broad.slug}` : '/category';
 }
@@ -81,7 +81,7 @@ export function findNarrowCategoryForOwnVehicle(
   if (!model) return undefined;
   return CATEGORIES.find(
     (c) =>
-      c.tecdocVehicle &&
+      c.catalogVehicle &&
       !thin.has(c.slug) &&
       narrowCategoryVehicles(c).some(
         (v) => v.make === make && v.model === model && (v.generation === null || v.generation === generation)

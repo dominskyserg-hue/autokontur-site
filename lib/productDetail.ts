@@ -774,7 +774,7 @@ const loadCrossReferences = cache(async function loadCrossReferences(
   return { oem, aftermarket };
 });
 
-// Аналог/OEM-номер з таблиці tecdoc_crosses — кроси з прайсів наших
+// Аналог/OEM-номер з таблиці part_crosses — кроси з прайсів наших
 // постачальників і довідника TRW (scripts/tecdoc/schema.sql). НЕ те саме,
 // що CrossRefItem вище (cross_reference_members — курована адміном модель)
 export interface TecdocCrossItem {
@@ -801,7 +801,7 @@ export interface TecdocCompatibilityItem {
   make: string;
   // Сире значення марки (напр. "VW", а не
   // курована "Volkswagen" з make вище) — потрібне окремо, бо саме в
-  // такому написанні марка збережена в CategoryDef.tecdocVehicle.make
+  // такому написанні марка збережена в CategoryDef.catalogVehicle.make
   // (lib/categories.ts) і саме його звіряє findAnyNarrowPageForVehicle
   // при пошуку посадкової сторінки моделі для бейджа застосовності
   makeRaw: string;
@@ -836,7 +836,7 @@ const TECDOC_COMPATIBILITY_LIMIT = 20;
 
 // article — уже ОЧИЩЕНИЙ (products.article в базі і так зберігається
 // очищеним, повторно чистити не треба — див. коментар біля products
-// у schema.sql). tecdoc_crosses.article_a заповнений тією ж функцією
+// у schema.sql). part_crosses.article_a заповнений тією ж функцією
 // cleanArticle() під час імпорту (scripts/tecdoc/cleanArticle.ts),
 // тому пряме порівняння текстом коректне
 type TecdocCrossItemRaw = TecdocCrossItem & { costPrice: number | null };
@@ -866,7 +866,7 @@ const loadTecdocCrosses = cache(async function loadTecdocCrosses(
       p.stock
     FROM (
       SELECT DISTINCT brand_b, article_b
-      FROM tecdoc_crosses
+      FROM part_crosses
       -- LENGTH(article_b) >= 3 — відсікає сміттєві "номери" з дампа
       -- на кшталт голого "0" чи "12" (53 420 таких рядків з довжиною
       -- 1 у всій таблиці на момент імпорту) — жоден справжній

@@ -980,7 +980,7 @@ WHERE NOT EXISTS (SELECT 1 FROM search_synonym_groups WHERE label = 'Гальм�
 --     при об'єднанні кластерів деталей йдуть на ручний розгляд
 --     (cross_reference_conflicts), масштаб — сотні/тисячі рядків.
 --
---   tecdoc_crosses нижче    — масові кроси з прайсів постачальників і
+--   part_crosses нижче    — масові кроси з прайсів постачальників і
 --     довідника TRW (скрипти scripts/tecdoc/import-*.ts) без ручної
 --     перевірки кожного зв'язку. Використовується для блоку "Аналоги"
 --     на сторінці товару, пошуку за чужим номером і своєї
@@ -1010,7 +1010,27 @@ WHERE NOT EXISTS (SELECT 1 FROM search_synonym_groups WHERE label = 'Гальм�
 -- читається на кожному відкритті сторінки товару — тому оптимізуємо
 -- саме під читання
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS tecdoc_crosses (
+-- Таблица раньше называлась tecdoc_crosses — переименована 30.09.2026.
+-- На базе со старым названием переименовываем (вместе с индексами и
+-- ограничениями), чтобы CREATE TABLE ниже не создал рядом пустую таблицу
+DO $$
+DECLARE
+  c record;
+BEGIN
+  IF to_regclass('public.part_crosses') IS NULL
+     AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'tecdoc_crosses') THEN
+    ALTER TABLE tecdoc_crosses RENAME TO part_crosses;
+    ALTER SEQUENCE IF EXISTS tecdoc_crosses_id_seq RENAME TO part_crosses_id_seq;
+    ALTER INDEX IF EXISTS idx_tecdoc_crosses_article_a RENAME TO idx_part_crosses_article_a;
+    FOR c IN SELECT conname FROM pg_constraint
+             WHERE conrelid = 'part_crosses'::regclass AND conname LIKE 'tecdoc\_crosses\_%' LOOP
+      EXECUTE format('ALTER TABLE part_crosses RENAME CONSTRAINT %I TO %I',
+                     c.conname, 'part_crosses_' || substr(c.conname, 16));
+    END LOOP;
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS part_crosses (
   id BIGSERIAL PRIMARY KEY,
 
   brand_a TEXT NOT NULL,
@@ -1043,7 +1063,7 @@ CREATE TABLE IF NOT EXISTS tecdoc_crosses (
 -- (app/api/products/route.ts) — без окремого індексу саме на
 -- article_a Postgres змушений сканувати всю таблицю (мільйони рядків)
 -- на кожен пошук
-CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (article_a);
+CREATE INDEX IF NOT EXISTS idx_part_crosses_article_a ON part_crosses (article_a);
 
 
 -- Таблицы tecdoc_compatibility и tecdoc_related_categories удалены

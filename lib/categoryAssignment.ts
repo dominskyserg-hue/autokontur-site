@@ -211,7 +211,7 @@ export async function recomputeInTransaction(
 }
 
 // Категории, которые можно переносить с двойника: все, кроме узких "по модели авто"
-const TWIN_CATEGORY_SLUGS = CATEGORIES.filter((c) => !c.modelGroup && !c.tecdocVehicle).map((c) => c.slug);
+const TWIN_CATEGORY_SLUGS = CATEGORIES.filter((c) => !c.modelGroup && !c.catalogVehicle).map((c) => c.slug);
 const TOP_LEVEL_SLUGS = new Set(CATEGORIES.filter((c) => !c.parentCategorySlug).map((c) => c.slug));
 
 async function assignByTwins(client: PoolClient, scope: CategoryRecomputeScope): Promise<number> {

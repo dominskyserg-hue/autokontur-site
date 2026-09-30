@@ -29,8 +29,8 @@ const out = (s = '') => { lines.push(s); console.log(s); };
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 1 });
 const client = await pool.connect();
 
-const TOP = (CATEGORIES as Array<{ slug: string; name: string; parentCategorySlug?: string; modelGroup?: string; tecdocVehicle?: unknown }>)
-  .filter((c) => !c.modelGroup && !c.tecdocVehicle);
+const TOP = (CATEGORIES as Array<{ slug: string; name: string; parentCategorySlug?: string; modelGroup?: string; catalogVehicle?: unknown }>)
+  .filter((c) => !c.modelGroup && !c.catalogVehicle);
 const COUNT_SQL = (grouped: boolean) => `SELECT pc.category_id, count(*)::int n, count(*) FILTER (WHERE ${grouped ? 'b.stock' : 'p.stock'} > 0)::int s
   FROM product_categories pc JOIN products p ON p.id = pc.product_id
   ${grouped ? 'JOIN products b ON b.id = COALESCE(p.group_best_offer_id, p.id)' : ''}

@@ -105,7 +105,7 @@ async function loadOemBrands(db: Pool | PoolClient, supplierId?: string): Promis
 
   const crosses = await db.query(
     `SELECT DISTINCT p.id, tc.brand_b AS brand
-       FROM tecdoc_crosses tc
+       FROM part_crosses tc
        JOIN products p ON p.article = tc.article_a AND p.is_active ${supplierFilter}
       WHERE tc.source = ANY($1::text[]) AND tc.is_valid AND LENGTH(tc.article_b) >= 3
         AND ${crossBrandKeySql('tc.brand_b')} ~ $2

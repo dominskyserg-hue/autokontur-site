@@ -8,7 +8,7 @@
 // а автоматичне склеювання за кодом шасі об'єднує чужі моделі
 // (перевірено на даних: Carisma з Libero, Accord з City). Тому для
 // кожного хабу тут явно перелічені ТОЧНІ записи моделі — ті самі, що в
-// tecdocVehicle вузьких сторінок lib/categories.ts (за ними хаб
+// catalogVehicle вузьких сторінок lib/categories.ts (за ними хаб
 // посилається на фільтр категорії ?model=).
 //
 // Товари хабу — зі своєї застосовності (product_vehicles_own,
@@ -27,7 +27,7 @@ export const MIN_HUB_PRODUCTS = 30;
 export interface ModelHubDef {
   // slug марки з lib/carMakes.ts (/marky/{makeSlug})
   makeSlug: string;
-  // Марка великими літерами — так само, як tecdocVehicle.make у lib/categories.ts
+  // Марка великими літерами — так само, як catalogVehicle.make у lib/categories.ts
   tecdocMake: string;
   // Друга частина адреси: /marky/{makeSlug}/{slug}
   slug: string;
@@ -39,7 +39,7 @@ export interface ModelHubDef {
   altNames?: string;
   yearFrom: number;
   yearTo: number;
-  // Точні записи моделі цього покоління (як tecdocVehicle.models). ПЕРШИЙ —
+  // Точні записи моделі цього покоління (як catalogVehicle.models). ПЕРШИЙ —
   // основний кузов: його підставляємо у фільтр категорії
   // (/category/{slug}?marka=...&model=...), бо той фільтр приймає лише
   // одну модель

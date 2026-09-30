@@ -1,6 +1,6 @@
 // ============================================================
 // Імпорт офіційного OEM-довідника TRW (Excel-файл "Master - TRW NEW
-// 2025.xlsx", один аркуш, колонка "OE-Number") у tecdoc_crosses.
+// 2025.xlsx", один аркуш, колонка "OE-Number") у part_crosses.
 //
 // Джерело — звичайний Excel-файл з фіксованими іменованими колонками. Формат колонки
 // OE-Number у файлі (перевірено на реальних рядках):
@@ -30,7 +30,7 @@
 //
 // Записується з relation_type='oem' (а не 'cross') — крос-номери
 // TRW з інших джерел (relation_type='cross') цей запуск не чіпає і
-// не дублює: у tecdoc_crosses UNIQUE
+// не дублює: у part_crosses UNIQUE
 // (brand_a, article_a, brand_b, article_b, relation_type), тож
 // однакова пара з різним relation_type — це два різні рядки, а
 // повторний запуск цього скрипта безпечний (ON CONFLICT DO NOTHING).
@@ -132,11 +132,11 @@ async function main() {
   console.log(`  Усього рядків даних у файлі: ${(rows.length - 1).toLocaleString('uk-UA')}\n`);
 
   console.log('Крок 3/3: зіставляємо з каталогом і записуємо нові OEM-кроси...');
-  // Источник строк для tecdoc_crosses.source (см. scripts/tecdoc/schema.sql)
+  // Источник строк для part_crosses.source (см. scripts/tecdoc/schema.sql)
   const CROSSES_SOURCE = 'trw_2025';
   const inserter = new BatchInserter(
     pool,
-    'tecdoc_crosses',
+    'part_crosses',
     ['brand_a', 'article_a', 'brand_b', 'article_b', 'relation_type', 'source'],
     BATCH_SIZE
   );
@@ -176,7 +176,7 @@ async function main() {
   console.log('============================================================');
   console.log(`Артикулів TRW з нашого каталогу, знайдених у файлі з OE-даними: ${matchedArticles}`);
   console.log(`Знайдено пар "TRW-артикул <-> OEM-номер":                        ${pairsFound}`);
-  console.log(`Рядків вставлено в tecdoc_crosses (з двонапрямними):            ${inserter.getTotalInserted()}`);
+  console.log(`Рядків вставлено в part_crosses (з двонапрямними):            ${inserter.getTotalInserted()}`);
   console.log('\nПриклади:');
   console.log(examples.join('\n'));
   console.log('============================================================\n');

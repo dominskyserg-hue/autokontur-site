@@ -1,6 +1,6 @@
 // ============================================================
 // Імпорт кросс-номерів з прайс-листа постачальника NMCO (Excel-файл
-// "Price-Nippon.xls", лист "Прайслист") у tecdoc_crosses.
+// "Price-Nippon.xls", лист "Прайслист") у part_crosses.
 //
 // Файл НЕ монобрендовий — незважаючи на назву ("Price-Nippon"), у
 // колонці "Производитель" 354 різних бренди деталей (Nippon, Nissan,
@@ -104,11 +104,11 @@ async function main() {
   console.log(`  Усього рядків даних у файлі: ${(rows.length - 1).toLocaleString('uk-UA')}\n`);
 
   console.log('Крок 3/3: зіставляємо з каталогом і записуємо нові кроси...');
-  // Источник строк для tecdoc_crosses.source (см. scripts/tecdoc/schema.sql)
+  // Источник строк для part_crosses.source (см. scripts/tecdoc/schema.sql)
   const CROSSES_SOURCE = 'price_nippon';
   const inserter = new BatchInserter(
     pool,
-    'tecdoc_crosses',
+    'part_crosses',
     ['brand_a', 'article_a', 'brand_b', 'article_b', 'relation_type', 'source'],
     BATCH_SIZE
   );
@@ -164,7 +164,7 @@ async function main() {
   console.log(`Рядків з артикулом, якого НЕМА в каталозі постачальника: ${notFoundRows}`);
   console.log(`Різних брендів серед зіставлених рядків:                ${brandsUsed.size}`);
   console.log(`Знайдено пар "наш артикул <-> кросс-номер":             ${pairsFound}`);
-  console.log(`Рядків вставлено в tecdoc_crosses (з двонапрямними):    ${inserter.getTotalInserted()}`);
+  console.log(`Рядків вставлено в part_crosses (з двонапрямними):    ${inserter.getTotalInserted()}`);
   console.log('\nПриклади:');
   console.log(examples.join('\n'));
   console.log('============================================================\n');

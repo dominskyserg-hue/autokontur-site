@@ -1,10 +1,10 @@
 -- ============================================================
--- ТАБЛИЦА КРОССОВ tecdoc_crosses (кросс- и OEM-номера из прайсов)
+-- ТАБЛИЦА КРОССОВ part_crosses (кросс- и OEM-номера из прайсов)
 --
--- Название таблицы историческое. С 30.09.2026 (тогда же удалены таблицы
--- tecdoc_compatibility, tecdoc_related_categories, product_vehicle_makes)
--- в ней только кроссы из прайсов наших поставщиков и официального
--- справочника TRW:
+-- Раньше таблица называлась tecdoc_crosses. С 30.09.2026 (тогда же
+-- удалены таблицы tecdoc_compatibility, tecdoc_related_categories,
+-- product_vehicle_makes) в ней только кроссы из прайсов наших поставщиков
+-- и официального справочника TRW:
 --   autohelp     — scripts/tecdoc/import-autohelp-crosses.ts
 --   price_nippon — scripts/tecdoc/import-nippon-crosses.ts
 --   trw_2025     — scripts/tecdoc/import-trw-oe.ts
@@ -30,7 +30,27 @@
 -- читається на кожному відкритті сторінки товару — тому оптимізуємо
 -- саме під читання
 -- ------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS tecdoc_crosses (
+-- Таблица раньше называлась tecdoc_crosses — переименована 30.09.2026.
+-- На базе со старым названием переименовываем (вместе с индексами и
+-- ограничениями), чтобы CREATE TABLE ниже не создал рядом пустую таблицу
+DO $$
+DECLARE
+  c record;
+BEGIN
+  IF to_regclass('public.part_crosses') IS NULL
+     AND EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'tecdoc_crosses') THEN
+    ALTER TABLE tecdoc_crosses RENAME TO part_crosses;
+    ALTER SEQUENCE IF EXISTS tecdoc_crosses_id_seq RENAME TO part_crosses_id_seq;
+    ALTER INDEX IF EXISTS idx_tecdoc_crosses_article_a RENAME TO idx_part_crosses_article_a;
+    FOR c IN SELECT conname FROM pg_constraint
+             WHERE conrelid = 'part_crosses'::regclass AND conname LIKE 'tecdoc\_crosses\_%' LOOP
+      EXECUTE format('ALTER TABLE part_crosses RENAME CONSTRAINT %I TO %I',
+                     c.conname, 'part_crosses_' || substr(c.conname, 16));
+    END LOOP;
+  END IF;
+END $$;
+
+CREATE TABLE IF NOT EXISTS part_crosses (
   id BIGSERIAL PRIMARY KEY,
 
   brand_a TEXT NOT NULL,
@@ -63,7 +83,7 @@ CREATE TABLE IF NOT EXISTS tecdoc_crosses (
 -- (app/api/products/route.ts) — без окремого індексу саме на
 -- article_a Postgres змушений сканувати всю таблицю (мільйони рядків)
 -- на кожен пошук
-CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (article_a);
+CREATE INDEX IF NOT EXISTS idx_part_crosses_article_a ON part_crosses (article_a);
 
 -- Источник строки кросса — каждый скрипт импорта пишет свой:
 --   trw_2025      — OEM-справочник TRW (import-trw-oe.ts)
@@ -73,22 +93,22 @@ CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (artic
 -- Бывшие источники tecdoc_2016, tecdoc_2018, price_cardon и price_va
 -- удалены 30.09.2026 вместе со скриптами импорта
 -- Константный DEFAULT не переписывает таблицу — ALTER выполняется мгновенно
-ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'unknown';
+ALTER TABLE part_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'unknown';
 
 -- false — строка признана ложной или из исключённого источника и нигде
 -- не используется (сайт фильтрует AND is_valid). Причина — invalid_reason
-ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS is_valid BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE part_crosses ADD COLUMN IF NOT EXISTS is_valid BOOLEAN NOT NULL DEFAULT true;
 
 -- Почему строка не используется (is_valid = false):
 --   source_excluded — источник исключён целиком (tecdoc_2016, tecdoc_2018,
 --                     price_cardon, price_va);
 --   brand_mismatch  — ни одна сторона строки не совпала с товаром каталога
 --                     по бренду
-ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS invalid_reason TEXT;
+ALTER TABLE part_crosses ADD COLUMN IF NOT EXISTS invalid_reason TEXT;
 
 -- Строки исключённых источников (если их снова кто-то загрузит) сразу
 -- пишутся помеченными и сайтом не используются
-CREATE OR REPLACE FUNCTION tecdoc_crosses_exclude_sources() RETURNS trigger AS $$
+CREATE OR REPLACE FUNCTION part_crosses_exclude_sources() RETURNS trigger AS $$
 BEGIN
   IF NEW.source IN ('tecdoc_2016', 'tecdoc_2018', 'price_cardon', 'price_va') THEN
     NEW.is_valid := false;
@@ -98,7 +118,11 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-DROP TRIGGER IF EXISTS trg_tecdoc_crosses_exclude_sources ON tecdoc_crosses;
-CREATE TRIGGER trg_tecdoc_crosses_exclude_sources
-  BEFORE INSERT OR UPDATE OF source, is_valid ON tecdoc_crosses
-  FOR EACH ROW EXECUTE FUNCTION tecdoc_crosses_exclude_sources();
+-- Триггер и функция со старыми именами (до переименования таблицы)
+DROP TRIGGER IF EXISTS trg_tecdoc_crosses_exclude_sources ON part_crosses;
+DROP FUNCTION IF EXISTS tecdoc_crosses_exclude_sources();
+
+DROP TRIGGER IF EXISTS trg_part_crosses_exclude_sources ON part_crosses;
+CREATE TRIGGER trg_part_crosses_exclude_sources
+  BEFORE INSERT OR UPDATE OF source, is_valid ON part_crosses
+  FOR EACH ROW EXECUTE FUNCTION part_crosses_exclude_sources();

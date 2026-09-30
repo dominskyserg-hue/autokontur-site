@@ -49,7 +49,7 @@ try {
   const tn = await client.query(`SELECT DISTINCT ON (pc.product_id) pc.product_id, coalesce(
       (SELECT q.name FROM products q JOIN product_categories x ON x.product_id = q.id AND x.rule_id NOT IN ('twin','cross')
         WHERE q.article = p.article AND upper(q.brand) = upper(p.brand) AND q.id <> p.id LIMIT 1),
-      (SELECT q.name FROM tecdoc_crosses tc JOIN products q ON q.article = tc.article_b AND upper(q.brand) = upper(tc.brand_b)
+      (SELECT q.name FROM part_crosses tc JOIN products q ON q.article = tc.article_b AND upper(q.brand) = upper(tc.brand_b)
         JOIN product_categories x ON x.product_id = q.id AND x.rule_id NOT IN ('twin','cross')
         WHERE tc.article_a = p.article AND upper(tc.brand_a) = upper(p.brand) LIMIT 1)) AS twin
     FROM product_categories pc JOIN products p ON p.id = pc.product_id WHERE pc.rule_id IN ('twin','cross') AND p.is_active`);
