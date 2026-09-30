@@ -25,17 +25,50 @@ const pool =
 
 globalThis.pgPool = pool;
 
+// Ссылка на отслеживание посылки на сайте Новой Почты — клиент сразу
+// видит, где посылка, без ручного ввода номера
+export function ttnTrackingUrl(ttnNumber: string): string {
+  return `https://novaposhta.ua/tracking/?cargo_number=${encodeURIComponent(ttnNumber.replace(/\s+/g, ''))}`;
+}
+
+// Текст сообщения клиенту о ТТН — один и тот же для Telegram-бота и
+// для ручной отправки (кнопки "Скопіювати" / "Viber" в окне заказа)
+export function buildTtnMessage(orderNumber: number | string, ttnNumber: string): string {
+  return [
+    `Ваше замовлення №${orderNumber} відправлено Новою Поштою!`,
+    `Номер ТТН: ${ttnNumber}`,
+    `Відстежити: ${ttnTrackingUrl(ttnNumber)}`,
+  ].join('\n');
+}
+
+// Подключил ли покупатель Telegram-уведомления (есть строка в
+// customer_telegram_links) — показываем это менеджеру в окне заказа
+export async function isCustomerTelegramLinked(customerPhone: string): Promise<boolean> {
+  const result = await pool.query(`SELECT 1 FROM customer_telegram_links WHERE phone = $1`, [
+    normalizePhone(customerPhone),
+  ]);
+  return result.rows.length > 0;
+}
+
+// Результат отправки — чтобы кнопка "Надіслати ТТН" в окне заказа
+// могла честно сказать менеджеру, ушло сообщение или нет
+export type TtnNotifyResult = 'sent' | 'not_linked' | 'failed';
+
 // Молча пропускает всё, если покупатель не подключал Telegram-
 // уведомления (нет строки в customer_telegram_links) — это
 // ДОПОЛНИТЕЛЬНОЕ уведомление, его отсутствие не должно ломать
 // основной сценарий (сохранение ТТН)
-export async function notifyCustomerTtnAssigned(orderId: string, customerPhone: string, ttnNumber: string): Promise<void> {
+export async function notifyCustomerTtnAssigned(
+  orderId: string,
+  customerPhone: string,
+  ttnNumber: string
+): Promise<TtnNotifyResult> {
   try {
     const chatResult = await pool.query(`SELECT telegram_chat_id FROM customer_telegram_links WHERE phone = $1`, [
       normalizePhone(customerPhone),
     ]);
     const chatId = chatResult.rows[0]?.telegram_chat_id;
-    if (!chatId) return;
+    if (!chatId) return 'not_linked';
 
     // Людський номер замовлення (order_number) — окремим запитом, а не
     // переданий викликачем: обидва місця, що викликають цю функцію
@@ -45,11 +78,12 @@ export async function notifyCustomerTtnAssigned(orderId: string, customerPhone: 
     const orderResult = await pool.query(`SELECT order_number FROM orders WHERE id = $1`, [orderId]);
     const orderNumber = orderResult.rows[0]?.order_number ?? orderId.slice(0, 8);
 
-    await sendTelegramMessageTo(
-      chatId,
-      [`Ваше замовлення №${orderNumber} відправлено Новою Поштою!`, `Номер ТТН: ${ttnNumber}`].join('\n')
-    );
+    // sendTelegramMessageTo возвращает id сообщения или null, если
+    // Telegram его не принял (нет токена бота, клиент заблокировал бота)
+    const messageId = await sendTelegramMessageTo(chatId, buildTtnMessage(orderNumber, ttnNumber));
+    return messageId === null ? 'failed' : 'sent';
   } catch (error) {
     console.error('Ошибка при отправке Telegram-уведомления о ТТН:', error);
+    return 'failed';
   }
 }

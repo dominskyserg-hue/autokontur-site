@@ -105,6 +105,19 @@ interface OrderDetails {
   // Клиент и его общий баланс по всем заказам (+ должен, − предоплата);
   // null — у старых заказов клиент не привязан
   customer: { id: string; balance: number; orderCount: number } | null;
+  // Подключил ли клиент Telegram-бота магазина (сообщение о ТТН уходит
+  // ему автоматически)
+  telegramLinked: boolean;
+}
+
+// Переход к соседнему заказу списка стрелками ← → (пункт "стрелки между
+// заказами"): список, из которого открыли окно, передаёт сюда, есть ли
+// соседи и что делать при переходе
+export interface OrderNavigation {
+  onPrev: (() => void) | null;
+  onNext: (() => void) | null;
+  // Например "3 з 20" — где мы в текущем списке
+  positionLabel: string;
 }
 
 interface SupplierOption {
@@ -207,10 +220,12 @@ export default function OrderDetailsModal({
   orderId,
   onClose,
   onOrderChanged,
+  navigation,
 }: {
   orderId: string;
   onClose: () => void;
   onOrderChanged: () => void;
+  navigation?: OrderNavigation;
 }) {
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(true);
@@ -445,9 +460,59 @@ export default function OrderDetailsModal({
   );
 
   // ---- статус — сохраняется сразу при выборе, без отдельной кнопки ----
+  // ---- стрелки ← → на клавиатуре листают заказы (если окно открыто
+  // из списка). В полях ввода стрелки двигают курсор — там не
+  // перехватываем, иначе нельзя было бы исправить цифру в цене ----
+  useEffect(() => {
+    if (!navigation) return;
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
+      if (event.key === 'ArrowLeft' && navigation.onPrev) navigation.onPrev();
+      if (event.key === 'ArrowRight' && navigation.onNext) navigation.onNext();
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [navigation]);
+
+  // ---- статус — сохраняется сразу при выборе, без отдельной кнопки ----
+  // Отгрузка не полностью оплаченного заказа — частая ошибка: сначала
+  // спрашиваем подтверждение. Если менеджер отказался — возвращаем
+  // прежний статус в выпадающем списке
   const handleStatusChange = (next: OrderStatus) => {
+    if (next === 'shipped' && orderDetails && orderDetails.paidAmount < orderDetails.totalAmount) {
+      const confirmed = window.confirm(
+        `Заказ оплачен на ${formatMoney(orderDetails.paidAmount)} грн из ${formatMoney(orderDetails.totalAmount)} грн ` +
+          `(не хватает ${formatMoney(orderDetails.totalAmount - orderDetails.paidAmount)} грн).\n\n` +
+          'Всё равно отметить заказ отгруженным?'
+      );
+      if (!confirmed) return;
+    }
     setStatusDraft(next);
     savePatch('status', { status: next });
+  };
+
+  // ---- отправка сообщения о ТТН клиенту (кнопка в блоке ТТН) ----
+  const [ttnNotify, setTtnNotify] = useState<{ state: 'idle' | 'sending' | 'done' | 'error'; text?: string }>({
+    state: 'idle',
+  });
+  const handleNotifyTtn = async () => {
+    if (!orderDetails) return;
+    setTtnNotify({ state: 'sending' });
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}/notify-ttn`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося надіслати');
+      const texts: Record<string, string> = {
+        sent: '✓ Надіслано клієнту в Telegram',
+        not_linked: 'Клієнт не підключав Telegram-бота — надішліть текст у Viber або скопіюйте',
+        failed: 'Telegram не прийняв повідомлення (можливо, клієнт заблокував бота)',
+      };
+      setTtnNotify({ state: data.result === 'sent' ? 'done' : 'error', text: texts[data.result] || data.result });
+    } catch (error) {
+      setTtnNotify({ state: 'error', text: error instanceof Error ? error.message : 'Помилка мережі' });
+    }
   };
 
   // ---- ТТН вручную — сохраняется при потере фокуса, если изменилось ----
@@ -927,14 +992,19 @@ export default function OrderDetailsModal({
                 const cost = activeItems.reduce((sum, item) => sum + item.costPrice * item.quantity, 0);
                 const profit = revenue - cost;
                 const markupPercent = cost > 0 ? (profit / cost) * 100 : null;
+                // Позиции без цены закупки завышают прибыль (закупка = 0) —
+                // в таком случае честно предупреждаем и красим прибыль в серый
+                const withoutCost = activeItems.filter((item) => !(item.costPrice > 0)).length;
                 return (
                   <div className="text-right pl-3" style={{ borderLeft: '1px solid var(--line)' }}>
-                    <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
-                      Закупка {formatMoney(cost)} грн
+                    <p className="text-[11px]" style={{ color: withoutCost > 0 ? 'var(--warn)' : 'var(--ink-faint)' }}>
+                      {withoutCost > 0
+                        ? `Без закупки: ${withoutCost} поз. — прибуток неточний`
+                        : `Закупка ${formatMoney(cost)} грн`}
                     </p>
                     <p
                       className="text-lg font-semibold font-mono"
-                      style={{ color: profit < 0 ? 'var(--bad)' : 'var(--good)' }}
+                      style={{ color: withoutCost > 0 ? 'var(--ink-faint)' : profit < 0 ? 'var(--bad)' : 'var(--good)' }}
                       title="Прибуток = продаж − закупка"
                     >
                       {profit < 0 ? '−' : '+'}
@@ -969,6 +1039,36 @@ export default function OrderDetailsModal({
                     Друкувати ТТН
                   </a>
                 )}
+              </div>
+            )}
+            {/* Листание заказов текущего списка: кнопки и стрелки ← → на клавиатуре */}
+            {navigation && (
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  disabled={!navigation.onPrev}
+                  onClick={() => navigation.onPrev?.()}
+                  className="text-sm px-2.5 py-1.5 rounded-md disabled:opacity-30"
+                  style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                  title="Попереднє замовлення (←)"
+                  aria-label="Попереднє замовлення"
+                >
+                  ←
+                </button>
+                <span className="text-[11px] px-1 whitespace-nowrap" style={{ color: 'var(--ink-faint)' }}>
+                  {navigation.positionLabel}
+                </span>
+                <button
+                  type="button"
+                  disabled={!navigation.onNext}
+                  onClick={() => navigation.onNext?.()}
+                  className="text-sm px-2.5 py-1.5 rounded-md disabled:opacity-30"
+                  style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                  title="Наступне замовлення (→)"
+                  aria-label="Наступне замовлення"
+                >
+                  →
+                </button>
               </div>
             )}
             <button
@@ -1215,6 +1315,74 @@ export default function OrderDetailsModal({
                         {ttnDraft.trim() && <CopyButton text={ttnDraft.trim()} title="Скопіювати ТТН" />}
                       </div>
                     )}
+
+                    {/* ---- повідомлення клієнту про ТТН ----
+                        Автоматично воно йде в Telegram, як тільки з'являється
+                        номер, — але лише тим, хто підключив бота магазину.
+                        Тут видно, чи підключений клієнт, і можна надіслати
+                        ще раз або відправити текст у Viber вручну */}
+                    {orderDetails.ttnNumber && (() => {
+                      const orderNumber = orderDetails.orderNumber;
+                      const ttn = orderDetails.ttnNumber;
+                      const trackingUrl = `https://novaposhta.ua/tracking/?cargo_number=${encodeURIComponent(ttn.replace(/\s+/g, ''))}`;
+                      const messageText = [
+                        `Ваше замовлення №${orderNumber} відправлено Новою Поштою!`,
+                        `Номер ТТН: ${ttn}`,
+                        `Відстежити: ${trackingUrl}`,
+                      ].join('\n');
+                      const buttonStyle = { border: '1px solid var(--line)', color: 'var(--ink-muted)' };
+                      return (
+                        <div className="mt-2.5 p-2.5 rounded-md" style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
+                          <p className="text-[11px] mb-1.5" style={{ color: orderDetails.telegramLinked ? 'var(--good)' : 'var(--ink-faint)' }}>
+                            {orderDetails.telegramLinked
+                              ? '✓ Клієнт підключив Telegram — ТТН надсилається йому автоматично'
+                              : 'Клієнт не підключав Telegram-бота — автоматично ТТН не отримає'}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {orderDetails.telegramLinked && (
+                              <button
+                                type="button"
+                                disabled={ttnNotify.state === 'sending'}
+                                onClick={handleNotifyTtn}
+                                className="text-xs px-2 py-1 rounded-md disabled:opacity-50"
+                                style={{ ...buttonStyle, color: '#4FB3F0' }}
+                              >
+                                {ttnNotify.state === 'sending' ? 'Надсилаю...' : 'Надіслати ТТН у Telegram'}
+                              </button>
+                            )}
+                            <a
+                              href={`viber://forward?text=${encodeURIComponent(messageText)}`}
+                              className="text-xs px-2 py-1 rounded-md"
+                              style={{ ...buttonStyle, color: '#9B8CFF' }}
+                              title="Відкриє Viber і запропонує обрати, кому переслати текст"
+                            >
+                              Надіслати у Viber
+                            </a>
+                            <a
+                              href={trackingUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs px-2 py-1 rounded-md"
+                              style={buttonStyle}
+                            >
+                              Відстежити ↗
+                            </a>
+                            <span className="flex items-center gap-1 text-xs" style={{ color: 'var(--ink-faint)' }}>
+                              текст:
+                              <CopyButton text={messageText} title="Скопіювати текст повідомлення" />
+                            </span>
+                          </div>
+                          {ttnNotify.text && (
+                            <p
+                              className="text-[11px] mt-1.5"
+                              style={{ color: ttnNotify.state === 'done' ? 'var(--good)' : 'var(--warn)' }}
+                            >
+                              {ttnNotify.text}
+                            </p>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {!orderDetails.ttnRef && !orderDetails.ttnNumber && !showCreateTtn && (
                       <button
