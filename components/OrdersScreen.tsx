@@ -454,9 +454,24 @@ export default function OrdersScreen() {
       {/* ==================== МОДАЛЬНОЕ ОКНО КАРТОЧКИ ЗАКАЗА ==================== */}
       {selectedOrderId && (
         <OrderDetailsModal
+          // key — при переходе к соседнему заказу окно создаётся заново,
+          // и все его поля/черновики сбрасываются, а не "протекают" от
+          // предыдущего заказа
+          key={selectedOrderId}
           orderId={selectedOrderId}
           onClose={() => setSelectedOrderId(null)}
           onOrderChanged={fetchOrders}
+          navigation={(() => {
+            // Листаем в пределах текущей страницы списка (с теми же
+            // фильтрами, что сейчас на экране)
+            const index = orders.findIndex((o) => o.id === selectedOrderId);
+            if (index === -1) return undefined;
+            return {
+              onPrev: index > 0 ? () => setSelectedOrderId(orders[index - 1].id) : null,
+              onNext: index < orders.length - 1 ? () => setSelectedOrderId(orders[index + 1].id) : null,
+              positionLabel: `${index + 1} з ${orders.length}`,
+            };
+          })()}
         />
       )}
     </AdminLayout>

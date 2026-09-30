@@ -194,9 +194,23 @@ export default function ShippingScreen() {
   // 3. ОТМЕТИТЬ ОТГРУЖЕННЫМИ
   // ------------------------------------------------------------
   const handleShip = async () => {
+    // Не полностью оплаченные заказы перечисляем отдельно — отгрузка
+    // без оплаты должна быть осознанным решением, а не случайностью
+    const unpaid = selectedOrders.filter((o) => o.paidAmount < o.totalAmount);
+    const unpaidWarning =
+      unpaid.length > 0
+        ? '\n\n⚠ Не оплачены полностью:\n' +
+          unpaid
+            .map(
+              (o) =>
+                `${formatOrderNumber(o.orderNumber)} — оплачено ${formatMoney(o.paidAmount)} из ${formatMoney(o.totalAmount)} грн`
+            )
+            .join('\n')
+        : '';
     const confirmed = window.confirm(
       `Отметить отгруженными ${selectedOrders.length} заказ(ов)? Товар спишется со склада, а сумма заказа ` +
-        'начислится клиенту. Отменить это одной кнопкой нельзя.'
+        'начислится клиенту. Отменить это одной кнопкой нельзя.' +
+        unpaidWarning
     );
     if (!confirmed) return;
 
@@ -486,7 +500,22 @@ export default function ShippingScreen() {
       </div>
 
       {openOrderId && (
-        <OrderDetailsModal orderId={openOrderId} onClose={() => setOpenOrderId(null)} onOrderChanged={fetchOrders} />
+        <OrderDetailsModal
+          // key — при переходе к соседнему заказу окно создаётся заново
+          key={openOrderId}
+          orderId={openOrderId}
+          onClose={() => setOpenOrderId(null)}
+          onOrderChanged={fetchOrders}
+          navigation={(() => {
+            const index = orders.findIndex((o) => o.id === openOrderId);
+            if (index === -1) return undefined;
+            return {
+              onPrev: index > 0 ? () => setOpenOrderId(orders[index - 1].id) : null,
+              onNext: index < orders.length - 1 ? () => setOpenOrderId(orders[index + 1].id) : null,
+              positionLabel: `${index + 1} з ${orders.length}`,
+            };
+          })()}
+        />
       )}
     </AdminLayout>
   );

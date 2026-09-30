@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
-import { notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
+import { isCustomerTelegramLinked, notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
 import { requireAdmin } from '@/lib/adminAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
@@ -152,6 +152,9 @@ interface OrderDetailsResponse {
   // + должен нам, − предоплата). null — у старых заказов до появления
   // таблицы customers клиент не привязан
   customer: { id: string; balance: number; orderCount: number } | null;
+  // Подключил ли клиент Telegram-бота магазина — если да, сообщение о
+  // ТТН уходит ему автоматически (lib/orderNotifications.ts)
+  telegramLinked: boolean;
 }
 
 // ------------------------------------------------------------
@@ -315,6 +318,7 @@ export async function GET(
       paidAmount,
       managerNote: orderRow.manager_note,
       customer,
+      telegramLinked: await isCustomerTelegramLinked(orderRow.customer_phone),
     };
 
     return NextResponse.json({ success: true, order });
