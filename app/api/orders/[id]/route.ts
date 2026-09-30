@@ -15,6 +15,8 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
 import { isCustomerTelegramLinked, notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
+import { logOrderEvent, historyValue } from '@/lib/orderHistory';
+import { STATUS_LABELS } from '@/lib/orderUi';
 import { requireAdmin } from '@/lib/adminAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
@@ -454,6 +456,14 @@ async function shipOrder(orderId: string): Promise<NextResponse> {
 
     await client.query('COMMIT');
 
+    // История: отгрузка — отдельное событие со списанием склада и
+    // начислением суммы клиенту (см. комментарий к shipOrder выше)
+    const previousStatusLabel = STATUS_LABELS[order.status as OrderStatus] || order.status;
+    await logOrderEvent(
+      orderId,
+      `Статус: ${previousStatusLabel} → Отгружен (товар списано зі складу, суму нараховано клієнту)`
+    );
+
     const updatedResult = await pool.query(
       'SELECT id, customer_name, customer_phone, status, ttn_number, created_at, updated_at FROM orders WHERE id = $1',
       [orderId]
@@ -624,8 +634,16 @@ export async function PATCH(
     // не просто повторно сохранил статус без изменения ТТН — иначе
     // клиенту улетало бы одно и то же Telegram-уведомление про ТТН при
     // каждом сохранении карточки заказа
-    const previousResult = await pool.query('SELECT ttn_number FROM orders WHERE id = $1', [id]);
-    const previousTtnNumber: string | null = previousResult.rows[0]?.ttn_number ?? null;
+    // Прежние значения полей — ещё и для истории изменений заказа
+    // (lib/orderHistory.ts): пишем туда только то, что реально изменилось
+    const previousResult = await pool.query(
+      `SELECT ttn_number, status, customer_name, customer_surname, customer_phone, city, nova_poshta_address,
+              vin, car_info, manager_note
+       FROM orders WHERE id = $1`,
+      [id]
+    );
+    const previous = previousResult.rows[0];
+    const previousTtnNumber: string | null = previous?.ttn_number ?? null;
 
     // COALESCE($N, колонка) — обновляет колонку, только если для неё
     // реально передали значение в запросе; параметр undefined (поле не
@@ -688,6 +706,31 @@ export async function PATCH(
     // (той самий фікс, що і в app/api/orders/create/route.ts)
     if (row.ttn_number && row.ttn_number !== previousTtnNumber) {
       after(() => notifyCustomerTtnAssigned(row.id, row.customer_phone, row.ttn_number));
+    }
+
+    // ---- история изменений: только реально изменившиеся поля ----
+    if (previous) {
+      const statusLabel = (value: string) => STATUS_LABELS[value as OrderStatus] || value;
+      const changes: Array<string | null> = [
+        row.status !== previous.status ? `Статус: ${statusLabel(previous.status)} → ${statusLabel(row.status)}` : null,
+        row.ttn_number !== previous.ttn_number
+          ? `ТТН: ${historyValue(previous.ttn_number)} → ${historyValue(row.ttn_number)}`
+          : null,
+        row.customer_name !== previous.customer_name ||
+        row.customer_surname !== previous.customer_surname ||
+        row.customer_phone !== previous.customer_phone
+          ? `Клієнт: ${historyValue(`${previous.customer_name} ${previous.customer_surname}`)}, ${historyValue(previous.customer_phone)} → ` +
+            `${historyValue(`${row.customer_name} ${row.customer_surname}`)}, ${historyValue(row.customer_phone)}`
+          : null,
+        row.city !== previous.city || row.nova_poshta_address !== previous.nova_poshta_address
+          ? `Доставка: ${historyValue(row.city)}, ${historyValue(row.nova_poshta_address)}`
+          : null,
+        row.car_info !== previous.car_info || row.vin !== previous.vin
+          ? `Авто: ${historyValue(row.car_info)}, VIN ${historyValue(row.vin)}`
+          : null,
+        row.manager_note !== previous.manager_note ? `Замітка менеджера: ${historyValue(row.manager_note)}` : null,
+      ];
+      await logOrderEvent(row.id, changes);
     }
 
     return NextResponse.json({

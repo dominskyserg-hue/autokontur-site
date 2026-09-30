@@ -26,6 +26,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { requireAdmin } from '@/lib/adminAuth';
+import { logOrderEvent, historyMoney } from '@/lib/orderHistory';
 
 export const runtime = 'nodejs';
 
@@ -127,6 +128,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     );
 
     await client.query('COMMIT');
+
+    await logOrderEvent(
+      orderId,
+      `Прийнято оплату ${historyMoney(amount)} (${registerResult.rows[0].name})${comment ? ` — ${comment}` : ''}`
+    );
 
     const balanceResult = await pool.query('SELECT balance FROM cash_registers WHERE id = $1', [body.cashRegisterId]);
     const customerBalanceResult = order.customer_id

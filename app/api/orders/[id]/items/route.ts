@@ -30,6 +30,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { requireAdmin } from '@/lib/adminAuth';
+import { logOrderEvent, historyMoney } from '@/lib/orderHistory';
 
 export const runtime = 'nodejs';
 
@@ -146,6 +147,11 @@ export async function POST(
     );
 
     const row = result.rows[0];
+
+    await logOrderEvent(
+      orderId,
+      `Додано позицію ${row.article}${row.name ? ` «${row.name}»` : ''}: ${row.quantity} шт × ${historyMoney(row.price)} (${row.supplier_name})`
+    );
 
     return NextResponse.json(
       {

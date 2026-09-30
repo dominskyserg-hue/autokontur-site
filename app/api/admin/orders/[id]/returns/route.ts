@@ -36,6 +36,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { requireAdmin } from '@/lib/adminAuth';
+import { logOrderEvent, historyMoney } from '@/lib/orderHistory';
 
 export const runtime = 'nodejs';
 
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const customerId: string | null = orderResult.rows[0].customer_id;
 
     const itemResult = await client.query(
-      `SELECT id, product_id, price, quantity FROM order_items WHERE id = $1 AND order_id = $2`,
+      `SELECT id, product_id, article, price, quantity FROM order_items WHERE id = $1 AND order_id = $2`,
       [body.orderItemId, orderId]
     );
     if (itemResult.rows.length === 0) {
@@ -237,6 +238,20 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     await client.query('COMMIT');
+
+    // История заказа: что вернули, почему и как вернули деньги
+    const reasonLabels: Record<string, string> = {
+      defect: 'брак',
+      customer_mistake: 'помилка клієнта',
+      staff_mistake: 'помилка менеджера',
+      refused: 'відмова',
+    };
+    const refundLabels: Record<string, string> = { cash: 'готівкою', card: 'на картку', balance: 'на баланс клієнта' };
+    await logOrderEvent(
+      orderId,
+      `Повернення ${item.article}: ${body.quantity} шт (${reasonLabels[body.reason as string] || body.reason}), ` +
+        `${historyMoney(refundAmount)} ${refundLabels[body.refundMethod as string] || body.refundMethod}`
+    );
 
     return NextResponse.json(
       {

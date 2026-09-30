@@ -110,6 +110,14 @@ interface OrderDetails {
   telegramLinked: boolean;
 }
 
+// Одно событие истории изменений заказа (GET /api/orders/[id]/history)
+interface OrderHistoryEvent {
+  id: string;
+  message: string;
+  createdBy: string;
+  createdAt: string;
+}
+
 // Переход к соседнему заказу списка стрелками ← → (пункт "стрелки между
 // заказами"): список, из которого открыли окно, передаёт сюда, есть ли
 // соседи и что делать при переходе
@@ -312,6 +320,33 @@ export default function OrderDetailsModal({
 
   // ---- модалка "Принять оплату" ----
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  // ---- история изменений заказа ----
+  // historyVersion увеличиваем после каждого действия, которое меняет
+  // заказ, — эффект ниже тогда перечитывает историю с сервера
+  const [history, setHistory] = useState<OrderHistoryEvent[]>([]);
+  const [historyVersion, setHistoryVersion] = useState(0);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const bumpHistory = useCallback(() => setHistoryVersion((v) => v + 1), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/orders/${orderId}/history`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled && data.success) setHistory(data.events as OrderHistoryEvent[]);
+      })
+      .catch(() => {
+        // История — справочная информация; если не загрузилась, окно
+        // заказа работает как обычно
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orderId, historyVersion]);
+
+  // ---- удаление позиции из заказа ----
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [paymentCashRegisterId, setPaymentCashRegisterId] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentComment, setPaymentComment] = useState('');
@@ -446,6 +481,8 @@ export default function OrderDetailsModal({
         setOrderDetails((prev) => (prev ? { ...prev, ...(data.order as Partial<OrderDetails>) } : prev));
         setSaveState((prev) => ({ ...prev, [key]: { state: 'saved' } }));
         onOrderChanged();
+      bumpHistory();
+        bumpHistory();
         setTimeout(() => {
           setSaveState((prev) => (prev[key]?.state === 'saved' ? { ...prev, [key]: IDLE } : prev));
         }, 2000);
@@ -456,8 +493,30 @@ export default function OrderDetailsModal({
         }));
       }
     },
-    [orderId, onOrderChanged]
+    [orderId, onOrderChanged, bumpHistory]
   );
+
+  // ---- горячая клавиша Esc: закрывает то, что открыто "сверху" ----
+  // Сначала — форма редактирования или возврата позиции, потом окно
+  // оплаты, и только если ничего не открыто — само окно заказа.
+  // Enter для сохранения позиции — в самой форме (onKeyDown ниже)
+  useEffect(() => {
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (editingItemId) {
+        setEditingItemId(null);
+        setEditItemError(null);
+      } else if (returningItemId) {
+        setReturningItemId(null);
+      } else if (showPaymentModal) {
+        setShowPaymentModal(false);
+      } else {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [editingItemId, returningItemId, showPaymentModal, onClose]);
 
   // ---- статус — сохраняется сразу при выборе, без отдельной кнопки ----
   // ---- стрелки ← → на клавиатуре листают заказы (если окно открыто
@@ -510,6 +569,7 @@ export default function OrderDetailsModal({
         failed: 'Telegram не прийняв повідомлення (можливо, клієнт заблокував бота)',
       };
       setTtnNotify({ state: data.result === 'sent' ? 'done' : 'error', text: texts[data.result] || data.result });
+      bumpHistory();
     } catch (error) {
       setTtnNotify({ state: 'error', text: error instanceof Error ? error.message : 'Помилка мережі' });
     }
@@ -633,6 +693,7 @@ export default function OrderDetailsModal({
       setOrderDetails({ ...orderDetails, ttnNumber: data.ttnNumber as string, ttnRef: data.ttnRef as string });
       setShowCreateTtn(false);
       setTtnRecipient(null);
+      bumpHistory();
     } catch (error) {
       setCreateTtnError(error instanceof Error ? error.message : 'Ошибка сети при создании ТТН');
     } finally {
@@ -729,6 +790,7 @@ export default function OrderDetailsModal({
       setOrderDetails({ ...orderDetails, items: nextItems, totalAmount: nextTotal });
       setEditingItemId(null);
       onOrderChanged();
+      bumpHistory();
     } catch (error) {
       setEditItemError(error instanceof Error ? error.message : 'Ошибка сети при сохранении позиции');
     } finally {
@@ -792,6 +854,7 @@ export default function OrderDetailsModal({
       setAddItemSearch('');
       setAddItemResults([]);
       onOrderChanged();
+      bumpHistory();
     } catch (error) {
       setAddItemError(error instanceof Error ? error.message : 'Ошибка сети при добавлении товара');
     } finally {
@@ -812,6 +875,45 @@ export default function OrderDetailsModal({
     setReturnComment('');
     setReturnError(null);
     setReturnSuccessItemId(null);
+  };
+
+  // Удалить позицию: подтверждение с понятным предупреждением — что
+  // будет с уже заказанной у поставщика или уже лежащей на складе деталью
+  const handleDeleteItem = async (item: OrderItem) => {
+    if (!orderDetails) return;
+    const warnings: Record<string, string> = {
+      ordered_from_supplier:
+        '\n\n⚠ Цю позицію вже замовлено у постачальника — не забудьте скасувати замовлення у нього вручну.',
+      in_stock: '\n\nДеталь вже на складі — вона там і залишиться (з\'явиться в розділі «Склад»).',
+    };
+    const confirmed = window.confirm(
+      `Видалити з замовлення позицію ${item.article}${item.name ? ` «${item.name}»` : ''} ` +
+        `(${item.quantity} шт × ${formatMoney(item.price)} грн)?` +
+        (warnings[item.status] || '')
+    );
+    if (!confirmed) return;
+
+    setDeletingItemId(item.id);
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}/items/${item.id}`, { method: 'DELETE' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося видалити позицію');
+
+      if (editingItemId === item.id) setEditingItemId(null);
+      if (returningItemId === item.id) setReturningItemId(null);
+      setOrderDetails((prev) => {
+        if (!prev) return prev;
+        const nextItems = prev.items.filter((i) => i.id !== item.id);
+        const nextTotal = nextItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+        return { ...prev, items: nextItems, totalAmount: nextTotal };
+      });
+      onOrderChanged();
+      bumpHistory();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setDeletingItemId(null);
+    }
   };
 
   const cancelItemReturn = () => {
@@ -867,6 +969,7 @@ export default function OrderDetailsModal({
       setReturnSuccessItemId(returningItemId);
       setReturningItemId(null);
       onOrderChanged();
+      bumpHistory();
     } catch (error) {
       setReturnError(error instanceof Error ? error.message : 'Ошибка сети при оформлении возврата');
     } finally {
@@ -918,6 +1021,8 @@ export default function OrderDetailsModal({
       // принятые деньги, не дожидаясь повторного открытия карточки
       setOrderDetails((prev) => (prev ? { ...prev, paidAmount: prev.paidAmount + amount } : prev));
       setShowPaymentModal(false);
+      onOrderChanged();
+      bumpHistory();
     } catch (error) {
       setPaymentError(error instanceof Error ? error.message : 'Ошибка сети при проведении платежа');
     } finally {
@@ -1759,13 +1864,43 @@ export default function OrderDetailsModal({
                                       >
                                         ↩
                                       </button>
+                                      {/* Удалить можно только то, что ещё не уехало клиенту:
+                                          отгруженное/возвращённое оформляется возвратом (↩) */}
+                                      {orderDetails.status !== 'shipped' &&
+                                        item.status !== 'shipped' &&
+                                        item.status !== 'returned' && (
+                                          <button
+                                            type="button"
+                                            disabled={deletingItemId === item.id}
+                                            onClick={() => handleDeleteItem(item)}
+                                            className="text-base leading-none px-2.5 py-2 rounded-md disabled:opacity-40"
+                                            style={{ border: '1px solid var(--line)', color: 'var(--bad)' }}
+                                            title="Видалити позицію з замовлення"
+                                            aria-label="Видалити позицію"
+                                          >
+                                            🗑
+                                          </button>
+                                        )}
                                     </div>
                                   </td>
                                 </tr>
 
                                 {isEditing && (
                                   <tr style={{ borderBottom: '1px solid var(--line)', background: 'var(--surface-2)' }}>
-                                    <td colSpan={6} className="px-3 py-3">
+                                    <td
+                                      colSpan={6}
+                                      className="px-3 py-3"
+                                      // Enter в любом поле формы — сохранить позицию
+                                      // (Esc — отменить, см. обработчик клавиш выше).
+                                      // На кнопках Enter работает как обычно
+                                      onKeyDown={(e) => {
+                                        const tag = (e.target as HTMLElement).tagName;
+                                        if (e.key === 'Enter' && tag !== 'BUTTON' && !editItemSaving) {
+                                          e.preventDefault();
+                                          handleSaveItem();
+                                        }
+                                      }}
+                                    >
                                       {/* ==== ПРЕДЛОЖЕНИЯ ВСЕХ ПОСТАВЩИКОВ ПО ЭТОМУ АРТИКУЛУ ==== */}
                                       <div className="mb-3">
                                         <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
@@ -2012,6 +2147,9 @@ export default function OrderDetailsModal({
                                         >
                                           Отмена
                                         </button>
+                                        <span className="self-center text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                                          Enter — зберегти · Esc — скасувати
+                                        </span>
                                       </div>
                                     </td>
                                   </tr>
@@ -2154,6 +2292,45 @@ export default function OrderDetailsModal({
                     </div>
                   </div>
                 )}
+
+                {/* ==================== ИСТОРИЯ ИЗМЕНЕНИЙ ЗАКАЗА ==================== */}
+                {/* Кто и когда что менял — новые события сверху. По умолчанию
+                    видно последние 5, остальное — по кнопке "Показати все" */}
+                <div className="mt-5">
+                  <h3 className="text-xs font-semibold mb-2" style={{ color: 'var(--ink-muted)' }}>
+                    ІСТОРІЯ ЗМІН
+                  </h3>
+                  {history.length === 0 ? (
+                    <p className="text-xs" style={{ color: 'var(--ink-faint)' }}>
+                      Змін ще не було (історія ведеться з моменту оновлення адмінки).
+                    </p>
+                  ) : (
+                    <div className="rounded-md" style={{ border: '1px solid var(--line)' }}>
+                      {(showAllHistory ? history : history.slice(0, 5)).map((event, index) => (
+                        <div
+                          key={event.id}
+                          className="flex gap-3 px-3 py-2 text-xs"
+                          style={{ borderTop: index === 0 ? 'none' : '1px solid var(--line)' }}
+                        >
+                          <span className="font-mono whitespace-nowrap shrink-0" style={{ color: 'var(--ink-faint)' }}>
+                            {formatDateTime(event.createdAt)}
+                          </span>
+                          <span style={{ color: 'var(--ink)' }}>{event.message}</span>
+                        </div>
+                      ))}
+                      {history.length > 5 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllHistory((v) => !v)}
+                          className="w-full text-xs py-1.5 underline"
+                          style={{ borderTop: '1px solid var(--line)', color: 'var(--accent)' }}
+                        >
+                          {showAllHistory ? 'Згорнути' : `Показати все (${history.length})`}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
