@@ -3,7 +3,7 @@
 //
 // Товари хабу — зі своєї применимости (product_vehicles_own): деталь
 // потрапляє в хаб, якщо для неї визначено це покоління (див.
-// HUB_PRODUCTS_SQL нижче). До этапа C — з TecDoc-сумісності
+// HUB_PRODUCTS_SQL нижче)
 // ============================================================
 
 import { cache } from 'react';
@@ -106,7 +106,7 @@ export const HUB_MAYBE_SQL = `
   WHERE NOT EXISTS (SELECT 1 FROM confirmed c WHERE c.brand = parts.brand AND c.article = parts.article)
 `;
 
-// Этап C перехода с TecDoc: состав хаба — из своей применимости
+// Состав хаба — из своей применимости
 // (product_vehicles_own, lib/ownVehicles.ts): деталь попадает в хаб, если
 // у неё определено это поколение (generation = slug хаба) — по коду кузова
 // или году в названии/прайсе. Берутся все предложения этой детали (бренд +

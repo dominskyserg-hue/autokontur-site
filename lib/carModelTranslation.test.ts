@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cleanApplicability } from './carModelTranslation';
 
-// ---- Сирі TecDoc-коди "#...#" — застосовність НЕ показуємо ----
+// ---- Сирі коди "#...#" — застосовність НЕ показуємо ----
 
 test('Bcguma BC3304 (з задачі): код "#...#" + російський текст -> null', () => {
   // Реальний товар: brand=Bcguma, article=BC3304, car_make=TOYOTA

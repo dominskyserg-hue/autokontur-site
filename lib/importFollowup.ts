@@ -27,7 +27,7 @@ export async function runImportFollowup(pool: Pool, supplierId: string, timingId
     await recomputeProductCategories(pool, { kind: 'supplier', supplierId });
     times.categories_ms = Date.now() - t;
     t = Date.now();
-    // Своя применимость (марка/модель авто без TecDoc) — товары этого поставщика
+    // Своя применимость (марка/модель авто) — товары этого поставщика
     await rebuildOwnVehiclesSafely(pool, { supplierId });
     times.vehicle_makes_ms = Date.now() - t;
     t = Date.now();

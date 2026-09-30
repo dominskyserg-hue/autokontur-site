@@ -146,17 +146,16 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
   const { clause: categoryClause, params: categoryParams } = buildCategoryAndMakeWhereClause(category, make, 1);
 
   // Фільтр за моделлю/роком/двигуном (components/CategoryVehicleFilter.tsx)
-  // — окрема умова ПОВЕРХ категорії+марки, той самий tecdoc_compatibility-
-  // індекс, що й у вузьких SEO-сторінках і в основному пошуку
-  // (lib/vehicleFilter.ts). Умова додається ЛИШЕ якщо задано модель/рік/
+  // — окрема умова ПОВЕРХ категорії+марки, та сама умова, що й в
+  // основному пошуку (lib/vehicleFilter.ts: свої поля товару або своя
+  // застосовність). Умова додається ЛИШЕ якщо задано модель/рік/
   // двигун — сам по собі ?marka= (без них) лишається старою, вже
   // існуючою поведінкою (buildCategoryAndMakeWhereClause вище й так її
-  // враховує), без додаткової tecdoc-умови і без noindex нижче в
+  // враховує), без додаткової умови і без noindex нижче в
   // generateMetadata. Марку передаємо СЮДИ ЩЕ РАЗ, коли умова таки
   // будується (вона вже врахована окремо в categoryClause) — без
-  // цього гілка EXISTS(tecdoc_compatibility) шукала б задану модель
-  // серед УСІХ 600+ виробників у дампі TecDoc, а не лише в межах
-  // обраної марки (рідкісний, але можливий збіг назви моделі)
+  // цього задана модель шукалася б серед УСІХ марок, а не лише в межах
+  // обраної (рідкісний, але можливий збіг назви моделі)
   const hasModelYearEngineFilter = hasVehicleFilter({ model: vehicle.model, year: vehicle.year, engine: vehicle.engine });
   const vehicleResult = hasModelYearEngineFilter
     ? buildVehicleWhereClause(

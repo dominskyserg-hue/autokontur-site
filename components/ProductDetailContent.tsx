@@ -142,7 +142,7 @@ export default function ProductDetailContent({
   const faqItems = resolveFaqItems(seoOverride?.faq);
 
   // OEM/крос-номери для рядка характеристик — лише куровані адміном
-  // (cross_reference_members), не більше 6; повний масовий список TecDoc —
+  // (cross_reference_members), не більше 6; повний список кросів із прайсів —
   // окремим блоком "Аналоги" нижче
   const oemNumbers = [...crossRefs.oem, ...crossRefs.aftermarket]
     .slice(0, 6)
@@ -162,7 +162,7 @@ export default function ProductDetailContent({
     ...(supplierCatalogName ? [{ label: 'Назва в каталозі постачальника', value: supplierCatalogName }] : []),
   ];
 
-  // Даних про сумісність немає ні з TecDoc, ні з ручного оверрайду —
+  // Даних про сумісність немає ні своїх, ні з ручного оверрайду —
   // замість порожнього місця пропонуємо перевірити сумісність за VIN
   const hasCompatibility = tecdocCompatibility.length > 0 || Boolean(seoOverride?.applicability?.length);
 
@@ -500,7 +500,7 @@ export default function ProductDetailContent({
       {/* На відміну від секції вище (курована адміном модель
           cross_reference_members), тут — кроси з прайсів наших
           постачальників і довідника TRW (таблиця tecdoc_crosses, лише
-          is_valid: TecDoc і сторонні файли виключені). Товари, яких немає в
+          is_valid: виключені джерела не показуються). Товари, яких немає в
           нашому каталозі, все одно показуються текстом — саме вони
           дають SEO-текст під запити на кшталт "0986424815 купити".
           Згорнуто в <details> (не видалено!) — весь список і далі
@@ -793,7 +793,7 @@ function formatYearRange(yearFrom: number | null, yearTo: number | null): string
   return '';
 }
 
-// TecDoc записує кузов/покоління підкресленнями на кшталт
+// Каталоги записують кузов/покоління підкресленнями на кшталт
 // "(_T22_)" — прибираємо їх для показу покупцю (лишається "(T22)"),
 // самі дані в базі не чіпаємо
 function cleanModelDisplay(model: string): string {
@@ -811,9 +811,8 @@ function CompatibilityBadge({ item }: { item: TecdocCompatibilityItem }) {
   // Дужки-примітка: рік і об'єм двигуна разом, напр. "(1997–2003, 1.6)"
   const note = [yearRange, item.engine ? `${item.engine} л` : ''].filter(Boolean).join(', ');
 
-  // Застосовність визначена не напряму з дампа TecDoc для цього
-  // бренду/артикула, а через крос-номер іншого виробника (schema.sql,
-  // розділ 27) — видима позначка "· аналог" ЗАВЖДИ поруч із текстом
+  // Застосовність визначена не напряму для цього
+  // бренду/артикула, а через крос-номер іншого виробника — видима позначка "· аналог" ЗАВЖДИ поруч із текстом
   // (не лише в title при наведенні — на телефоні навести нема як), а
   // пунктирна рамка додатково відрізняє такий бейдж від звичайного
   const isCrossReference = Boolean(item.sourceNote);

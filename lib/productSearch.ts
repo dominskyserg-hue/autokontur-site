@@ -41,12 +41,12 @@ export function cleanArticle(rawValue: unknown): string {
 // це $-номер, з якого продовжувати нумерацію
 //
 // ШВИДКІСТЬ: раніше всі гілки пошуку (артикул, бренд, марка, модель,
-// кросс-номери, TecDoc, назва, "деталь + авто") були зʼєднані через OR
+// кросс-номери, сумісність, назва, "деталь + авто") були зʼєднані через OR
 // в одній умові над products — а один OR із неіндексованою гілкою
 // змушує Postgres перечитати ВСІ ~360 тис. рядків (1.4-2.5 c). Тепер
 // кожна гілка — окремий підзапит "SELECT id ...", який сам використовує
 // свій індекс (pg_trgm GIN на article/brand/car_make/car_model/
-// name_search, btree на tecdoc_*), а підсумкова умова — це
+// name_search, btree на таблицях кросів і сумісності), а підсумкова умова — це
 // p.id IN (гілка1 UNION гілка2 UNION ...). Результат ТОЙ САМИЙ (об'єднання
 // множин id) — змінилась лише форма запиту
 export async function buildTextSearchClause(
@@ -103,8 +103,7 @@ export async function buildTextSearchClause(
 
     // "Сумісність з авто" — дві гілки UNION (кожна з власним індексом):
     // (1) власні поля товару car_make (+ car_year), (2) своя применимость
-    // product_vehicles_own (lib/ownVehicles.ts). TecDoc (product_vehicle_makes,
-    // построенная из tecdoc_compatibility) с этапа D перехода не читается.
+    // product_vehicles_own (lib/ownVehicles.ts).
     // Год в запросе проверяется через поколение: деталь подходит, если её
     // поколение выпускалось в этот год (generationsCoveringYear)
     const addCarCompatBranches = (): void => {

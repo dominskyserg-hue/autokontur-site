@@ -1,7 +1,7 @@
 // ============================================================
 // ХАБ МОДЕЛІ АВТО — /marky/[make]/[model], напр. /marky/toyota/camry-xv40
 //
-// Опис хабів — вручну в lib/modelHubs.ts (точні записи TecDoc, текст),
+// Опис хабів — вручну в lib/modelHubs.ts (назви, роки, текст),
 // дані — lib/modelHubData.ts (своя применимость, product_vehicles_own). Сторінка:
 //   - H1 "Запчастини {Марка} {Модель} ({роки})" + текст 2–3 речення
 //   - блок категорій цієї моделі з кількістю товарів (спершу пріоритетні:
@@ -84,7 +84,7 @@ function yearsLabel(hub: ModelHubDef): string {
   return `${hub.yearFrom}–${hub.yearTo}`;
 }
 
-// "Mazda 6 GG (Atenza)" — друга назва з TecDoc у дужках, якщо є
+// "Mazda 6 GG (Atenza)" — друга (японська/британська) назва в дужках, якщо є
 function fullNameWithAlt(makeName: string, hub: ModelHubDef): string {
   return `${makeName} ${hub.label}${hub.altNames ? ` (${hub.altNames})` : ''}`;
 }

@@ -6,7 +6,7 @@
 // (components/StorefrontHome.tsx, фильтр на страницах категорий) — марка,
 // модель, год, объём двигателя.
 //
-// Этап C перехода с TecDoc: tecdoc_compatibility здесь больше не читается.
+// Все списки — из своих данных:
 //   field=make         -> марки из своей применимости (product_vehicles_own,
 //                         lib/ownVehicles.ts); название — курированное
 //                         (lib/carMakes.ts)
@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
 
     // ---- МАРКА ----
     if (field === 'make') {
-      // Этап C перехода с TecDoc: марки — только из своей применимости
+      // Марки — только из своей применимости
       // (product_vehicles_own, lib/ownVehicles.ts). Сырое поле car_make как
       // список не используется: там встречаются бренды запчастей ("BOSCH",
       // "CTR") и прочий свободный текст; настоящие марки из car_make и так
@@ -131,7 +131,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ success: true, options: [] });
       }
       // Годы — только из своих полей прайса (car_year): в своей применимости
-      // годов нет, из TecDoc больше не берём
+      // годов нет
       const productsResult = await pool.query(
         `SELECT DISTINCT car_year AS value FROM products WHERE UPPER(car_make) = ANY($1::text[]) AND car_year IS NOT NULL AND car_year <> ''`,
         [makeDbValues]
@@ -142,8 +142,8 @@ export async function GET(request: NextRequest) {
     }
 
     // ---- ОБ'ЄМ ДВИГУНА ----
-    // Этап C перехода с TecDoc: только своё поле товара products.engine_volume
-    // (в своей применимости двигателей нет, из TecDoc больше не берём)
+    // Только своё поле товара products.engine_volume (в своей применимости
+    // двигателей нет)
     const conditions: string[] = [`p.engine_volume IS NOT NULL`, `p.engine_volume <> ''`];
     const values: unknown[] = [];
     if (make) {

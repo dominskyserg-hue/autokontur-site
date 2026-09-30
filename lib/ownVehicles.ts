@@ -1,6 +1,6 @@
 // ============================================================
 // Марка и модель авто из СОБСТВЕННЫХ данных — таблица product_vehicles_own
-// (schema.sql, раздел "СВОЯ ПРИМЕНИМОСТЬ"). Замена применимости TecDoc.
+// (schema.sql, раздел "СВОЯ ПРИМЕНИМОСТЬ").
 //
 // Источники (колонка source):
 //   brand — бренд самого товара — автопроизводитель (оригинал TOYOTA);
@@ -28,8 +28,8 @@ import { detectCarModels } from '@/lib/carModelDictionary';
 import { CAR_MAKES, detectCarMakeInText, getCarMakeByDbValue } from '@/lib/carMakes';
 
 // Источники кроссов, которым мы доверяем: прайсы наших поставщиков и
-// официальный справочник TRW. TecDoc (tecdoc_2016/2018) и сторонние файлы
-// неизвестного происхождения (price_cardon, price_va) сюда не входят
+// официальный справочник TRW. Остальные источники (исключённые, см.
+// scripts/tecdoc/schema.sql) сюда не входят
 export const ALLOWED_CROSS_SOURCES = ['autohelp', 'price_nippon', 'trw_2025'];
 
 export type OwnVehicleSource = 'brand' | 'name' | 'oem' | 'price';

@@ -1,10 +1,10 @@
 -- ============================================================
 -- ТАБЛИЦА КРОССОВ tecdoc_crosses (кросс- и OEM-номера из прайсов)
 --
--- Название историческое: раньше здесь был сырой индекс из дампа TecDoc.
--- С 30.09.2026 данные TecDoc удалены (как и таблицы tecdoc_compatibility,
--- tecdoc_related_categories, product_vehicle_makes) — в таблице только
--- кроссы из прайсов наших поставщиков и официального справочника TRW:
+-- Название таблицы историческое. С 30.09.2026 (тогда же удалены таблицы
+-- tecdoc_compatibility, tecdoc_related_categories, product_vehicle_makes)
+-- в ней только кроссы из прайсов наших поставщиков и официального
+-- справочника TRW:
 --   autohelp     — scripts/tecdoc/import-autohelp-crosses.ts
 --   price_nippon — scripts/tecdoc/import-nippon-crosses.ts
 --   trw_2025     — scripts/tecdoc/import-trw-oe.ts
@@ -22,11 +22,11 @@
 
 -- ------------------------------------------------------------
 -- Кроси й OEM-номери: пара "бренд+артикул" A <-> "бренд+артикул" B.
--- Один зв'язок з дампа записується ОДРАЗУ ДВОМА рядками (A->B і
+-- Один зв'язок записується ОДРАЗУ ДВОМА рядками (A->B і
 -- B->A) — це свідома денормалізація заради швидкості читання: сторінці
 -- товару достатньо ОДНОГО індексованого запиту
 -- "WHERE brand_a = ? AND article_a = ?", без UNION/OR по двох
--- колонках одразу. Пишеться рідко (раз на оновлення дампа TecDoc),
+-- колонках одразу. Пишеться рідко (при імпорті файлу кросів),
 -- читається на кожному відкритті сторінки товару — тому оптимізуємо
 -- саме під читання
 -- ------------------------------------------------------------
@@ -70,8 +70,8 @@ CREATE INDEX IF NOT EXISTS idx_tecdoc_crosses_article_a ON tecdoc_crosses (artic
 --   autohelp      — прайс Autohelp (import-autohelp-crosses.ts)
 --   price_nippon  — прайс NMCO/Nippon (import-nippon-crosses.ts)
 --   unknown       — источник не указан
--- Бывшие источники tecdoc_2016, tecdoc_2018 (дампы TecDoc), price_cardon и
--- price_va (сторонние файлы) удалены 30.09.2026 вместе со скриптами импорта
+-- Бывшие источники tecdoc_2016, tecdoc_2018, price_cardon и price_va
+-- удалены 30.09.2026 вместе со скриптами импорта
 -- Константный DEFAULT не переписывает таблицу — ALTER выполняется мгновенно
 ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'unknown';
 
@@ -80,11 +80,10 @@ ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT
 ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS is_valid BOOLEAN NOT NULL DEFAULT true;
 
 -- Почему строка не используется (is_valid = false):
---   source_excluded — источник исключён целиком: данные TecDoc
---                     (tecdoc_2016, tecdoc_2018) и сторонние файлы
---                     неизвестного происхождения (price_cardon, price_va);
+--   source_excluded — источник исключён целиком (tecdoc_2016, tecdoc_2018,
+--                     price_cardon, price_va);
 --   brand_mismatch  — ни одна сторона строки не совпала с товаром каталога
---                     по бренду (так размечались строки старого дампа TecDoc)
+--                     по бренду
 ALTER TABLE tecdoc_crosses ADD COLUMN IF NOT EXISTS invalid_reason TEXT;
 
 -- Строки исключённых источников (если их снова кто-то загрузит) сразу

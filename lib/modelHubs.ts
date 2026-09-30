@@ -2,19 +2,19 @@
 // ХАБИ МОДЕЛЕЙ АВТО — сторінки /marky/{марка}/{модель-покоління}
 // (app/marky/[make]/[model]/page.tsx), напр. /marky/toyota/camry-xv40.
 //
-// Кожен хаб описаний ВРУЧНУ: у TecDoc та сама машина часто записана
+// Кожен хаб описаний ВРУЧНУ: у каталогах та сама машина часто записана
 // під іншою (японською/британською) назвою — Mazda 6 GG = "ATENZA",
 // Nissan Qashqai J10 = "DUALIS", Mitsubishi Pajero II = "SHOGUN II", —
 // а автоматичне склеювання за кодом шасі об'єднує чужі моделі
 // (перевірено на даних: Carisma з Libero, Accord з City). Тому для
-// кожного хабу тут явно перелічені ТОЧНІ записи tecdoc_compatibility.model
-// (так само, як tecdocVehicle у вузьких сторінках lib/categories.ts).
+// кожного хабу тут явно перелічені ТОЧНІ записи моделі — ті самі, що в
+// tecdocVehicle вузьких сторінок lib/categories.ts (за ними хаб
+// посилається на фільтр категорії ?model=).
 //
-// Товари хабу — ЛИШЕ з TecDoc-сумісності (рішення власника): товар
-// потрапляє в хаб, якщо в tecdoc_compatibility є рядок з його
-// brand+article і одним із models нижче. Поля car_make/car_model з
-// прайсів постачальників не використовуються — покоління з них не
-// визначити.
+// Товари хабу — зі своєї застосовності (product_vehicles_own,
+// lib/modelHubData.ts): товар потрапляє в хаб, якщо для нього визначено
+// саме це покоління (код кузова, роки або код двигуна в назві/прайсі,
+// lib/carModelDictionary.ts).
 //
 // Хаб, у якого менше MIN_HUB_PRODUCTS товарів, не показується (404 і
 // немає в списках/сайтмапі) — "тонкий" контент шкодить SEO.
@@ -27,19 +27,19 @@ export const MIN_HUB_PRODUCTS = 30;
 export interface ModelHubDef {
   // slug марки з lib/carMakes.ts (/marky/{makeSlug})
   makeSlug: string;
-  // Марка так, як вона записана в tecdoc_compatibility.make
+  // Марка великими літерами — так само, як tecdocVehicle.make у lib/categories.ts
   tecdocMake: string;
   // Друга частина адреси: /marky/{makeSlug}/{slug}
   slug: string;
   // Назва для покупця (як шукають в Україні), без марки: "Camry XV40"
   label: string;
-  // Назва в TecDoc, якщо відрізняється від ринкової — згадується в
+  // Друга назва моделі (японська/британська), якщо є — згадується в
   // тексті сторінки ("Mazda 6 GG (Atenza)"), щоб сторінку знаходили й
   // за нею
   altNames?: string;
   yearFrom: number;
   yearTo: number;
-  // Точні записи tecdoc_compatibility.model цього покоління. ПЕРШИЙ —
+  // Точні записи моделі цього покоління (як tecdocVehicle.models). ПЕРШИЙ —
   // основний кузов: його підставляємо у фільтр категорії
   // (/category/{slug}?marka=...&model=...), бо той фільтр приймає лише
   // одну модель
@@ -250,7 +250,7 @@ export const PRIORITY_CATEGORY_SLUGS: string[] = [
 
 // Вузькі сторінки "модель + деталь", які НЕ пов'язуються з хабами (ні
 // посиланням з хабу, ні "Всі запчастини для ..." з самої сторінки):
-// товари на них підібрані за словом у назві, а не за TecDoc-поколінням
+// товари на них підібрані за словом у назві, а не за поколінням
 // (рішення власника: "Camry колодки" — для всіх поколінь Camry одразу)
 const HUB_EXCLUDED_NARROW_SLUGS: ReadonlySet<string> = new Set(['camry-halmivni-kolodky-peredni']);
 
@@ -266,7 +266,7 @@ export function hubPath(hub: ModelHubDef): string {
   return `/marky/${hub.makeSlug}/${hub.slug}`;
 }
 
-// Хаб для рядка сумісності TecDoc (блок "Запчастина підходить для авто"
+// Хаб для рядка сумісності (блок "Запчастина підходить для авто"
 // у картці товару): точний збіг марки й запису моделі
 export function findHubForTecdocModel(tecdocMake: string, tecdocModel: string): ModelHubDef | undefined {
   const make = tecdocMake.toUpperCase();

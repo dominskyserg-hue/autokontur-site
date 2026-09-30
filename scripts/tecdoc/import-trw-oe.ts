@@ -28,9 +28,9 @@
 // звуження, що й в інших імпортах кросів ("тільки те, що стосується
 // того, що ви продаєте", а не всі 80 тисяч артикулів файлу).
 //
-// Записується з relation_type='oem' (а не 'cross') — генеричні
-// крос-номери TRW з попереднього дампа TecDoc (relation_type='cross')
-// цей запуск не чіпає і не дублює: у tecdoc_crosses UNIQUE
+// Записується з relation_type='oem' (а не 'cross') — крос-номери
+// TRW з інших джерел (relation_type='cross') цей запуск не чіпає і
+// не дублює: у tecdoc_crosses UNIQUE
 // (brand_a, article_a, brand_b, article_b, relation_type), тож
 // однакова пара з різним relation_type — це два різні рядки, а
 // повторний запуск цього скрипта безпечний (ON CONFLICT DO NOTHING).

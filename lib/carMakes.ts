@@ -70,7 +70,7 @@ export const CAR_MAKES: CarMakeDef[] = [
 // Марки, яких НЕМАЄ серед курованих CAR_MAKES вище (немає готового
 // лого в /public/car-logos і власної сторінки /marky/[slug]) — але
 // покупці все одно можуть шукати їх вільним текстом ("лексус",
-// "шкода"...), і в базі (products.car_make / tecdoc_compatibility.make)
+// "шкода"...), і в базі (products.car_make)
 // такі значення реально трапляються. Легша структура: лише те, що
 // потрібно для розпізнавання тексту й SQL-фільтра, без slug/name/logo,
 // які використовує ТІЛЬКИ куратор сторінок марок
@@ -209,7 +209,7 @@ export function getCarMakeByDbValue(value: string | null | undefined): CarMakeDe
 // її означення зі списком усіх варіантів написання. Потрібен там, де
 // покупач вже обрав марку зі списку card-options (field=make — див.
 // app/api/products/car-options/route.ts), а її треба зіставити з
-// products.car_make/tecdoc_compatibility.make, де ця сама марка може
+// products.car_make, де ця сама марка може
 // бути записана як завгодно ("VW", "VOLKSWAGEN"...)
 export function getCarMakeByName(name: string | null | undefined): CarMakeDef | undefined {
   if (!name) return undefined;
@@ -220,7 +220,7 @@ export function getCarMakeByName(name: string | null | undefined): CarMakeDef | 
 // Приводить значення марки, обране покупцем у випадаючому списку, до
 // масиву варіантів написання для точного (регістронезалежного) SQL-
 // порівняння через "UPPER(колонка) = ANY($N::text[])" — однаково
-// придатний і для products.car_make, і для tecdoc_compatibility.make.
+// придатний для products.car_make і схожих колонок.
 // Якщо марка курована (є в CAR_MAKES) — повертає ВСІ її варіанти
 // написання одразу (наприклад, для Volkswagen — і "VW", і "VOLKSWAGEN"),
 // інакше — просто саме передане значення (некурована марка, є лише в
