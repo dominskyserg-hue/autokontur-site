@@ -421,6 +421,10 @@ export default function OrderDetailsModal({
   // ---- телефон відділення Нової Пошти (контакт для дзвінка) ----
   const [warehousePhone, setWarehousePhone] = useState<string | null>(null);
 
+  // ---- закупка и прибыль в шапке: скрыты, пока не нажмёшь ----
+  // (чтобы клиент, стоящий рядом с менеджером, не видел нашу наценку)
+  const [showProfit, setShowProfit] = useState(false);
+
   // ---- модалка "Принять оплату" ----
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
@@ -1399,8 +1403,11 @@ export default function OrderDetailsModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* ==================== ШАПКА ==================== */}
+        {/* relative + pr-14 — место под крестик, закреплённый в правом
+            верхнем углу (кнопки шапки могут переноситься на новую строку,
+            а крестик всегда остаётся в углу) */}
         <div
-          className="flex items-start justify-between gap-4 px-6 py-4 shrink-0 flex-wrap"
+          className="relative flex items-start justify-between gap-4 pl-6 pr-14 py-4 shrink-0 flex-wrap"
           style={{ borderBottom: '1px solid var(--line)' }}
         >
           <div className="min-w-0">
@@ -1475,8 +1482,33 @@ export default function OrderDetailsModal({
                 // Позиции без цены закупки завышают прибыль (закупка = 0) —
                 // в таком случае честно предупреждаем и красим прибыль в серый
                 const withoutCost = activeItems.filter((item) => !(item.costPrice > 0)).length;
+                // Скрыто: вместо цифр — кнопка "Прибуток", по нажатию показываем
+                if (!showProfit) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setShowProfit(true)}
+                      className="text-right pl-3 cursor-pointer"
+                      style={{ borderLeft: '1px solid var(--line)' }}
+                      title="Показати закупку і прибуток"
+                    >
+                      <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                        Прибуток
+                      </p>
+                      <p className="text-lg font-semibold font-mono" style={{ color: 'var(--ink-faint)' }}>
+                        👁 •••
+                      </p>
+                    </button>
+                  );
+                }
                 return (
-                  <div className="text-right pl-3" style={{ borderLeft: '1px solid var(--line)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowProfit(false)}
+                    className="text-right pl-3 cursor-pointer"
+                    style={{ borderLeft: '1px solid var(--line)' }}
+                    title="Сховати закупку і прибуток"
+                  >
                     <p className="text-[11px]" style={{ color: withoutCost > 0 ? 'var(--warn)' : 'var(--ink-faint)' }}>
                       {withoutCost > 0
                         ? `Без закупки: ${withoutCost} поз. — прибуток неточний`
@@ -1495,7 +1527,7 @@ export default function OrderDetailsModal({
                         </span>
                       )}
                     </p>
-                  </div>
+                  </button>
                 );
               })()}
             {orderDetails && (
@@ -1561,12 +1593,14 @@ export default function OrderDetailsModal({
                 </button>
               </div>
             )}
+            {/* Крестик — всегда в правом верхнем углу окна */}
             <button
               type="button"
               onClick={onClose}
-              className="text-sm px-2 py-1 rounded-md shrink-0"
+              className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-md text-lg hover:bg-white/5"
               style={{ color: 'var(--ink-muted)' }}
               aria-label="Закрыть"
+              title="Закрити (Esc)"
             >
               ✕
             </button>
