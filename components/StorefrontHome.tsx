@@ -70,6 +70,10 @@ import { maxQuantityFor } from '@/lib/cart';
 import { estimateDelivery } from '@/lib/deliveryEstimate';
 import SearchNotFoundRequest from '@/components/SearchNotFoundRequest';
 import SearchSuggestions from '@/components/SearchSuggestions';
+import MyCarChip from '@/components/MyCarChip';
+import { myCarLabel, readMyCar } from '@/lib/myCar';
+import { useMyCar } from '@/lib/useMyCar';
+import { clearCheckoutMemory, readCheckoutMemory, saveCheckoutMemory } from '@/lib/checkoutMemory';
 import { switchKeyboardLayout } from '@/lib/keyboardLayout';
 
 // ------------------------------------------------------------
@@ -103,6 +107,8 @@ interface Product {
   offerCount?: number;
   // Восстановленная / б/у деталь — бейдж "Відновлена"
   isRefurbished?: boolean;
+  // Подходит к "моєму авто" покупателя (lib/myCar.ts); null — авто не выбрано
+  fitsMyCar?: boolean | null;
   // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж
   // "На нашому складі" вместо обычного "N шт"
   ownStock?: boolean;
@@ -464,6 +470,14 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // те, що вже завантажено в results — нового запиту не роблять
   // Поле поиска в фокусе — показываем подсказки при вводе
   const [searchFocused, setSearchFocused] = useState(false);
+  // "Моє авто" (components/MyCarChip.tsx) и переключатель "Тільки для мого
+  // авто" в результатах поиска. Ref — чтобы runSearch читал актуальное
+  // значение без пересоздания функции
+  const myCar = useMyCar();
+  const [onlyMyCar, setOnlyMyCar] = useState(false);
+  const onlyMyCarRef = useRef(false);
+  // Последний поиск — чтобы повторить его при смене авто или переключателя
+  const lastSearchRef = useRef<{ params: URLSearchParams; label: string } | null>(null);
   // Если результаты найдены по исправленной раскладке — что ввёл покупатель
   const [layoutFixedFrom, setLayoutFixedFrom] = useState<string | null>(null);
   const [filterAvailability, setFilterAvailability] = useState<'all' | 'inStock' | 'backorder'>('all');
@@ -766,6 +780,38 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // Чесний UI-нюанс, а не нова бізнес-логіка
   const [deliveryMethod, setDeliveryMethod] = useState<'branch' | 'courier'>('branch');
 
+  // Быстрый повторный заказ (lib/checkoutMemory.ts): данные прошлого заказа
+  // подставляются в форму. prefilled — показать "Дані з минулого замовлення"
+  const [prefilled, setPrefilled] = useState(false);
+  const fillFromMemory = useCallback(() => {
+    const saved = readCheckoutMemory();
+    if (!saved || !saved.customerPhone) return;
+    setCustomerName(saved.customerName ?? '');
+    setCustomerSurname(saved.customerSurname ?? '');
+    setCustomerPhone(saved.customerPhone ?? '');
+    setCity(saved.city ?? '');
+    setNovaPoshtaAddress(saved.novaPoshtaAddress ?? '');
+    setCityRef(saved.cityRef ?? null);
+    setWarehouseRef(saved.warehouseRef ?? null);
+    if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
+    setPrefilled(true);
+  }, []);
+  useEffect(() => {
+    fillFromMemory();
+  }, [fillFromMemory]);
+  // "Очистити" — забыть сохранённые данные и очистить поля
+  const handleClearPrefill = () => {
+    clearCheckoutMemory();
+    setCustomerName('');
+    setCustomerSurname('');
+    setCustomerPhone('');
+    setCity('');
+    setNovaPoshtaAddress('');
+    setCityRef(null);
+    setWarehouseRef(null);
+    setPrefilled(false);
+  };
+
   // VIN-захист замовлення — Smart UX з ТЗ: чекбокс + поле VIN. Окремого
   // стовпця в базі теж немає, тому VIN просто дописується в comment
   // перед відправкою (див. handleSubmitOrder) — менеджер побачить його
@@ -1000,6 +1046,17 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       // корзину — и React-state (setCart), и localStorage (это уже
       // делает эффект выше, который сохраняет cart в localStorage
       // при каждом изменении — запись [] означает "очистить")
+      // Запоминаем контакты и доставку для следующего заказа (lib/checkoutMemory.ts)
+      saveCheckoutMemory({
+        customerName: customerName.trim(),
+        customerSurname: customerSurname.trim(),
+        customerPhone: customerPhone.trim(),
+        city: city.trim(),
+        novaPoshtaAddress: novaPoshtaAddress.trim(),
+        cityRef: deliveryMethod === 'branch' ? cityRef : null,
+        warehouseRef: deliveryMethod === 'branch' ? warehouseRef : null,
+        deliveryMethod,
+      });
       setCreatedOrderId(data.orderId);
       setCreatedOrderNumber(data.orderNumber);
       setOrderStatus('success');
@@ -1019,6 +1076,8 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       setAddressTouched(false);
       setVinProtect(false);
       setVinProtectCode('');
+      // Форма снова заполнена сохранёнными данными — для следующего заказа
+      fillFromMemory();
     } catch (error) {
       setOrderError(error instanceof Error ? error.message : 'Помилка мережі під час оформлення замовлення');
       setOrderStatus('idle');
@@ -1076,11 +1135,25 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // запроса (params) и подписью, которая показывается над результатами
   // (label, например "555-66" или "Toyota, 2008, 2.0")
   // ------------------------------------------------------------
-  const runSearch = useCallback(async (params: URLSearchParams, label: string) => {
+  const runSearch = useCallback(async (baseParams: URLSearchParams, label: string) => {
     const token = ++pollTokenRef.current;
+    lastSearchRef.current = { params: baseParams, label };
     setSearching(true);
     setSearchError(null);
     setSubmittedQuery(label);
+    // "Моє авто": отметка "підходить" у каждого товара (fitMake/fitModel),
+    // а при включённом "Тільки для мого авто" — ещё и фильтр (carMake/carModel),
+    // если поиск сам по себе не по авто
+    const params = new URLSearchParams(baseParams);
+    const car = readMyCar();
+    if (car) {
+      params.set('fitMake', car.make);
+      if (car.model) params.set('fitModel', car.model);
+      if (onlyMyCarRef.current && !params.has('carMake')) {
+        params.set('carMake', car.make);
+        if (car.model) params.set('carModel', car.model);
+      }
+    }
     try {
       const response = await fetch(`/api/products?${params.toString()}`);
       const data = await response.json();
@@ -1118,6 +1191,15 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       setSearching(false);
     }
   }, [pollForImages]);
+
+  // Сменили "моє авто" или переключатель "Тільки для мого авто" — повторяем
+  // последний поиск, чтобы отметки и фильтр соответствовали новому авто
+  const myCarKey = myCar ? myCarLabel(myCar) : '';
+  useEffect(() => {
+    onlyMyCarRef.current = onlyMyCar && Boolean(myCarKey);
+    if (lastSearchRef.current) runSearch(lastSearchRef.current.params, lastSearchRef.current.label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlyMyCar, myCarKey]);
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1333,11 +1415,13 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
               style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
             >
               <PhoneIcon />
-              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} style={{ color: TECH_MUTED }}>
+              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="whitespace-nowrap" style={{ color: TECH_MUTED }}>
                 {phone}
               </a>
-              <span style={{ color: TECH_BORDER_2 }}>◆</span>
-              <span>{workingHours}</span>
+              {/* Часы работы — только на широком экране: в шапке ещё кнопка
+                  "Моє авто", иначе строка переносится */}
+              <span className="hidden 2xl:inline" style={{ color: TECH_BORDER_2 }}>◆</span>
+              <span className="hidden whitespace-nowrap 2xl:inline">{workingHours}</span>
             </div>
 
             <div className="flex items-center gap-2.5">
@@ -1398,8 +1482,11 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                 className="hidden lg:flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
                 style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
               >
-                <span>Марки авто</span>
+                <span className="whitespace-nowrap">Марки авто</span>
               </Link>
+
+              {/* ---- Моє авто (components/MyCarChip.tsx) ---- */}
+              <MyCarChip />
 
               {/* ---- Особистий кабінет ---- */}
               {/* Скрыт, пока кабинет выключен (lib/customerCabinet.ts) */}
@@ -1511,6 +1598,8 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
             orderError={orderError}
             createdOrderId={createdOrderId}
             createdOrderNumber={createdOrderNumber}
+            prefilled={prefilled}
+            onClearPrefill={handleClearPrefill}
             customerName={customerName}
             customerSurname={customerSurname}
             customerPhone={customerPhone}
@@ -2066,6 +2155,17 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                   )}
                 </p>
 
+                {/* ---- "Тільки для мого авто" (lib/myCar.ts) ---- */}
+                {myCar && (
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium"
+                    style={{ fontFamily: SANS_TECH, border: `1px solid ${onlyMyCar ? 'rgba(52,211,153,0.45)' : TECH_BORDER}`, color: onlyMyCar ? TECH_GOOD : TECH_MUTED }}
+                  >
+                    <input type="checkbox" checked={onlyMyCar} onChange={(e) => setOnlyMyCar(e.target.checked)} />
+                    Тільки для {myCarLabel(myCar)}
+                  </label>
+                )}
+
                 {/* ---- перемикач вигляду: плиткою або таблицею ---- */}
                 {!searching && results.length > 0 && (
                   <div className="inline-flex shrink-0 gap-0.5 rounded-lg p-1" style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}>
@@ -2454,6 +2554,11 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                                   <RefurbishedBadge />
                                 </span>
                               )}
+                              {product.fitsMyCar && (
+                                <span className="shrink-0 text-[11px] font-semibold" style={{ color: TECH_GOOD }} title="Підходить до вашого авто">
+                                  ✓ підходить
+                                </span>
+                              )}
                             </div>
 
                             <div>
@@ -2570,6 +2675,11 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                             {product.isRefurbished && (
                               <div className="mt-1.5">
                                 <RefurbishedBadge />
+                              </div>
+                            )}
+                            {product.fitsMyCar && (
+                              <div className="mt-1.5 text-[11px] font-semibold" style={{ color: TECH_GOOD }}>
+                                ✓ Підходить до вашого авто
                               </div>
                             )}
                           </Link>
@@ -3192,6 +3302,9 @@ interface CartDrawerProps {
   orderError: string | null;
   createdOrderId: string | null;
   createdOrderNumber: number | null;
+  // Форма заполнена данными прошлого заказа (lib/checkoutMemory.ts)
+  prefilled: boolean;
+  onClearPrefill: () => void;
   customerName: string;
   customerSurname: string;
   customerPhone: string;
@@ -3256,6 +3369,8 @@ function CartDrawer({
   orderError,
   createdOrderId,
   createdOrderNumber,
+  prefilled,
+  onClearPrefill,
   customerName,
   customerSurname,
   customerPhone,
@@ -3369,6 +3484,15 @@ function CartDrawer({
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
                   Контактна інформація
                 </h3>
+                {/* Данные прошлого заказа уже подставлены (lib/checkoutMemory.ts) */}
+                {prefilled && (
+                  <p className="-mt-1 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_GOOD }}>
+                    ✓ Підставили дані з минулого замовлення.{' '}
+                    <button type="button" onClick={onClearPrefill} className="underline" style={{ color: TECH_MUTED }}>
+                      Очистити
+                    </button>
+                  </p>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>

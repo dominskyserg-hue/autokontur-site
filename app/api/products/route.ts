@@ -155,6 +155,9 @@ interface ProductResponse {
   // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — на витрине бейдж
   // "На нашому складі · відправка сьогодні" и первое место в поиске
   ownStock: boolean;
+  // Подходит ли к "моєму авто" покупателя (параметры fitMake/fitModel,
+  // lib/myCar.ts): true/false; null — авто не передано
+  fitsMyCar: boolean | null;
   updatedAt: string;
 }
 
@@ -366,6 +369,16 @@ export async function GET(request: NextRequest) {
     const limitPlaceholder = `$${values.length - 1}`;
     const offsetPlaceholder = `$${values.length}`;
 
+    // "Моє авто" покупателя (fitMake/fitModel): НЕ фильтр, а отметка
+    // "✓ підходить" у каждого товара — то же условие, что и у фильтра по
+    // авто (lib/vehicleFilter.ts: свои поля товара или своя применимость),
+    // только как колонка в SELECT. Параметры добавляются ПОСЛЕ limit/offset —
+    // на их номера это не влияет, а в подсчёт total (filterValues) не попадают
+    const fitMake = (searchParams.get('fitMake') || '').trim().slice(0, 60);
+    const fitModel = (searchParams.get('fitModel') || '').trim().slice(0, 60);
+    const fitClause = fitMake ? buildVehicleWhereClause({ make: fitMake, model: fitModel || undefined }, values.length + 1) : null;
+    if (fitClause) values.push(...fitClause.params);
+
     // Персональна ціна покупця (customer_pricing_rules, за cookie з
     // телефоном "залогіненого" в Особистому кабінеті покупця —
     // components/CustomerDashboard.tsx) — рахуємо ПАРАЛЕЛЬНО з основним
@@ -403,6 +416,7 @@ export async function GET(request: NextRequest) {
         b.supplier_id,
         s.name AS supplier_name,
         s.delivery_time,
+        ${fitClause ? `(${fitClause.clause}) AS fits_my_car,` : ''}
         p.updated_at${useApproxCount ? '' : ', COUNT(*) OVER() AS total_count'}
       FROM products p
       ${g.join}
@@ -446,6 +460,7 @@ export async function GET(request: NextRequest) {
       stock: row.stock,
       isRefurbished: row.is_refurbished,
       ownStock: ownStockKeys.includes(ownStockKey(row.article, row.brand)),
+      fitsMyCar: fitClause ? Boolean(row.fits_my_car) : null,
       ...(isAdmin ? { supplierId: row.supplier_id, supplierName: row.supplier_name } : {}),
       deliveryTime: row.delivery_time,
       updatedAt: row.updated_at,

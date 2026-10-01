@@ -32,6 +32,7 @@
 
 import { useState } from 'react';
 import { maxQuantityFor } from '@/lib/cart';
+import { readCheckoutMemory, saveCheckoutMemory } from '@/lib/checkoutMemory';
 import { createPortal } from 'react-dom';
 import type { FormEvent } from 'react';
 import { trackBeginCheckout, trackPurchase } from '@/lib/analytics';
@@ -126,6 +127,10 @@ export default function QuickOrderModal({ product, compact = false, initialQuant
   // Открываем окно сразу с количеством, выбранным на карточке товара
   const openModal = () => {
     setQuantity(Math.min(maxQuantity, Math.max(1, initialQuantity)));
+    // Имя и телефон из прошлого заказа (lib/checkoutMemory.ts)
+    const saved = readCheckoutMemory();
+    if (saved?.customerPhone && !phone) setPhone(saved.customerPhone);
+    if (saved?.customerName && !name) setName([saved.customerName, saved.customerSurname].filter(Boolean).join(' '));
     setOpen(true);
   };
 
@@ -174,6 +179,8 @@ export default function QuickOrderModal({ product, compact = false, initialQuant
       }
 
       setCreatedOrderNumber(typeof data.orderNumber === 'number' ? data.orderNumber : null);
+      // Запоминаем имя и телефон для следующего заказа
+      saveCheckoutMemory({ customerName: firstName, customerSurname: parts.length > 1 ? lastName : '', customerPhone: phone.trim() });
       trackPurchase(data.orderId, [{ id: product.id, name: displayName, brand: product.brand, price: product.retailPrice, quantity }]);
       setStatus('success');
     } catch (err) {
