@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import VinRequestButton from '@/components/VinRequestButton';
+import CallbackButton from '@/components/CallbackButton';
 import AttributionCapture from '@/components/AttributionCapture';
 import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
@@ -175,6 +176,8 @@ export default function RootLayout({
         {/* Плаваюча кнопка "Не знайшли, що шукали?" — на КОЖНІЙ сторінці
             сайту (сама ховає себе під /admin, див. components/VinRequestButton.tsx) */}
         <VinRequestButton />
+        {/* "Передзвоніть мені" — слева внизу, на всех страницах витрины (components/CallbackButton.tsx) */}
+        <CallbackButton />
 
         {/* ==================== META (FACEBOOK) PIXEL — базовый код ====================
             Стандартный код инициализации fbq() — ровно такой же, какой

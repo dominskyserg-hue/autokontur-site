@@ -25,6 +25,7 @@ import { Search, Send, ShoppingCart, User, Phone, Menu, X } from 'lucide-react';
 import { DominatorLogo } from '@/components/SiteHeader';
 import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
 import SearchSuggestions from '@/components/SearchSuggestions';
+import MyCarChip from '@/components/MyCarChip';
 import {
   TECH_ACCENT,
   TECH_ACCENT_BRIGHT,
@@ -178,6 +179,8 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
           >
             Марки авто
           </Link>
+          {/* "Моє авто" — подсказывает, какие детали подходят (components/MyCarChip.tsx) */}
+          <MyCarChip />
           {/* Скрыт, пока кабинет выключен (lib/customerCabinet.ts) */}
           {isCustomerCabinetEnabled() && (
             <Link
