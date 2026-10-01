@@ -1,7 +1,7 @@
 'use client';
 
 // ============================================================
-// Плавающая кнопка "Передзвоніть мені" (слева внизу экрана, на всех
+// Плавающая кнопка "Передзвоніть мені" (справа внизу экрана, на всех
 // страницах витрины). Многие покупатели запчастей хотят сначала
 // поговорить с человеком, а не оформлять заказ сами: оставляют телефон
 // (имя и вопрос — по желанию), менеджер перезванивает.
@@ -89,17 +89,25 @@ export default function CallbackButton() {
 
   return (
     <>
-      {/* Кнопка: слева внизу (справа — кнопка "Не знайшли?"). На телефоне
-          чуть выше, чтобы не закрывать полосу "Купити" внизу карточки */}
+      {/* Кнопка: справа внизу, над кнопкой "Не знайшли?" */}
       <button
         type="button"
         onClick={openForm}
-        className="fixed bottom-24 left-4 z-40 flex items-center gap-2 rounded-full px-4 py-3 text-sm font-semibold shadow-lg md:bottom-6 md:left-6"
+        // Круглая кнопка-значок справа, над кнопкой "Не знайшли?"
+        // (components/VinRequestButton.tsx) — обе в одном углу и не
+        // перекрывают карточки товаров. Подпись — при наведении
+        className="group fixed bottom-36 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full md:bottom-[5.5rem] md:right-6"
         style={{ background: GOOD, color: '#04110C', boxShadow: '0 0 0 1px rgba(52,211,153,0.5), 0 10px 30px rgba(16,185,129,0.35)' }}
         aria-label="Передзвоніть мені"
       >
-        <Phone className="h-4 w-4" />
-        <span className="hidden sm:inline">Передзвоніть мені</span>
+        <Phone className="h-5 w-5" />
+        {/* Подпись при наведении (только компьютер) */}
+        <span
+          className="pointer-events-none absolute right-full mr-2 hidden whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold opacity-0 transition-opacity group-hover:opacity-100 md:block"
+          style={{ background: '#1B2436', color: '#fff', border: '1px solid rgba(255,255,255,0.14)' }}
+        >
+          Передзвоніть мені
+        </span>
       </button>
 
       {open && (

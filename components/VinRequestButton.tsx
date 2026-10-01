@@ -174,7 +174,11 @@ export default function VinRequestButton() {
             transition={{ type: 'spring', stiffness: 300, damping: 22 }}
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
-            className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full py-3 pl-4 pr-5 text-sm font-semibold shadow-glow-lg transition-shadow hover:shadow-glow-lg sm:bottom-6 sm:right-6"
+            // Круглая кнопка-значок справа внизу (над ней — "Передзвоніть мені",
+            // components/CallbackButton.tsx): раньше широкие кнопки по обоим
+            // бокам перекрывали карточки товаров. Подпись — при наведении.
+            // На телефоне выше, чтобы не закрывать полосу "Купити"
+            className="group fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-glow-lg md:bottom-6 md:right-6"
             style={{
               fontFamily: TECH_BODY_FONT,
               background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`,
@@ -182,9 +186,14 @@ export default function VinRequestButton() {
             }}
             aria-label="Не знайшли, що шукали? Написати нам"
           >
-            <MessageCircleQuestion size={20} strokeWidth={1.8} />
-            <span className="hidden sm:inline">Не знайшли? Напишіть нам</span>
-            <span className="sm:hidden">Не знайшли?</span>
+            <MessageCircleQuestion size={22} strokeWidth={1.8} />
+            {/* Подпись при наведении (только компьютер) */}
+            <span
+              className="pointer-events-none absolute right-full mr-2 hidden whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold opacity-0 transition-opacity group-hover:opacity-100 md:block"
+              style={{ background: '#1B2436', color: '#fff', border: '1px solid rgba(255,255,255,0.14)' }}
+            >
+              Не знайшли? Напишіть нам
+            </span>
           </motion.button>
         )}
       </AnimatePresence>
