@@ -65,6 +65,8 @@ const PUBLIC_API_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: 'DELETE', pattern: /^\/api\/customer\/addresses\/[^/]+$/ },
   { method: 'GET', pattern: /^\/api\/customer\/telegram-link$/ },
   { method: 'POST', pattern: /^\/api\/vin-requests$/ },
+  // Страница "Де моє замовлення?" (app/zamovlennia) — номер заказа + телефон
+  { method: 'POST', pattern: /^\/api\/order-status$/ },
   { method: 'GET', pattern: /^\/api\/announcements$/ },
   { method: 'GET', pattern: /^\/api\/site-settings$/ },
   { method: 'GET', pattern: /^\/api\/nova-poshta\/cities$/ },

@@ -207,6 +207,7 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
             { href: '/marky', label: 'Марки авто' },
             { href: '/pidbir-za-vin', label: 'Підбір за VIN' },
             { href: '/delivery', label: 'Доставка і оплата' },
+            { href: '/zamovlennia', label: 'Де моє замовлення?' },
           ].map((item) => (
             <Link
               key={item.href}
