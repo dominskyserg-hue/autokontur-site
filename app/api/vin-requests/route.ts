@@ -85,7 +85,15 @@ interface CreateVinRequestBody {
   vinCode?: string;
   phone?: string;
   description?: string;
+  // Заявка "Не знайшли деталь?" из пустого поиска на витрине
+  // (components/SearchNotFoundRequest.tsx): что искал покупатель и его авто.
+  // Для такой заявки VIN необязателен — покупатель часто его не знает
+  searchQuery?: string;
+  car?: string;
 }
+
+// Что пишем в vin_code, если VIN не указан (колонка NOT NULL)
+const NO_VIN_PLACEHOLDER = 'VIN не вказано';
 
 export async function POST(request: NextRequest) {
   // Защита от спама: не больше 5 заявок за 10 минут с одного IP
@@ -106,11 +114,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
-  const vinCode = (body.vinCode || '').trim().toUpperCase();
+  const searchQuery = (body.searchQuery || '').trim().slice(0, 200);
+  const car = (body.car || '').trim().slice(0, 200);
+  const isSearchRequest = searchQuery !== '';
+  let vinCode = (body.vinCode || '').trim().toUpperCase();
   const phone = (body.phone || '').trim();
-  const description = (body.description || '').trim();
+  // Заявка из пустого поиска: в описание сразу пишем, что искали и для
+  // какого авто — менеджер видит это в разделе "VIN-запросы"
+  const description = isSearchRequest
+    ? [
+        `🔍 Не знайдено на сайті: «${searchQuery}»`,
+        car ? `Авто: ${car}` : null,
+        (body.description || '').trim() ? `Коментар: ${(body.description || '').trim()}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : (body.description || '').trim();
 
-  if (!vinCode || vinCode.length < 5) {
+  if (isSearchRequest && !vinCode) {
+    vinCode = NO_VIN_PLACEHOLDER;
+  } else if (!vinCode || vinCode.length < 5) {
     return NextResponse.json({ error: 'Вкажіть VIN-код автомобіля.' }, { status: 400 });
   }
   if (!phone || !isValidPhone(phone)) {

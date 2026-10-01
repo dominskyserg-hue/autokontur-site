@@ -26,6 +26,7 @@ import RefurbishedBadge from '@/components/RefurbishedBadge';
 import OfferAccordion from '@/components/OfferAccordion';
 import ProductBuyBox from '@/components/ProductBuyBox';
 import StickyBuyBar from '@/components/StickyBuyBar';
+import FitCheck from '@/components/FitCheck';
 import { estimateDelivery } from '@/lib/deliveryEstimate';
 import OwnStockBadge from '@/components/OwnStockBadge';
 import FavoriteButton from '@/components/FavoriteButton';
@@ -326,6 +327,12 @@ export default function ProductDetailContent({
               14 днів на повернення
             </span>
           </div>
+
+          {/* "Підходить до вашого авто?" — по сохранённому в браузере авто
+              покупателя и применимости детали (components/FitCheck.tsx) */}
+          <FitCheck
+            compatibility={vehicleCompatibility.map((item) => ({ make: item.make, makeRaw: item.makeRaw, model: item.model }))}
+          />
 
           {/* data-buy-box — по нему StickyBuyBar понимает, что блок ушёл с экрана */}
           <div data-buy-box className="flex flex-wrap items-center gap-3">

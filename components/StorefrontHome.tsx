@@ -68,6 +68,9 @@ import RefurbishedBadge from '@/components/RefurbishedBadge';
 import OwnStockBadge from '@/components/OwnStockBadge';
 import { maxQuantityFor } from '@/lib/cart';
 import { estimateDelivery } from '@/lib/deliveryEstimate';
+import SearchNotFoundRequest from '@/components/SearchNotFoundRequest';
+import SearchSuggestions from '@/components/SearchSuggestions';
+import { switchKeyboardLayout } from '@/lib/keyboardLayout';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -459,6 +462,10 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // ---- фільтри результатів пошуку (наявність / бренд / ціна) ----
   // На відміну від самого пошуку (запит до бази), фільтри звужують
   // те, що вже завантажено в results — нового запиту не роблять
+  // Поле поиска в фокусе — показываем подсказки при вводе
+  const [searchFocused, setSearchFocused] = useState(false);
+  // Если результаты найдены по исправленной раскладке — что ввёл покупатель
+  const [layoutFixedFrom, setLayoutFixedFrom] = useState<string | null>(null);
   const [filterAvailability, setFilterAvailability] = useState<'all' | 'inStock' | 'backorder'>('all');
   const [filterBrands, setFilterBrands] = useState<Set<string>>(new Set());
   const [priceFilter, setPriceFilter] = useState<{ min: string; max: string }>({ min: '', max: '' });
@@ -1080,7 +1087,24 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       if (!response.ok) {
         throw new Error(data.error || 'Не вдалося виконати пошук');
       }
-      const products = data.products as Product[];
+      let products = data.products as Product[];
+      setLayoutFixedFrom(null);
+
+      // Ничего не нашли — может, покупатель забыл переключить раскладку
+      // ("щс90" вместо "oc90", lib/keyboardLayout.ts): пробуем ещё раз
+      const searchText = params.get('search');
+      const switched = products.length === 0 && searchText ? switchKeyboardLayout(searchText) : null;
+      if (switched) {
+        const retryParams = new URLSearchParams(params);
+        retryParams.set('search', switched);
+        const retryResponse = await fetch(`/api/products?${retryParams.toString()}`);
+        const retryData = await retryResponse.json();
+        if (retryResponse.ok && (retryData.products as Product[]).length > 0) {
+          products = retryData.products as Product[];
+          setLayoutFixedFrom(searchText);
+          setSubmittedQuery(switched);
+        }
+      }
       setResults(products);
 
       const missingImageIds = products.filter((p) => !p.imageUrl).map((p) => p.id);
@@ -1099,6 +1123,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
     event.preventDefault();
     const query = searchInput.trim();
     if (!query) return;
+    setSearchFocused(false);
     runSearch(new URLSearchParams({ search: query, pageSize: '24' }), query);
   };
 
@@ -1809,7 +1834,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.18 }}
                     onSubmit={handleSearchSubmit}
-                    className="max-w-md mx-auto lg:mx-0 flex items-center gap-3 rounded-xl px-4 py-1 transition-shadow focus-within:shadow-glow"
+                    className="relative max-w-md mx-auto lg:mx-0 flex items-center gap-3 rounded-xl px-4 py-1 transition-shadow focus-within:shadow-glow"
                     style={{ border: `1px solid ${TECH_BORDER_2}`, background: 'rgba(255,255,255,0.04)' }}
                   >
                     <SearchIcon />
@@ -1817,6 +1842,12 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                       type="text"
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
+                      onFocus={() => setSearchFocused(true)}
+                      onBlur={() => setSearchFocused(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setSearchFocused(false);
+                      }}
+                      autoComplete="off"
                       placeholder="Введіть артикул або назву запчастини"
                       className="w-full min-w-0 py-3.5 text-sm bg-transparent outline-none placeholder:text-[#54607A]"
                       style={{ fontFamily: SANS_TECH, color: TECH_INK }}
@@ -1829,6 +1860,17 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                     >
                       {searching ? 'Шукаємо...' : 'Знайти'}
                     </button>
+                    {/* Подсказки при вводе (components/SearchSuggestions.tsx) */}
+                    <SearchSuggestions
+                      query={searchInput}
+                      active={searchFocused}
+                      onShowAll={(value) => {
+                        setSearchInput(value);
+                        setSearchFocused(false);
+                        runSearch(new URLSearchParams({ search: value, pageSize: '24' }), value);
+                      }}
+                      onPick={() => setSearchFocused(false)}
+                    />
                   </motion.form>
                 ) : (
                   <motion.form
@@ -2002,6 +2044,12 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                   {submittedQuery}
                 </code>
               </h2>
+              {/* Нашли по исправленной раскладке клавиатуры (lib/keyboardLayout.ts) */}
+              {layoutFixedFrom && !searching && (
+                <p className="mb-2 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                  Ви ввели «{layoutFixedFrom}» — схоже, з іншою розкладкою клавіатури. Показуємо результати для «{submittedQuery}».
+                </p>
+              )}
 
               <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <p className="text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
@@ -2248,16 +2296,19 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                       <span style={{ fontFamily: MONO_TECH, color: TECH_ACCENT_BRIGHT }}>«{submittedQuery}»</span> нічого не знайдено
                     </h3>
                     <p className="max-w-sm text-sm leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-                      Перевірте правильність артикула — або надішліть нам VIN-код автомобіля, і інженер підбере деталь вручну.
+                      Перевірте правильність артикула — або залиште заявку нижче, і ми знайдемо деталь вручну.
                     </p>
+                    {/* Заявка "Не знайшли деталь?" — то, что искали, уже подставлено
+                        (components/SearchNotFoundRequest.tsx) */}
+                    <SearchNotFoundRequest query={submittedQuery} />
                     <button
                       type="button"
                       onClick={() => setVinModalOpen(true)}
-                      className="mt-4 inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
-                      style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
+                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium underline"
+                      style={{ fontFamily: SANS_TECH, color: TECH_ACCENT_BRIGHT }}
                     >
-                      Підібрати за VIN
-                      <ArrowRight className="h-4 w-4" />
+                      Або підібрати за VIN-кодом
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
