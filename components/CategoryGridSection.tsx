@@ -40,6 +40,7 @@ import { getCategoryBySlug } from '@/lib/categories';
 import { CAR_MAKES } from '@/lib/carMakes';
 import { TECH_DISPLAY_FONT, TECH_BODY_FONT, TECH_FAINT } from '@/lib/techTheme';
 import VehicleFilterModal, { type VehicleSelection } from './VehicleFilterModal';
+import { saveMyCar } from '@/lib/myCar';
 
 // ------------------------------------------------------------
 // ІКОНКИ РОЗДІЛІВ
@@ -398,6 +399,9 @@ export default function CategoryGridSection({
 
   const handleSubmit = (selection: VehicleSelection) => {
     if (!activeDepartment) return;
+    // Запоминаем выбранное авто как "моє авто" (lib/myCar.ts) — по нему
+    // страница товара покажет, подходит ли деталь
+    if (selection.make) saveMyCar({ make: selection.make, model: selection.model });
     goToDestination(activeDepartment, selection);
     closeModal();
   };
