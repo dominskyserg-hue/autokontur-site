@@ -2781,3 +2781,26 @@ CREATE INDEX IF NOT EXISTS idx_orders_callback_at ON orders (callback_at) WHERE 
 -- добавляет эти колонки сам при первом обращении, если их ещё нет
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS supplier_ordered_at TIMESTAMPTZ;
 ALTER TABLE order_items ADD COLUMN IF NOT EXISTS expected_at DATE;
+
+
+-- ============================================================
+-- ОПЛАТА КАРТКОЮ ЧЕРЕЗ monobank (plata by mono) — lib/monoPay.ts
+-- ============================================================
+-- Таблица создаётся автоматически при первом обращении (ensureMonoTables),
+-- вручную запускать ничего не нужно. Здесь — для справки.
+-- Функция включается переменной окружения MONO_ACQUIRING_TOKEN (Vercel →
+-- Settings → Environment Variables). Пока её нет — на сайте остаётся «СКОРО».
+CREATE TABLE IF NOT EXISTS mono_invoices (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+  invoice_id TEXT NOT NULL UNIQUE,
+  amount NUMERIC(12, 2) NOT NULL,
+  status TEXT NOT NULL DEFAULT 'created',
+  page_url TEXT,
+  failure_reason TEXT,
+  fee NUMERIC(12, 2),
+  paid_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_mono_invoices_order_id ON mono_invoices (order_id);

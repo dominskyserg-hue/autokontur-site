@@ -67,6 +67,11 @@ const PUBLIC_API_ROUTES: { method: string; pattern: RegExp }[] = [
   { method: 'POST', pattern: /^\/api\/vin-requests$/ },
   // Страница "Де моє замовлення?" (app/zamovlennia) — номер заказа + телефон
   { method: 'POST', pattern: /^\/api\/order-status$/ },
+  // Оплата картой через mono (lib/monoPay.ts): включена ли, создать счёт
+  // для своего заказа (id + телефон), вебхук от mono (проверяется подпись)
+  { method: 'GET', pattern: /^\/api\/payments\/mono\/config$/ },
+  { method: 'POST', pattern: /^\/api\/payments\/mono\/create$/ },
+  { method: 'POST', pattern: /^\/api\/payments\/mono\/webhook$/ },
   { method: 'GET', pattern: /^\/api\/announcements$/ },
   { method: 'GET', pattern: /^\/api\/site-settings$/ },
   { method: 'GET', pattern: /^\/api\/nova-poshta\/cities$/ },
