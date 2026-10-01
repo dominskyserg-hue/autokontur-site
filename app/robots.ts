@@ -18,13 +18,24 @@
 import type { MetadataRoute } from 'next';
 import { SITE_URL } from '@/lib/siteConfig';
 
+// Роботы, которые не приводят покупателей, а только создают нагрузку
+// (по статистике Vercel — ~60% всех запросов). Им закрыт весь сайт.
+// Тем, кто robots.txt не слушается, middleware.ts отвечает 403
+const BLOCKED_BOTS = ['meta-externalagent', 'Amazonbot', 'AhrefsBot', 'SERankingBacklinksBot', 'SERanking'];
+
 export default function robots(): MetadataRoute.Robots {
   return {
-    rules: {
-      userAgent: '*',
-      allow: '/',
-      disallow: ['/admin', '/api', '/account', '/*?_rsc=', '/*&_rsc='],
-    },
+    rules: [
+      {
+        userAgent: '*',
+        allow: '/',
+        disallow: ['/admin', '/api', '/account', '/*?_rsc=', '/*&_rsc='],
+      },
+      {
+        userAgent: BLOCKED_BOTS,
+        disallow: '/',
+      },
+    ],
     sitemap: `${SITE_URL}/sitemap.xml`,
   };
 }
