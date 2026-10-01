@@ -110,8 +110,30 @@ async function isAuthenticated(request: NextRequest): Promise<boolean> {
   return (await verifySessionCookie(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)) !== null;
 }
 
+// ------------------------------------------------------------
+// БЛОКИРОВКА БЕСПОЛЕЗНЫХ БОТОВ
+// ------------------------------------------------------------
+// По статистике Vercel (неделя 25.09–01.10.2026) ~60% всех запросов к
+// сайту делали роботы, которые не приводят покупателей: meta-externalagent
+// (Meta собирает тексты для своего ИИ — ~714 тыс. запросов за неделю),
+// Amazonbot, AhrefsBot и SERanking (SEO-сервисы). Каждый их заход на товар
+// — это рендер страницы и запросы в базу. Им отвечаем сразу 403, ещё до
+// страницы. Google, Bing и прочие поисковики НЕ трогаем — они нужны для
+// поиска и рекламы. Этим же ботам запрет прописан в app/robots.ts
+const BLOCKED_BOT_PATTERN = /meta-externalagent|amazonbot|ahrefsbot|seranking/i;
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (BLOCKED_BOT_PATTERN.test(request.headers.get('user-agent') || '')) {
+    return new NextResponse('Forbidden', { status: 403 });
+  }
+
+  // Обычные страницы витрины (не /admin и не /api) — дальше не проверяем
+  if (!pathname.startsWith('/admin') && !pathname.startsWith('/api/')) {
+    return NextResponse.next();
+  }
+
   const authed = await isAuthenticated(request);
 
   // ---- страницы /admin/* ----
@@ -172,10 +194,14 @@ export async function middleware(request: NextRequest) {
 }
 
 // matcher — middleware выполняется ТОЛЬКО для запросов, подпадающих
-// под эти пути (а не для каждого запроса на сайте вообще — витрина,
-// статика и т.п. остаются без лишней проверки на каждый чих)
+// под эти пути. Статика (CSS, JS, картинки) сюда не попадает; страницы
+// витрины попадают только ради быстрой проверки на ботов (без входа и базы)
 export const config = {
-  matcher: ['/admin/:path*', '/api/:path*'],
+  // Кроме /admin и /api — ещё и страницы витрины, чтобы отсекать
+  // бесполезных ботов (BLOCKED_BOT_PATTERN выше). Статику Next.js,
+  // картинки и файлы с расширением (robots.txt, sitemap.xml, favicon...)
+  // middleware не трогает: robots.txt боты должны читать свободно
+  matcher: ['/admin/:path*', '/api/:path*', '/((?!_next/|.*\\.[a-zA-Z0-9]+$).*)'],
 };
 
 // ------------------------------------------------------------

@@ -3,6 +3,7 @@ import Script from 'next/script';
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import VinRequestButton from '@/components/VinRequestButton';
 import AttributionCapture from '@/components/AttributionCapture';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
 // Друга пара шрифтів — ТІЛЬКИ для нового розділу "Tech Premium"
@@ -238,6 +239,11 @@ export default function RootLayout({
             ${GA_MEASUREMENT_ID ? `gtag('config', '${GA_MEASUREMENT_ID}');` : ''}
           `}
         </Script>
+        {/* Vercel Web Analytics — считает ЖИВЫХ посетителей (просмотры
+            страниц, откуда пришли, страна, устройство). Отчёт — во вкладке
+            Analytics проекта на vercel.com. Работает после того, как
+            Analytics включён в настройках проекта */}
+        <Analytics />
       </body>
     </html>
   );
