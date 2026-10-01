@@ -792,6 +792,20 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // Чесний UI-нюанс, а не нова бізнес-логіка
   const [deliveryMethod, setDeliveryMethod] = useState<'branch' | 'courier'>('branch');
 
+  // Способ оплаты: при отриманні (за замовчуванням) или карткою онлайн
+  // через mono (lib/monoPay.ts). Выбор карты показываем, только если оплата
+  // включена на сервере (GET /api/payments/mono/config)
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'card'>('cod');
+  const [monoEnabled, setMonoEnabled] = useState(false);
+  // Заказ оформлен, но перейти на страницу оплаты не получилось
+  const [payFailed, setPayFailed] = useState(false);
+  useEffect(() => {
+    fetch('/api/payments/mono/config')
+      .then((response) => response.json())
+      .then((data) => setMonoEnabled(Boolean(data.enabled)))
+      .catch(() => setMonoEnabled(false));
+  }, []);
+
   // Быстрый повторный заказ (lib/checkoutMemory.ts): данные прошлого заказа
   // подставляются в форму. prefilled — показать "Дані з минулого замовлення"
   const [prefilled, setPrefilled] = useState(false);
@@ -1069,6 +1083,34 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
         warehouseRef: deliveryMethod === 'branch' ? warehouseRef : null,
         deliveryMethod,
       });
+      // Оплата карткою онлайн: создаём счёт в mono и уводим покупателя на
+      // страницу оплаты. Заказ уже оформлен, поэтому корзину очищаем сразу.
+      // Если перейти к оплате не вышло — показываем экран "Дякуємо" с
+      // подсказкой оплатить позже на странице "Де моє замовлення?"
+      let payFailedNow = false;
+      if (paymentMethod === 'card' && monoEnabled) {
+        try {
+          const payResponse = await fetch('/api/payments/mono/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: data.orderId, phone: customerPhone.trim() }),
+          });
+          const payData = await payResponse.json();
+          if (payResponse.ok && payData.pageUrl) {
+            try {
+              window.localStorage.setItem(CART_STORAGE_KEY, '[]');
+            } catch {
+              // не критично
+            }
+            window.location.href = payData.pageUrl as string;
+            return;
+          }
+          payFailedNow = true;
+        } catch {
+          payFailedNow = true;
+        }
+      }
+      setPayFailed(payFailedNow);
       setCreatedOrderId(data.orderId);
       setCreatedOrderNumber(data.orderNumber);
       setOrderStatus('success');
@@ -1635,6 +1677,10 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
             onWarehouseRefChange={setWarehouseRef}
             onCommentChange={setComment}
             onDeliveryMethodChange={setDeliveryMethod}
+            monoEnabled={monoEnabled}
+            paymentMethod={paymentMethod}
+            onPaymentMethodChange={setPaymentMethod}
+            payFailed={payFailed}
             onVinProtectChange={setVinProtect}
             onVinProtectCodeChange={setVinProtectCode}
             onNameBlur={() => setNameTouched(true)}
@@ -3340,6 +3386,11 @@ interface CartDrawerProps {
   onWarehouseRefChange: (ref: string | null) => void;
   onCommentChange: (value: string) => void;
   onDeliveryMethodChange: (value: 'branch' | 'courier') => void;
+  // Оплата карткою онлайн (mono) включена на сервере
+  monoEnabled: boolean;
+  paymentMethod: 'cod' | 'card';
+  onPaymentMethodChange: (value: 'cod' | 'card') => void;
+  payFailed: boolean;
   onVinProtectChange: (value: boolean) => void;
   onVinProtectCodeChange: (value: string) => void;
   onNameBlur: () => void;
@@ -3406,6 +3457,10 @@ function CartDrawer({
   onWarehouseRefChange,
   onCommentChange,
   onDeliveryMethodChange,
+  monoEnabled,
+  paymentMethod,
+  onPaymentMethodChange,
+  payFailed,
   onVinProtectChange,
   onVinProtectCodeChange,
   onNameBlur,
@@ -3457,7 +3512,7 @@ function CartDrawer({
         </div>
 
         {orderStatus === 'success' ? (
-          <OrderSuccessScreen orderNumber={createdOrderNumber} customerPhone={customerPhone} onClose={onClose} />
+          <OrderSuccessScreen orderNumber={createdOrderNumber} customerPhone={customerPhone} payFailed={payFailed} onClose={onClose} />
         ) : cart.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
             <div style={{ color: TECH_BORDER_2 }}>
@@ -3633,24 +3688,52 @@ function CartDrawer({
                 </div>
               </div>
 
-              {/* ---- Спосіб оплати — реально працює лише післяплата,
-                  картку/IBAN чесно позначаємо "Скоро", а не вдаємо, що
-                  вони вже приймають гроші ---- */}
+              {/* ---- Спосіб оплати: післяплата працює завжди, картка онлайн
+                  (mono) — коли ввімкнено на сервері (MONO_ACQUIRING_TOKEN),
+                  інакше чесно "Скоро"; IBAN поки "Скоро" ---- */}
               <div className="mt-1 flex flex-col gap-3 pt-3" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
                   Спосіб оплати
                 </h3>
                 <div className="grid grid-cols-3 gap-1.5">
-                  <div
+                  {/* Післяплата — оплата при отриманні в Новій Пошті */}
+                  <button
+                    type="button"
+                    onClick={() => onPaymentMethodChange('cod')}
                     className="flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center"
-                    style={{ border: '1px solid rgba(59,130,246,0.5)', background: 'rgba(59,130,246,0.1)', boxShadow: TECH_GLOW }}
+                    style={
+                      paymentMethod === 'cod' || !monoEnabled
+                        ? { border: '1px solid rgba(59,130,246,0.5)', background: 'rgba(59,130,246,0.1)', boxShadow: TECH_GLOW }
+                        : { border: `1px solid ${TECH_BORDER}` }
+                    }
                   >
-                    <Banknote className="h-[18px] w-[18px]" style={{ color: TECH_ACCENT_BRIGHT }} />
-                    <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: '#fff' }}>
+                    <Banknote className="h-[18px] w-[18px]" style={{ color: paymentMethod === 'cod' || !monoEnabled ? TECH_ACCENT_BRIGHT : TECH_FAINT }} />
+                    <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: paymentMethod === 'cod' || !monoEnabled ? '#fff' : TECH_MUTED }}>
                       Післяплата
                     </span>
-                  </div>
-                  <div className="relative flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center opacity-45" style={{ border: `1px solid ${TECH_BORDER}` }}>
+                  </button>
+                  {/* Картка онлайн (mono) — працює, коли увімкнено на сервері; інакше "Скоро" */}
+                  {monoEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => onPaymentMethodChange('card')}
+                      className="flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center"
+                      style={
+                        paymentMethod === 'card'
+                          ? { border: '1px solid rgba(59,130,246,0.5)', background: 'rgba(59,130,246,0.1)', boxShadow: TECH_GLOW }
+                          : { border: `1px solid ${TECH_BORDER}` }
+                      }
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{ color: paymentMethod === 'card' ? TECH_ACCENT_BRIGHT : TECH_FAINT }}>
+                        <rect x="2" y="5" width="20" height="15" rx="2.5" />
+                        <path d="M2 10h20" />
+                      </svg>
+                      <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: paymentMethod === 'card' ? '#fff' : TECH_MUTED }}>
+                        Карткою онлайн
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="relative flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center opacity-45" style={{ border: `1px solid ${TECH_BORDER}` }}>
                     <span
                       className="absolute -top-1.5 right-1 rounded-full px-1.5 py-0.5 text-[8px] font-bold"
                       style={{ fontFamily: SANS_TECH, color: TECH_HEAT, background: TECH_HEAT_SOFT }}
@@ -3665,6 +3748,7 @@ function CartDrawer({
                       Картка
                     </span>
                   </div>
+                  )}
                   <div className="relative flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center opacity-45" style={{ border: `1px solid ${TECH_BORDER}` }}>
                     <span
                       className="absolute -top-1.5 right-1 rounded-full px-1.5 py-0.5 text-[8px] font-bold"
@@ -3681,6 +3765,12 @@ function CartDrawer({
                     </span>
                   </div>
                 </div>
+                {monoEnabled && paymentMethod === 'card' && (
+                  <p className="text-[11px] leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                    Після підтвердження відкриється захищена сторінка monobank: картка, Apple Pay або Google Pay. Дані
+                    картки ми не бачимо і не зберігаємо.
+                  </p>
+                )}
               </div>
 
               {/* ---- VIN-захист замовлення ---- */}
@@ -3877,10 +3967,13 @@ const TELEGRAM_BOT_USERNAME = 'dominatorparts_orders_bot';
 function OrderSuccessScreen({
   orderNumber,
   customerPhone,
+  payFailed,
   onClose,
 }: {
   orderNumber: number | null;
   customerPhone: string;
+  // Выбрана оплата карткою, но перейти на страницу оплаты не вдалося
+  payFailed: boolean;
   onClose: () => void;
 }) {
   return (
@@ -3900,6 +3993,12 @@ function OrderSuccessScreen({
           №{orderNumber ?? ''}
         </span>
       </p>
+      {payFailed && (
+        <p className="mb-3 rounded-lg p-2.5 text-xs" style={{ fontFamily: SANS_TECH, background: TECH_HEAT_SOFT, color: TECH_HEAT }}>
+          Не вдалося відкрити сторінку оплати карткою. Замовлення збережено — оплатити можна на сторінці «Де моє
+          замовлення?» або при отриманні.
+        </p>
+      )}
       <p className="mb-6 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
         Ми зв&apos;яжемося з вами найближчим часом. Статус замовлення завжди можна перевірити на сторінці{' '}
         {/* Обычная ссылка, а не Link: страница открывается из панели корзины */}

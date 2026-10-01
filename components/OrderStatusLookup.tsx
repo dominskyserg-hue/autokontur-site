@@ -35,6 +35,10 @@ import {
 const PENDING_NOTE = 'Уточнити при дзвінку менеджера';
 
 interface OrderStatusData {
+  // id нужен для "Оплатити зараз" (POST /api/payments/mono/create)
+  orderId: string;
+  // Оплата картой на сайте: null — заказ без онлайн-оплаты
+  payment: { status: 'pending' | 'paid' | 'failed'; amount: number | null; canPay: boolean } | null;
   orderNumber: number;
   status: string;
   statusLabel: string;
@@ -88,6 +92,27 @@ export default function OrderStatusLookup({ initialOrderNumber = '' }: { initial
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [order, setOrder] = useState<OrderStatusData | null>(null);
+  const [paying, setPaying] = useState(false);
+
+  // "Оплатити зараз": новый/прежний счёт mono и переход на страницу оплаты
+  const handlePay = async () => {
+    if (!order) return;
+    setPaying(true);
+    setError(null);
+    try {
+      const response = await fetch('/api/payments/mono/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId: order.orderId, phone }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.pageUrl) throw new Error(data.error || 'Не вдалося перейти до оплати');
+      window.location.href = data.pageUrl as string;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Помилка мережі, спробуйте ще раз');
+      setPaying(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -201,6 +226,40 @@ export default function OrderStatusLookup({ initialOrderNumber = '' }: { initial
           >
             {order.statusLabel}
           </p>
+
+          {/* Оплата картой на сайте (mono) */}
+          {order.payment && (
+            <div
+              className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl p-3.5 text-sm"
+              style={{
+                border: `1px solid ${order.payment.status === 'paid' ? 'rgba(52,211,153,0.4)' : TECH_BORDER}`,
+                background: order.payment.status === 'paid' ? TECH_GOOD_SOFT : 'transparent',
+              }}
+            >
+              {order.payment.status === 'paid' ? (
+                <span style={{ color: TECH_GOOD }}>✓ Оплачено карткою на сайті — дякуємо!</span>
+              ) : (
+                <>
+                  <span style={{ color: order.payment.status === 'failed' ? '#FCA5A5' : TECH_MUTED }}>
+                    {order.payment.status === 'failed'
+                      ? 'Оплата не пройшла. Спробуйте ще раз.'
+                      : 'Очікуємо оплату карткою. Якщо ви вже заплатили — оновлення прийде за хвилину.'}
+                  </span>
+                  {order.payment.canPay && (
+                    <button
+                      type="button"
+                      onClick={handlePay}
+                      disabled={paying}
+                      className="rounded-xl px-5 py-2 text-sm font-semibold disabled:opacity-50"
+                      style={{ background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff' }}
+                    >
+                      {paying ? 'Переходимо...' : 'Оплатити зараз'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
 
           {/* Полоска прогресса: Прийнято → В обробці → Готуємо → Відправлено */}
           {currentStep >= 0 && (

@@ -29,6 +29,7 @@ import { Pool } from 'pg';
 import { rateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rateLimit';
 import { getClientIp } from '@/lib/adminAuth';
 import { getTtnStatus } from '@/lib/novaPoshta/tracking';
+import { getOrderPaymentInfo } from '@/lib/monoPay';
 
 export const runtime = 'nodejs';
 
@@ -149,9 +150,23 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Оплата картой на сайте (mono): оплачен / ждёт оплаты / не прошла.
+    // Ошибка проверки не ломает ответ — просто без блока оплаты
+    let payment: { status: string; amount: number | null; canPay: boolean } | null = null;
+    try {
+      const info = await getOrderPaymentInfo(row.id);
+      if (info.status !== 'none') {
+        payment = { status: info.status, amount: info.amount, canPay: info.status !== 'paid' && row.status !== 'cancelled' };
+      }
+    } catch (error) {
+      console.error('Не удалось получить статус оплаты заказа:', error);
+    }
+
     return NextResponse.json({
       success: true,
       order: {
+        orderId: row.id,
+        payment,
         orderNumber: row.order_number,
         status: row.status,
         statusLabel: STATUS_LABELS[row.status] ?? row.status,
