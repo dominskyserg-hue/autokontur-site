@@ -95,6 +95,8 @@ export default function QuickOrderModal({ product, compact = false, initialQuant
   const [error, setError] = useState<string | null>(null);
   // Сколько штук заказывает покупатель (раньше всегда было 1)
   const [quantity, setQuantity] = useState(1);
+  // Номер созданного заказа — для ссылки "Де моє замовлення?" после оформления
+  const [createdOrderNumber, setCreatedOrderNumber] = useState<number | null>(null);
 
   const displayName = product.name?.trim() || [product.brand, product.article].filter(Boolean).join(' ');
 
@@ -171,6 +173,7 @@ export default function QuickOrderModal({ product, compact = false, initialQuant
         throw new Error(data.error || 'Не вдалося оформити замовлення');
       }
 
+      setCreatedOrderNumber(typeof data.orderNumber === 'number' ? data.orderNumber : null);
       trackPurchase(data.orderId, [{ id: product.id, name: displayName, brand: product.brand, price: product.retailPrice, quantity }]);
       setStatus('success');
     } catch (err) {
@@ -243,6 +246,15 @@ export default function QuickOrderModal({ product, compact = false, initialQuant
                 </h3>
                 <p className="mb-6 text-sm leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
                   Наш менеджер зателефонує вам найближчим часом, щоб уточнити доставку і оформити відправлення.
+                  {createdOrderNumber !== null && (
+                    <>
+                      {' '}Номер замовлення: <b style={{ color: TECH_INK }}>№{createdOrderNumber}</b> — статус можна перевірити на сторінці{' '}
+                      <a href={`/zamovlennia?n=${createdOrderNumber}`} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
+                        «Де моє замовлення?»
+                      </a>
+                      .
+                    </>
+                  )}
                 </p>
                 <button
                   type="button"

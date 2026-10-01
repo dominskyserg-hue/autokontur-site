@@ -67,6 +67,7 @@ import OfferCountNote from '@/components/OfferCountNote';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
 import OwnStockBadge from '@/components/OwnStockBadge';
 import { maxQuantityFor } from '@/lib/cart';
+import { estimateDelivery } from '@/lib/deliveryEstimate';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -2318,7 +2319,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                           <span>Бренд / Код</span>
                           <span>Товар</span>
                           <span>Наявність</span>
-                          <span>Термін</span>
+                          <span>Відправка</span>
                           <span className="text-right">Ціна</span>
                           <span></span>
                         </div>
@@ -2427,7 +2428,9 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                             </div>
 
                             <div className="whitespace-nowrap text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-                              {product.stock > 0 ? 'сьогодні' : product.deliveryTime || '—'}
+                              {/* Когда отправим (lib/deliveryEstimate.ts): наш склад —
+                                  сегодня/завтра, у поставщика — по его сроку */}
+                              {estimateDelivery({ stock: product.stock, ownStock: product.ownStock, deliveryTime: product.deliveryTime }).dispatchText}
                             </div>
 
                             <div className="whitespace-nowrap text-right">
@@ -2568,7 +2571,8 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
 
                           {product.stock <= 0 && product.deliveryTime && (
                             <p className="-mt-2 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-                              Термін поставки: {product.deliveryTime}
+                              Відправка:{' '}
+                              {estimateDelivery({ stock: product.stock, ownStock: product.ownStock, deliveryTime: product.deliveryTime }).dispatchText}
                             </p>
                           )}
 
@@ -3710,7 +3714,11 @@ function OrderSuccessScreen({
         </span>
       </p>
       <p className="mb-6 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-        Ми зв&apos;яжемося з вами найближчим часом.
+        Ми зв&apos;яжемося з вами найближчим часом. Статус замовлення завжди можна перевірити на сторінці{' '}
+        {/* Обычная ссылка, а не Link: страница открывается из панели корзины */}
+        <a href={`/zamovlennia${orderNumber ? `?n=${orderNumber}` : ''}`} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
+          «Де моє замовлення?»
+        </a>
       </p>
 
       {customerPhone && (
