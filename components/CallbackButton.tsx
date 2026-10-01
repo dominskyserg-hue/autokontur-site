@@ -13,7 +13,7 @@
 // На страницах админки кнопка не показывается.
 // ============================================================
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { usePathname } from 'next/navigation';
 import { Phone, X } from 'lucide-react';
@@ -36,6 +36,22 @@ export default function CallbackButton() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  // На телефоне кнопка прячется, пока страницу листают (иначе она висит
+  // поверх цены и "Купити" в карточках), и возвращается через секунду
+  const [scrolling, setScrolling] = useState(false);
+  const scrollTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    const onScroll = () => {
+      setScrolling(true);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = window.setTimeout(() => setScrolling(false), 1000);
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (scrollTimerRef.current) window.clearTimeout(scrollTimerRef.current);
+    };
+  }, []);
 
   // В админке кнопка не нужна
   if (pathname?.startsWith('/admin')) return null;
@@ -93,11 +109,20 @@ export default function CallbackButton() {
       <button
         type="button"
         onClick={openForm}
-        // Круглая кнопка-значок справа, над кнопкой "Не знайшли?"
-        // (components/VinRequestButton.tsx) — обе в одном углу и не
-        // перекрывают карточки товаров. Подпись — при наведении
-        className="group fixed bottom-36 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full md:bottom-[5.5rem] md:right-6"
-        style={{ background: GOOD, color: '#04110C', boxShadow: '0 0 0 1px rgba(52,211,153,0.5), 0 10px 30px rgba(16,185,129,0.35)' }}
+        // Круглая кнопка-значок справа. На телефоне она ОДНА (кнопка
+        // "Не знайшли?" там скрыта — components/VinRequestButton.tsx),
+        // отступ снизу учитывает нижнюю панель iPhone (safe-area) и
+        // полосу "Купити" на карточке товара. На компьютере — над кнопкой
+        // "Не знайшли?". Подпись — при наведении
+        // При прокрутке на телефоне (max-md) кнопка почти прозрачна и не ловит нажатия
+        className={`group fixed right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full transition-opacity bottom-[calc(5rem+env(safe-area-inset-bottom))] md:bottom-[5.5rem] md:right-6 ${
+          scrolling ? 'max-md:pointer-events-none max-md:opacity-15' : ''
+        }`}
+        style={{
+          background: GOOD,
+          color: '#04110C',
+          boxShadow: '0 0 0 1px rgba(52,211,153,0.5), 0 10px 30px rgba(16,185,129,0.35)',
+        }}
         aria-label="Передзвоніть мені"
       >
         <Phone className="h-5 w-5" />

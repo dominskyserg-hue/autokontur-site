@@ -560,6 +560,18 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
     }
   }, []);
 
+  // На телефоне (< 768px) таблица шире экрана и обрезается (цена и "Купити"
+  // уезжают за край) — там всегда карточки, а переключатель вида скрыт
+  const [isMobileScreen, setIsMobileScreen] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobileScreen(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  const effectiveViewMode: 'grid' | 'table' = isMobileScreen ? 'grid' : viewMode;
+
   const changeViewMode = (mode: 'grid' | 'table') => {
     setViewMode(mode);
     try {
@@ -2168,7 +2180,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
 
                 {/* ---- перемикач вигляду: плиткою або таблицею ---- */}
                 {!searching && results.length > 0 && (
-                  <div className="inline-flex shrink-0 gap-0.5 rounded-lg p-1" style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}>
+                  <div className="hidden shrink-0 gap-0.5 rounded-lg p-1 md:inline-flex" style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}>
                     <button
                       type="button"
                       onClick={() => changeViewMode('grid')}
@@ -2453,7 +2465,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                   className="overflow-hidden rounded-2xl"
                   style={{ background: TECH_SURFACE, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER}` }}
                 >
-                  {viewMode === 'table' ? (
+                  {effectiveViewMode === 'table' ? (
                     <div className="overflow-x-auto">
                       <div style={{ minWidth: '760px' }}>
                         <div

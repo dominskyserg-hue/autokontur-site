@@ -177,8 +177,10 @@ export default function VinRequestButton() {
             // Круглая кнопка-значок справа внизу (над ней — "Передзвоніть мені",
             // components/CallbackButton.tsx): раньше широкие кнопки по обоим
             // бокам перекрывали карточки товаров. Подпись — при наведении.
-            // На телефоне выше, чтобы не закрывать полосу "Купити"
-            className="group fixed bottom-20 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-glow-lg md:bottom-6 md:right-6"
+            // На телефоне скрыта (там одна кнопка "Передзвоніть мені" —
+            // components/CallbackButton.tsx; "Не знайшли?" там же есть в
+            // пустом поиске и в меню "Підбір за VIN")
+            className="group fixed bottom-20 right-4 z-40 hidden h-12 w-12 items-center justify-center rounded-full shadow-glow-lg md:bottom-6 md:right-6 md:flex"
             style={{
               fontFamily: TECH_BODY_FONT,
               background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`,
