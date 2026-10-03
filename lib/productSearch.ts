@@ -19,6 +19,7 @@ import { extractCarReference } from './searchCarText';
 import { crossSideMatchesSql } from './crossBrandMatch';
 import { ownMakeSlugs } from './ownVehicles';
 import { generationsCoveringYear } from './carModelDictionary';
+import { detectEngineQuery } from './engineSearch';
 
 // Та сама функція, що й у app/api/suppliers/parse-excel/route.ts —
 // нею чистяться артикули ПЕРЕД збереженням у базу, тому пошуковий
@@ -53,7 +54,13 @@ export async function buildTextSearchClause(
   pool: Pool,
   search: string,
   startParamIndex: number
-): Promise<{ clause: string; params: unknown[] }> {
+): Promise<{ clause: string; params: unknown[]; engineCode?: string }> {
+  // Запрос — код мотора ("4G18"): показываем ТОЛЬКО детали, в названии
+  // которых этот мотор указан (lib/engineSearch.ts), без случайных
+  // совпадений по подстроке артикула
+  const engine = await detectEngineQuery(pool, search, startParamIndex);
+  if (engine) return { clause: engine.clause, params: engine.params, engineCode: engine.code };
+
   const values: unknown[] = [];
 
   const cleanedArticle = cleanArticle(search);
