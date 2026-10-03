@@ -289,7 +289,7 @@ export default function AdminLayout({
     <div className="min-h-screen flex" style={rootStyle}>
       {/* ==================== БОКОВОЕ МЕНЮ ==================== */}
       <aside
-        className="w-60 shrink-0 px-4 py-6 hidden md:flex md:flex-col gap-6"
+        className="w-60 shrink-0 px-4 py-6 hidden md:flex md:flex-col gap-6 md:sticky md:top-0 md:h-screen md:overflow-y-auto"
         style={{ borderRight: '1px solid var(--line)' }}
       >
         <div className="flex items-center gap-2 px-2">
@@ -383,6 +383,24 @@ export default function AdminLayout({
 
       {/* ==================== ОБЛАСТЬ КОНТЕНТА ==================== */}
       <div className="flex-1 min-w-0 overflow-x-hidden">
+        {/* На узком экране бокового меню нет — показываем верхнюю
+            панель с именем и кнопкой выхода */}
+        <div
+          className="md:hidden flex items-center justify-between gap-3 px-5 py-3"
+          style={{ borderBottom: '1px solid var(--line)' }}
+        >
+          <span className="text-sm font-medium truncate" style={{ color: 'var(--ink-muted)' }}>
+            {currentUser ? currentUser.name : shopName}
+          </span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="px-3 py-1.5 rounded-md text-sm font-medium shrink-0"
+            style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+          >
+            Выйти
+          </button>
+        </div>
         <div className="max-w-6xl mx-auto px-5 md:px-10 py-8">{children}</div>
       </div>
     </div>
