@@ -422,7 +422,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // Два режима поиска показывают результаты в одну и ту же секцию
   // (results/searching/searchError/submittedQuery общие для обоих) —
   // отличаются только тем, ЧТО именно передаётся в GET /api/products
-  const [searchMode, setSearchMode] = useState<'article' | 'car'>('article');
+  const [searchMode, setSearchMode] = useState<'article' | 'car' | 'engine'>('article');
 
   // searchInput — то, что покупатель печатает; submittedQuery — то,
   // по чему реально искали (обновляется только по кнопке "Найти"/Enter,
@@ -484,6 +484,18 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // engineCode — над результатами показываем пометку "Запчастини на
   // двигун 4G18" и общее число деталей в наличии
   const [engineInfo, setEngineInfo] = useState<{ code: string; total: number } | null>(null);
+  // Вкладка "За двигуном": введений код і ознака "шукали саме за двигуном,
+  // але бекенд не впізнав у запиті код двигуна" (тоді показуємо пояснення)
+  const [engineInput, setEngineInput] = useState('');
+  const [engineMiss, setEngineMiss] = useState(false);
+  const engineRequestedRef = useRef(false);
+  // Загальна кількість знайденого (бекенд) і підвантаження наступних сторінок:
+  // раніше показувалась лише перша сторінка (24 шт.), а лічильник писав
+  // "Знайдено: 24" навіть коли в базі 20 тисяч деталей марки
+  const [searchTotal, setSearchTotal] = useState<{ count: number; approximate: boolean } | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const activeParamsRef = useRef<URLSearchParams | null>(null);
+  const searchPageRef = useRef(1);
   const [filterAvailability, setFilterAvailability] = useState<'all' | 'inStock' | 'backorder'>('all');
   const [filterBrands, setFilterBrands] = useState<Set<string>>(new Set());
   const [priceFilter, setPriceFilter] = useState<{ min: string; max: string }>({ min: '', max: '' });
@@ -1196,6 +1208,8 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   const runSearch = useCallback(async (baseParams: URLSearchParams, label: string) => {
     const token = ++pollTokenRef.current;
     lastSearchRef.current = { params: baseParams, label };
+    const engineRequested = engineRequestedRef.current;
+    engineRequestedRef.current = false;
     setSearching(true);
     setSearchError(null);
     setSubmittedQuery(label);
@@ -1225,6 +1239,13 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
           ? { code: data.engineCode, total: Number(data.pagination?.totalCount) || products.length }
           : null
       );
+      setEngineMiss(engineRequested && typeof data.engineCode !== 'string');
+      activeParamsRef.current = params;
+      searchPageRef.current = 1;
+      setSearchTotal({
+        count: Number(data.pagination?.totalCount) || products.length,
+        approximate: Boolean(data.pagination?.totalCountApproximate),
+      });
 
       // Ничего не нашли — может, покупатель забыл переключить раскладку
       // ("щс90" вместо "oc90", lib/keyboardLayout.ts): пробуем ещё раз
@@ -1237,6 +1258,11 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
         const retryData = await retryResponse.json();
         if (retryResponse.ok && (retryData.products as Product[]).length > 0) {
           products = retryData.products as Product[];
+          activeParamsRef.current = retryParams;
+          setSearchTotal({
+            count: Number(retryData.pagination?.totalCount) || products.length,
+            approximate: Boolean(retryData.pagination?.totalCountApproximate),
+          });
           setLayoutFixedFrom(searchText);
           setSubmittedQuery(switched);
         }
@@ -1251,8 +1277,43 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       setSearchError(error instanceof Error ? error.message : 'Помилка мережі під час пошуку');
       setResults([]);
       setEngineInfo(null);
+      setEngineMiss(false);
+      setSearchTotal(null);
     } finally {
       setSearching(false);
+    }
+  }, [pollForImages]);
+
+  // "Показати ще": підвантажує наступну сторінку поточного пошуку й
+  // дописує її в кінець списку (без дублів)
+  const loadMore = useCallback(async () => {
+    const base = activeParamsRef.current;
+    if (!base) return;
+    setLoadingMore(true);
+    try {
+      const next = searchPageRef.current + 1;
+      const nextParams = new URLSearchParams(base);
+      nextParams.set('page', String(next));
+      const response = await fetch(`/api/products?${nextParams.toString()}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося завантажити ще');
+      const more = data.products as Product[];
+      searchPageRef.current = next;
+      if (more.length === 0) {
+        // орієнтовний лічильник був завищений — далі нічого немає
+        setSearchTotal((prev) => (prev ? { ...prev, count: 0 } : prev));
+        return;
+      }
+      setResults((prev) => {
+        const seen = new Set(prev.map((item) => item.id));
+        return [...prev, ...more.filter((item) => !seen.has(item.id))];
+      });
+      const missingImageIds = more.filter((item) => !item.imageUrl).map((item) => item.id);
+      if (missingImageIds.length > 0) pollForImages(missingImageIds, pollTokenRef.current);
+    } catch (error) {
+      setSearchError(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setLoadingMore(false);
     }
   }, [pollForImages]);
 
@@ -1264,6 +1325,16 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
     if (lastSearchRef.current) runSearch(lastSearchRef.current.params, lastSearchRef.current.label);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onlyMyCar, myCarKey]);
+
+  // Пошук за двигуном: код ("4G18") іде звичайним параметром search, а
+  // бекенд (lib/engineSearch.ts) сам розпізнає код двигуна
+  const runEngineSearch = (rawCode: string) => {
+    const code = rawCode.trim();
+    if (!code) return;
+    setSearchFocused(false);
+    engineRequestedRef.current = true;
+    runSearch(new URLSearchParams({ search: code, pageSize: '24' }), code);
+  };
 
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1943,13 +2014,13 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                   і з'являється в іншій з тим самим layoutId, бібліотека
                   сама анімує "переліт" між їхніми позиціями ---- */}
               <div
-                className="relative inline-grid grid-cols-2 rounded-xl p-1 mb-4 mx-auto lg:mx-0"
+                className="relative inline-grid grid-cols-3 rounded-xl p-1 mb-4 mx-auto lg:mx-0"
                 style={{ border: `1px solid ${TECH_BORDER}`, background: 'rgba(255,255,255,0.03)' }}
               >
                 <button
                   type="button"
                   onClick={() => setSearchMode('article')}
-                  className="relative z-10 rounded-lg px-6 py-2.5 text-sm font-semibold transition-colors"
+                  className="relative z-10 rounded-lg px-4 sm:px-6 py-2.5 text-sm font-semibold transition-colors"
                   style={{ fontFamily: SANS_TECH, color: searchMode === 'article' ? '#fff' : TECH_MUTED }}
                 >
                   {searchMode === 'article' && (
@@ -1965,7 +2036,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                 <button
                   type="button"
                   onClick={() => setSearchMode('car')}
-                  className="relative z-10 rounded-lg px-6 py-2.5 text-sm font-semibold transition-colors"
+                  className="relative z-10 rounded-lg px-4 sm:px-6 py-2.5 text-sm font-semibold transition-colors"
                   style={{ fontFamily: SANS_TECH, color: searchMode === 'car' ? '#fff' : TECH_MUTED }}
                 >
                   {searchMode === 'car' && (
@@ -1977,6 +2048,22 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                     />
                   )}
                   За автомобілем
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSearchMode('engine')}
+                  className="relative z-10 rounded-lg px-4 sm:px-6 py-2.5 text-sm font-semibold transition-colors"
+                  style={{ fontFamily: SANS_TECH, color: searchMode === 'engine' ? '#fff' : TECH_MUTED }}
+                >
+                  {searchMode === 'engine' && (
+                    <motion.span
+                      layoutId="hero-seg-thumb"
+                      className="absolute inset-0 -z-10 rounded-lg"
+                      style={{ background: 'rgba(255,255,255,0.08)' }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+                    />
+                  )}
+                  За двигуном
                 </button>
               </div>
 
@@ -2029,6 +2116,60 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                       onPick={() => setSearchFocused(false)}
                     />
                   </motion.form>
+                ) : searchMode === 'engine' ? (
+                  <motion.form
+                    key="engine"
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.18 }}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      runEngineSearch(engineInput);
+                    }}
+                    className="max-w-md mx-auto lg:mx-0"
+                  >
+                    <div
+                      className="relative flex items-center gap-3 rounded-xl px-4 py-1 transition-shadow focus-within:shadow-glow"
+                      style={{ border: `1px solid ${TECH_BORDER_2}`, background: 'rgba(255,255,255,0.04)' }}
+                    >
+                      <SearchIcon />
+                      <input
+                        type="text"
+                        value={engineInput}
+                        onChange={(e) => setEngineInput(e.target.value)}
+                        autoComplete="off"
+                        placeholder="Код двигуна, наприклад 4G18"
+                        className="w-full min-w-0 py-3.5 text-sm bg-transparent outline-none placeholder:text-[#54607A]"
+                        style={{ fontFamily: SANS_TECH, color: TECH_INK }}
+                      />
+                      <button
+                        type="submit"
+                        disabled={searching || !engineInput.trim()}
+                        className="shrink-0 rounded-lg px-5 py-2.5 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-50"
+                        style={{ fontFamily: SANS_TECH, background: TECH_ACCENT, color: '#fff' }}
+                      >
+                        {searching ? 'Шукаємо...' : 'Знайти'}
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+                      <span>Наприклад:</span>
+                      {['4G18', '4G63', '4D56', '6G72'].map((code) => (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => {
+                            setEngineInput(code);
+                            runEngineSearch(code);
+                          }}
+                          className="rounded-md px-2 py-1 transition-colors hover:bg-[rgba(59,130,246,0.15)]"
+                          style={{ fontFamily: MONO_TECH, color: TECH_ACCENT_BRIGHT, border: `1px solid ${TECH_BORDER}` }}
+                        >
+                          {code}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.form>
                 ) : (
                   <motion.form
                     key="car"
@@ -2037,7 +2178,9 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.18 }}
                     onSubmit={handleCarSearchSubmit}
-                    className="max-w-xl mx-auto lg:mx-0 grid grid-cols-2 gap-2 sm:grid-cols-[1fr_1fr_1fr_1fr_auto]"
+                    className={`max-w-xl mx-auto lg:mx-0 grid grid-cols-2 gap-2 ${
+                      carYearOptions.length > 0 ? 'sm:grid-cols-[1fr_1fr_1fr_1fr_auto]' : 'sm:grid-cols-[1fr_1fr_auto]'
+                    }`}
                   >
                     <select
                       value={carMake}
@@ -2068,6 +2211,10 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                       ))}
                     </select>
 
+                    {/* Рік і об'єм двигуна показуємо, лише якщо в каталозі є такі
+                        дані: раніше списки були порожні й "Об'єм двигуна"
+                        назавжди лишався заблокованим */}
+                    {carYearOptions.length > 0 && (
                     <select
                       value={carYear}
                       onChange={(e) => setCarYear(e.target.value)}
@@ -2082,7 +2229,9 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                         </option>
                       ))}
                     </select>
+                    )}
 
+                    {carYearOptions.length > 0 && (
                     <select
                       value={carEngineVolume}
                       onChange={(e) => setCarEngineVolume(e.target.value)}
@@ -2097,6 +2246,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                         </option>
                       ))}
                     </select>
+                    )}
 
                     <button
                       type="submit"
@@ -2218,6 +2368,15 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                 </p>
               )}
 
+              {engineMiss && !searching && (
+                <p className="mb-3 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                  За кодом двигуна «{submittedQuery}» не знайшли деталей, у назві яких він указаний.{' '}
+                  {results.length > 0
+                    ? 'Показуємо звичайний пошук за цим запитом.'
+                    : 'Перевірте код або напишіть нам — підберемо деталі за VIN.'}
+                </p>
+              )}
+
               <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <p className="text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
                   {searching ? (
@@ -2228,7 +2387,13 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                     </>
                   ) : (
                     <>
-                      Знайдено: <b style={{ color: TECH_INK, fontVariantNumeric: 'tabular-nums' }}>{results.length}</b>
+                      Знайдено:{' '}
+                      <b style={{ color: TECH_INK, fontVariantNumeric: 'tabular-nums' }}>
+                        {searchTotal && searchTotal.count > results.length
+                          ? `${searchTotal.approximate ? 'понад ' : ''}${searchTotal.count.toLocaleString('uk-UA')}`
+                          : results.length}
+                      </b>
+                      {searchTotal && searchTotal.count > results.length && <> · показано {results.length}</>}
                     </>
                   )}
                 </p>
@@ -2827,6 +2992,21 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Підвантаження наступних сторінок видачі */}
+              {!searching && results.length > 0 && searchTotal && searchTotal.count > results.length && (
+                <div className="mt-6 text-center">
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={loadingMore}
+                    className="rounded-xl px-8 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg disabled:opacity-60"
+                    style={{ fontFamily: SANS_TECH, background: TECH_ACCENT, color: '#fff' }}
+                  >
+                    {loadingMore ? 'Завантажуємо...' : 'Показати ще'}
+                  </button>
                 </div>
               )}
             </div>
