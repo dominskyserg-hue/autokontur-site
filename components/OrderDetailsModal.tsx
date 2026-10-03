@@ -371,8 +371,18 @@ export default function OrderDetailsModal({
   const [ttnCost, setTtnCost] = useState('');
   // Післяплата: галочка и сумма. По умолчанию включена, если заказ
   // оплачен не полностью, а сумма = сколько клиент ещё не доплатил
-  const [ttnCodEnabled, setTtnCodEnabled] = useState(false);
+  // Режим оплати при отриманні: none — без неї, cod — післяплата,
+  // control — «Контроль оплати» Нової Пошти (одне з двох, не обидва)
+  const [ttnPayMode, setTtnPayMode] = useState<'none' | 'cod' | 'control'>('none');
   const [ttnCodAmount, setTtnCodAmount] = useState('');
+  // Відправник цієї ТТН: список контактів і адрес забору підтягується з
+  // API Нової Пошти, за замовчуванням вибрано те, що збережено в Налаштуваннях
+  const [senderContacts, setSenderContacts] = useState<Array<{ ref: string; label: string; phone: string }>>([]);
+  const [senderAddresses, setSenderAddresses] = useState<Array<{ ref: string; label: string }>>([]);
+  const [senderContactRef, setSenderContactRef] = useState('');
+  const [senderAddressRef, setSenderAddressRef] = useState('');
+  const [senderLoading, setSenderLoading] = useState(false);
+  const [senderError, setSenderError] = useState<string | null>(null);
   const [ttnPayerType, setTtnPayerType] = useState<'Recipient' | 'Sender'>('Recipient');
   const [ttnDescription, setTtnDescription] = useState('Запчастини');
   const [creatingTtn, setCreatingTtn] = useState(false);
@@ -961,12 +971,38 @@ export default function OrderDetailsModal({
   // ------------------------------------------------------------
   // СОЗДАНИЕ ТТН ЧЕРЕЗ API НОВОЙ ПОЧТЫ
   // ------------------------------------------------------------
+  // Підтягує відправників з API Нової Пошти + те, що збережено в
+  // Налаштуваннях (щоб підставити як вибране за замовчуванням)
+  const loadSenderChoices = async () => {
+    setSenderLoading(true);
+    setSenderError(null);
+    try {
+      const [optionsResponse, settingsResponse] = await Promise.all([
+        fetch('/api/admin/nova-poshta/sender-options'),
+        fetch('/api/nova-poshta-settings'),
+      ]);
+      const options = await optionsResponse.json();
+      if (!optionsResponse.ok) throw new Error(options.error || 'Не вдалося отримати відправників');
+      const settings = await settingsResponse.json();
+
+      setSenderContacts(options.contacts || []);
+      setSenderAddresses(options.addresses || []);
+      setSenderContactRef(settings?.settings?.contactSenderRef || options.contacts?.[0]?.ref || '');
+      setSenderAddressRef(settings?.settings?.senderAddressRef || options.addresses?.[0]?.ref || '');
+    } catch (error) {
+      setSenderError(error instanceof Error ? error.message : 'Помилка мережі при завантаженні відправників');
+    } finally {
+      setSenderLoading(false);
+    }
+  };
+
   const openCreateTtn = () => {
     setCreateTtnError(null);
     setTtnCost(orderDetails ? String(Math.ceil(orderDetails.totalAmount)) : '');
     const unpaid = orderDetails ? Math.max(0, Math.ceil(orderDetails.totalAmount - orderDetails.paidAmount)) : 0;
-    setTtnCodEnabled(unpaid > 0);
+    setTtnPayMode(unpaid > 0 ? 'cod' : 'none');
     setTtnCodAmount(unpaid > 0 ? String(unpaid) : '');
+    loadSenderChoices();
 
     const knownRecipient =
       orderDetails?.cityRef && orderDetails?.warehouseRef
@@ -987,9 +1023,21 @@ export default function OrderDetailsModal({
       setCreateTtnError('Оберіть місто та відділення отримувача.');
       return;
     }
-    if (ttnCodEnabled && !(parseFloat(ttnCodAmount.replace(',', '.')) > 0)) {
-      setCreateTtnError('Вкажіть суму післяплати або зніміть галочку.');
+    const payAmount = parseFloat(ttnCodAmount.replace(',', '.')) || 0;
+    if (ttnPayMode !== 'none' && !(payAmount > 0)) {
+      setCreateTtnError('Вкажіть суму оплати при отриманні або оберіть «Без оплати».');
       return;
+    }
+    // Контроль оплати: якщо клієнт ще не доплатив, а ТТН її не покриває —
+    // питаємо підтвердження, щоб не відправити неоплачену посилку випадково
+    const unpaidNow = Math.max(0, Math.ceil(orderDetails.totalAmount - orderDetails.paidAmount));
+    const covered = ttnPayMode === 'none' ? 0 : payAmount;
+    if (unpaidNow > covered) {
+      const ok = window.confirm(
+        `Увага: за замовленням не оплачено ${unpaidNow} грн, а в ТТН при отриманні заплатить лише ${Math.round(covered)} грн. ` +
+          'Створити ТТН все одно?'
+      );
+      if (!ok) return;
     }
 
     setCreatingTtn(true);
@@ -1006,7 +1054,10 @@ export default function OrderDetailsModal({
           cost: parseFloat(ttnCost),
           payerType: ttnPayerType,
           description: ttnDescription,
-          codAmount: ttnCodEnabled ? parseFloat(ttnCodAmount.replace(',', '.')) || 0 : 0,
+          codAmount: ttnPayMode === 'cod' ? payAmount : 0,
+          paymentControlAmount: ttnPayMode === 'control' ? payAmount : 0,
+          senderContactRef: senderContactRef || undefined,
+          senderAddressRef: senderAddressRef || undefined,
         }),
       });
       const data = await response.json();
@@ -2091,18 +2142,90 @@ export default function OrderDetailsModal({
                           onChange={(e) => setTtnDescription(e.target.value)}
                         />
 
-                        {/* ---- післяплата: Нова Пошта візьме гроші з клієнта при
-                            отриманні й перекаже нам (комісію платить отримувач) ---- */}
+                        {/* ---- відправник: контакт і адреса забору з API Нової Пошти ---- */}
+                        <div className="p-2.5 rounded-md flex flex-col gap-2" style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
+                              Відправник
+                            </span>
+                            <button
+                              type="button"
+                              onClick={loadSenderChoices}
+                              disabled={senderLoading}
+                              className="text-[11px] underline disabled:opacity-50"
+                              style={{ color: 'var(--accent)' }}
+                            >
+                              {senderLoading ? 'Завантаження...' : 'Оновити з Нової Пошти'}
+                            </button>
+                          </div>
+                          {senderError && (
+                            <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
+                              {senderError}
+                            </p>
+                          )}
+                          <select
+                            className="w-full px-3 py-2 text-sm rounded-md"
+                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                            value={senderContactRef}
+                            disabled={senderLoading || senderContacts.length === 0}
+                            onChange={(e) => setSenderContactRef(e.target.value)}
+                          >
+                            {senderContacts.length === 0 && <option value="">Контакти не завантажені</option>}
+                            {senderContacts.map((c) => (
+                              <option key={c.ref} value={c.ref}>
+                                {c.label}
+                                {c.phone ? ` · ${c.phone}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <select
+                            className="w-full px-3 py-2 text-sm rounded-md"
+                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                            value={senderAddressRef}
+                            disabled={senderLoading || senderAddresses.length === 0}
+                            onChange={(e) => setSenderAddressRef(e.target.value)}
+                          >
+                            {senderAddresses.length === 0 && <option value="">Адреси не завантажені</option>}
+                            {senderAddresses.map((a) => (
+                              <option key={a.ref} value={a.ref}>
+                                {a.label}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                            За замовчуванням — відправник з Налаштувань. Тут можна обрати іншого лише для цієї ТТН.
+                          </p>
+                        </div>
+
+                        {/* ---- оплата при отриманні: післяплата або контроль оплати ---- */}
                         <div className="p-2.5 rounded-md" style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}>
-                          <label className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={ttnCodEnabled}
-                              onChange={(e) => setTtnCodEnabled(e.target.checked)}
-                            />
-                            З післяплатою
-                          </label>
-                          {ttnCodEnabled && (
+                          <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                            Оплата при отриманні
+                          </div>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {(
+                              [
+                                ['none', 'Без оплати'],
+                                ['cod', 'Післяплата'],
+                                ['control', 'Контроль оплати'],
+                              ] as const
+                            ).map(([mode, label]) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setTtnPayMode(mode)}
+                                className="px-2 py-1.5 rounded-md text-[11px] font-medium"
+                                style={
+                                  ttnPayMode === mode
+                                    ? { background: 'var(--accent)', color: 'var(--accent-ink)' }
+                                    : { border: '1px solid var(--line)', color: 'var(--ink-muted)' }
+                                }
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {ttnPayMode !== 'none' && (
                             <div className="flex items-center gap-2 mt-2">
                               <input
                                 type="text"
@@ -2130,9 +2253,26 @@ export default function OrderDetailsModal({
                             </div>
                           )}
                           <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
-                            Клієнт заплатить при отриманні. Оголошена вартість автоматично буде не меншою за суму
-                            післяплати.
+                            {ttnPayMode === 'none' &&
+                              'Посилка їде без оплати при отриманні (наприклад, клієнт уже оплатив повністю).'}
+                            {ttnPayMode === 'cod' &&
+                              'Клієнт заплатить при отриманні, Нова Пошта переведе гроші нам (комісію платить отримувач).'}
+                            {ttnPayMode === 'control' &&
+                              'Додаткова послуга «Контроль оплати»: клієнт може оглянути посилку й платить при отриманні. Потрібен договір з Новою Поштою на цю послугу.'}{' '}
+                            Оголошена вартість автоматично буде не меншою за цю суму.
                           </p>
+                          {(() => {
+                            const unpaid = Math.max(0, Math.ceil(orderDetails.totalAmount - orderDetails.paidAmount));
+                            const pay = ttnPayMode === 'none' ? 0 : parseFloat(ttnCodAmount.replace(',', '.')) || 0;
+                            if (unpaid > pay) {
+                              return (
+                                <p className="text-[11px] mt-1" style={{ color: 'var(--warn)' }}>
+                                  ⚠ Не оплачено {unpaid} грн, а при отриманні буде стягнуто {Math.round(pay)} грн.
+                                </p>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
 
                         {createTtnError && (
