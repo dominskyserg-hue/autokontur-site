@@ -45,6 +45,8 @@ interface OrderListItem {
   paidAmount: number;
   createdAt: string;
   updatedAt: string;
+  // Кто ведёт заказ; null — заказ ничей
+  assignedManager: { id: string; name: string } | null;
 }
 
 interface Pagination {
@@ -105,6 +107,8 @@ export default function OrdersScreen() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  // Фильтр по менеджеру: '' — все, 'me' — мои, 'none' — без менеджера
+  const [managerFilter, setManagerFilter] = useState<'' | 'me' | 'none'>('');
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -123,7 +127,7 @@ export default function OrdersScreen() {
   // Смена фильтра или поиска — возвращаемся на первую страницу
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, quickFilter, dateFrom, dateTo]);
+  }, [debouncedSearch, quickFilter, dateFrom, dateTo, managerFilter]);
 
   // ------------------------------------------------------------
   // ЗАГРУЗКА СПИСКА ЗАКАЗОВ (GET /api/orders)
@@ -141,6 +145,7 @@ export default function OrdersScreen() {
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (dateFrom) params.set('dateFrom', dateFrom);
       if (dateTo) params.set('dateTo', dateTo);
+      if (managerFilter) params.set('manager', managerFilter);
 
       const response = await fetch(`/api/orders?${params.toString()}`);
       const data = await response.json();
@@ -156,7 +161,7 @@ export default function OrdersScreen() {
     } finally {
       setLoading(false);
     }
-  }, [page, quickFilter, debouncedSearch, dateFrom, dateTo]);
+  }, [page, quickFilter, debouncedSearch, dateFrom, dateTo, managerFilter]);
 
   useEffect(() => {
     fetchOrders();
@@ -307,6 +312,34 @@ export default function OrdersScreen() {
         </div>
       </div>
 
+      {/* ==================== ФИЛЬТР ПО МЕНЕДЖЕРУ ==================== */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {(
+          [
+            ['', 'Усі замовлення'],
+            ['me', 'Мої'],
+            ['none', 'Без менеджера'],
+          ] as const
+        ).map(([key, label]) => {
+          const isActive = managerFilter === key;
+          return (
+            <button
+              key={key || 'all'}
+              type="button"
+              onClick={() => setManagerFilter(key)}
+              className="text-xs px-3 py-1.5 rounded-md font-medium whitespace-nowrap"
+              style={{
+                border: '1px solid ' + (isActive ? 'var(--accent)' : 'var(--line)'),
+                background: isActive ? 'var(--accent-soft)' : 'var(--surface)',
+                color: isActive ? 'var(--accent)' : 'var(--ink-muted)',
+              }}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
       {/* ==================== БЫСТРЫЕ ФИЛЬТРЫ ПО СТАТУСУ ==================== */}
       <div className="flex flex-wrap gap-2 mb-5">
         {quickFilters.map((filter) => {
@@ -362,7 +395,7 @@ export default function OrdersScreen() {
             <table className="w-full text-sm">
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                  {['№', 'Дата', 'Клиент', 'Телефон', 'К-сть', 'Сумма', 'Статус / Оплата', ''].map((heading) => (
+                  {['№', 'Дата', 'Клиент', 'Телефон', 'К-сть', 'Сумма', 'Статус / Оплата', 'Менеджер', ''].map((heading) => (
                     <th
                       key={heading}
                       className="text-left px-3 py-2.5 text-xs font-medium whitespace-nowrap"
@@ -398,6 +431,13 @@ export default function OrdersScreen() {
                         <StatusBadge status={order.status} />
                         <PaymentBadge paidAmount={order.paidAmount} totalAmount={order.totalAmount} />
                       </div>
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {order.assignedManager ? (
+                        order.assignedManager.name
+                      ) : (
+                        <span style={{ color: 'var(--ink-faint)' }}>—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap text-right">
                       <button

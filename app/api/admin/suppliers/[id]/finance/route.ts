@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { requireAdmin } from '@/lib/adminAuth';
+import { requireOwnerAccess } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -33,7 +33,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
+  const adminDenied = await requireOwnerAccess();
   if (adminDenied) return adminDenied;
 
   const { id } = await context.params;

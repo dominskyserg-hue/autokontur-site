@@ -14,7 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { requireAdmin } from '@/lib/adminAuth';
+import { requireOwnerAccess } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 
@@ -41,7 +41,7 @@ interface PatchRequestBody {
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
+  const adminDenied = await requireOwnerAccess();
   if (adminDenied) return adminDenied;
 
   const { id } = await context.params;

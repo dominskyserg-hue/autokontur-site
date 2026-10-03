@@ -4,7 +4,7 @@
 // Страница входа в админ-панель — единственная страница под /admin/*,
 // которую middleware.ts НЕ защищает паролем (иначе войти было бы
 // просто некуда). Сам вход — POST /api/admin/login, который при
-// верном пароле выдаёт cookie-сессию; дальше её на каждый заход
+// верных логине и пароле выдаёт cookie-сессию; дальше её на каждый заход
 // проверяет middleware.ts.
 //
 // ?next=/admin/orders в адресе — куда вернуть админа после успешного
@@ -20,6 +20,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 
 export default function AdminLoginPage() {
+  const [login, setLogin] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export default function AdminLoginPage() {
       const response = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ login, password }),
       });
       const data = await response.json();
       if (!response.ok || !data.success) {
@@ -69,17 +70,27 @@ export default function AdminLoginPage() {
         </div>
         <h1 className="text-xl font-bold mb-1.5">Вход в админ-панель</h1>
         <p className="text-sm mb-6" style={{ color: '#8B96AB' }}>
-          Введите пароль администратора, чтобы продолжить.
+          Введите свой логин и пароль, чтобы продолжить.
         </p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+          <input
+            type="text"
+            value={login}
+            onChange={(e) => setLogin(e.target.value)}
+            placeholder="Логин"
+            autoFocus
+            autoComplete="username"
+            className="w-full px-4 py-3 text-sm rounded-lg outline-none"
+            style={{ border: '1px solid #232B3D', background: '#1A2233', color: '#E7ECF3' }}
+          />
           <div>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Пароль"
-              autoFocus
+              autoComplete="current-password"
               className="w-full px-4 py-3 text-sm rounded-lg outline-none"
               style={{
                 border: `1px solid ${error ? '#F2635F' : '#232B3D'}`,

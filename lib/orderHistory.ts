@@ -16,6 +16,7 @@
 // ============================================================
 
 import { Pool } from 'pg';
+import { getCurrentAdmin } from '@/lib/adminAuth';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -62,6 +63,19 @@ export function ensureOrderHistoryTable(): Promise<void> {
   return tableReady;
 }
 
+// Кто делает действие — имя вошедшего сотрудника (из cookie-сессии).
+// Вне запроса браузера (cron, вебхуки, фоновые задачи) cookie нет —
+// тогда пишем "система"; сбой определения автора никогда не должен
+// мешать самой записи
+async function resolveAuthor(): Promise<string> {
+  try {
+    const admin = await getCurrentAdmin();
+    return admin ? admin.name : 'admin';
+  } catch {
+    return 'система';
+  }
+}
+
 // Записать одно или несколько событий в историю заказа. Пустые
 // сообщения пропускаются — удобно передавать список "что изменилось",
 // где часть пунктов может оказаться пустой
@@ -73,8 +87,13 @@ export async function logOrderEvent(orderId: string, messages: string | Array<st
 
   try {
     await ensureOrderHistoryTable();
+    const author = await resolveAuthor();
     for (const message of list) {
-      await pool.query('INSERT INTO order_history (order_id, message) VALUES ($1, $2)', [orderId, message]);
+      await pool.query('INSERT INTO order_history (order_id, message, created_by) VALUES ($1, $2, $3)', [
+        orderId,
+        message,
+        author,
+      ]);
     }
   } catch (error) {
     console.error('Не удалось записать историю заказа:', error);

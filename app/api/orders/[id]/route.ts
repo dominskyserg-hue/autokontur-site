@@ -17,7 +17,8 @@ import { Pool } from 'pg';
 import { isCustomerTelegramLinked, notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
 import { logOrderEvent, historyValue } from '@/lib/orderHistory';
 import { STATUS_LABELS } from '@/lib/orderUi';
-import { requireAdmin } from '@/lib/adminAuth';
+import { getCurrentAdmin, requireAdmin } from '@/lib/adminAuth';
+import { ensureOrderAssignmentColumns } from '@/lib/orderAssignment';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -157,6 +158,12 @@ interface OrderDetailsResponse {
   // Подключил ли клиент Telegram-бота магазина — если да, сообщение о
   // ТТН уходит ему автоматически (lib/orderNotifications.ts)
   telegramLinked: boolean;
+  // Кто ведёт заказ (lib/orderAssignment.ts); null — заказ ничей
+  assignedManager: { id: string; name: string; assignedAt: string | null } | null;
+  // false — вошёл менеджер: окно заказа скрывает закупку и прибыль. Сами
+  // costPrice позиций в ответе остаются: форма правки позиции отправляет
+  // их обратно при сохранении, и обнуление затёрло бы закупку в базе
+  canSeeCosts: boolean;
 }
 
 // ------------------------------------------------------------
@@ -198,8 +205,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
-  if (adminDenied) return adminDenied;
+  const viewer = await getCurrentAdmin();
+  if (!viewer) {
+    return NextResponse.json({ error: 'Потрібна авторизація.' }, { status: 401 });
+  }
 
   const { id } = await params;
 
@@ -209,12 +218,15 @@ export async function GET(
 
   try {
     await ensureManagerNoteColumn();
+    await ensureOrderAssignmentColumns();
 
     const orderResult = await pool.query(
       `
       SELECT id, order_number, customer_name, customer_surname, customer_phone, city, nova_poshta_address,
              city_ref, warehouse_ref, comment, manager_note, customer_id,
-             ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at
+             ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at,
+             assigned_manager_id, assigned_at,
+             (SELECT u.name FROM admin_users u WHERE u.id = orders.assigned_manager_id) AS assigned_manager_name
       FROM orders
       WHERE id = $1
       `,
@@ -321,6 +333,10 @@ export async function GET(
       managerNote: orderRow.manager_note,
       customer,
       telegramLinked: await isCustomerTelegramLinked(orderRow.customer_phone),
+      assignedManager: orderRow.assigned_manager_id
+        ? { id: orderRow.assigned_manager_id, name: orderRow.assigned_manager_name, assignedAt: orderRow.assigned_at }
+        : null,
+      canSeeCosts: viewer.role === 'owner',
     };
 
     return NextResponse.json({ success: true, order });
