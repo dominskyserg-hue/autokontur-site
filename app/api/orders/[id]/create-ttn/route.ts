@@ -69,6 +69,9 @@ interface CreateTtnBody {
   // передано — беруться дані з Налаштувань
   senderContactRef?: string;
   senderAddressRef?: string;
+  // Відправка з відділення Нової Пошти (наприклад, Одеса №116): місто й
+  // відділення, обрані через пошук НП. Має пріоритет над senderAddressRef
+  senderWarehouse?: { cityRef?: string; warehouseRef?: string };
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -171,12 +174,20 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     // Якщо оператор обрав іншого відправника прямо в формі ТТН — беремо
     // його з API Нової Пошти (а не довіряємо Ref'ам з браузера наосліп):
     // так у ТТН не потрапить контакт чи адреса, яких немає в нашому акаунті
+    const warehouseCityRef = body.senderWarehouse?.cityRef;
+    const warehouseRef = body.senderWarehouse?.warehouseRef;
+    const fromWarehouse = Boolean(warehouseCityRef && warehouseRef);
     const wantContact = body.senderContactRef || s.np_contact_sender_ref;
     const wantAddress = body.senderAddressRef || s.np_sender_address_ref;
-    if (wantContact !== s.np_contact_sender_ref || wantAddress !== s.np_sender_address_ref) {
+    if (fromWarehouse || wantContact !== s.np_contact_sender_ref || wantAddress !== s.np_sender_address_ref) {
       const options = await loadSenderOptions();
       const contact = options.contacts.find((c) => c.ref === wantContact);
-      const address = options.addresses.find((a) => a.ref === wantAddress);
+      // Для відправки з відділення адреса — саме відділення, у списку
+      // адрес забору його немає, тому шукаємо адресу лише коли відправка
+      // кур'єрська
+      const address = fromWarehouse
+        ? { ref: warehouseRef as string, cityRef: warehouseCityRef as string }
+        : options.addresses.find((a) => a.ref === wantAddress);
       if (!contact || !address) {
         return NextResponse.json(
           { error: 'Обраного відправника або адреси забору немає в акаунті Нової Пошти. Оновіть список і виберіть знову.' },
@@ -194,6 +205,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { ttnNumber, ttnRef } = await createInternetDocument({
       sender,
+      serviceType: fromWarehouse ? 'WarehouseWarehouse' : 'DoorsWarehouse',
       recipient: {
         firstName: order.customer_name,
         lastName: order.customer_surname,
