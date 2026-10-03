@@ -61,6 +61,12 @@ export interface CreateTtnParams {
   // клиента при получении и переведёт нам. 0 или не передано — без
   // післяплати. Комиссию за перевод денег платит получатель
   codAmount?: number;
+  // «Контроль оплати» (AfterpaymentOnGoodsCost), грн: додаткова послуга
+  // Нової Пошти — отримувач платить суму при отриманні й може оглянути
+  // посилку до оплати. Потребує окремого договору з Новою Поштою.
+  // Взаємовиключна з codAmount (післяплатою) — НП не приймає обидві
+  // одразу, тому route передає лише одне з двох
+  paymentControlAmount?: number;
 }
 
 async function findOrCreateRecipientContact(recipient: RecipientInfo): Promise<{ recipientRef: string; contactRecipientRef: string }> {
@@ -142,6 +148,10 @@ export async function createInternetDocument(
     // 'Money', сума — рядком, комісію за переказ платить отримувач.
     // (AfterpaymentOnGoodsCost — інша послуга, "контроль оплати", вона
     // потребує окремого договору з Новою Поштою, тому її не використовуємо)
+    // «Контроль оплати» — окреме поле документа, не BackwardDeliveryData
+    ...(params.paymentControlAmount && params.paymentControlAmount > 0
+      ? { AfterpaymentOnGoodsCost: String(Math.round(params.paymentControlAmount)) }
+      : {}),
     ...(params.codAmount && params.codAmount > 0
       ? {
           BackwardDeliveryData: [

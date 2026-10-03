@@ -26,7 +26,8 @@
 
 import { NextRequest, NextResponse, after } from 'next/server';
 import { Pool } from 'pg';
-import { createInternetDocument } from '@/lib/novaPoshta/createDocument';
+import { createInternetDocument, type SenderInfo } from '@/lib/novaPoshta/createDocument';
+import { loadSenderOptions } from '@/lib/novaPoshta/sender';
 import { NovaPoshtaApiError } from '@/lib/novaPoshta/api';
 import { notifyCustomerTtnAssigned } from '@/lib/orderNotifications';
 import { requireAdmin } from '@/lib/adminAuth';
@@ -61,6 +62,13 @@ interface CreateTtnBody {
   description?: string;
   // Післяплата, грн (необов'язково; 0 — без післяплати)
   codAmount?: number;
+  // «Контроль оплати», грн (необов'язково). Не поєднується з післяплатою
+  paymentControlAmount?: number;
+  // Інший відправник для цієї ТТН (необов'язково): контактна особа та
+  // адреса забору з списку, який віддає API Нової Пошти. Якщо не
+  // передано — беруться дані з Налаштувань
+  senderContactRef?: string;
+  senderAddressRef?: string;
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -102,9 +110,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!Number.isFinite(codAmount) || codAmount < 0) {
     return NextResponse.json({ error: 'Сума післяплати має бути числом не менше нуля.' }, { status: 400 });
   }
-  // Нова Пошта не приймає післяплату, більшу за оголошену вартість
-  // посилки, — тому оголошену вартість піднімаємо до суми післяплати
-  const declaredCost = Math.max(cost, Math.ceil(codAmount));
+  const paymentControlAmount =
+    body.paymentControlAmount === undefined || body.paymentControlAmount === null ? 0 : Number(body.paymentControlAmount);
+  if (!Number.isFinite(paymentControlAmount) || paymentControlAmount < 0) {
+    return NextResponse.json({ error: 'Сума контролю оплати має бути числом не менше нуля.' }, { status: 400 });
+  }
+  if (codAmount > 0 && paymentControlAmount > 0) {
+    return NextResponse.json(
+      { error: 'Післяплата й контроль оплати не поєднуються — оберіть щось одне.' },
+      { status: 400 }
+    );
+  }
+  // Нова Пошта не приймає післяплату (або контроль оплати), більшу за
+  // оголошену вартість посилки, — тому оголошену вартість піднімаємо
+  // до цієї суми
+  const declaredCost = Math.max(cost, Math.ceil(Math.max(codAmount, paymentControlAmount)));
 
   try {
     const orderResult = await pool.query(
@@ -139,14 +159,41 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       );
     }
 
+    // Відправник за замовчуванням — з Налаштувань
+    let sender: SenderInfo = {
+      senderRef: s.np_sender_ref,
+      contactSenderRef: s.np_contact_sender_ref,
+      sendersPhone: s.np_senders_phone || '',
+      senderAddressRef: s.np_sender_address_ref,
+      citySenderRef: s.np_city_sender_ref,
+    };
+
+    // Якщо оператор обрав іншого відправника прямо в формі ТТН — беремо
+    // його з API Нової Пошти (а не довіряємо Ref'ам з браузера наосліп):
+    // так у ТТН не потрапить контакт чи адреса, яких немає в нашому акаунті
+    const wantContact = body.senderContactRef || s.np_contact_sender_ref;
+    const wantAddress = body.senderAddressRef || s.np_sender_address_ref;
+    if (wantContact !== s.np_contact_sender_ref || wantAddress !== s.np_sender_address_ref) {
+      const options = await loadSenderOptions();
+      const contact = options.contacts.find((c) => c.ref === wantContact);
+      const address = options.addresses.find((a) => a.ref === wantAddress);
+      if (!contact || !address) {
+        return NextResponse.json(
+          { error: 'Обраного відправника або адреси забору немає в акаунті Нової Пошти. Оновіть список і виберіть знову.' },
+          { status: 400 }
+        );
+      }
+      sender = {
+        senderRef: options.senderRef,
+        contactSenderRef: contact.ref,
+        sendersPhone: contact.phone || s.np_senders_phone || '',
+        senderAddressRef: address.ref,
+        citySenderRef: address.cityRef,
+      };
+    }
+
     const { ttnNumber, ttnRef } = await createInternetDocument({
-      sender: {
-        senderRef: s.np_sender_ref,
-        contactSenderRef: s.np_contact_sender_ref,
-        sendersPhone: s.np_senders_phone || '',
-        senderAddressRef: s.np_sender_address_ref,
-        citySenderRef: s.np_city_sender_ref,
-      },
+      sender,
       recipient: {
         firstName: order.customer_name,
         lastName: order.customer_surname,
@@ -160,6 +207,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       payerType,
       description: body.description?.trim() || 'Запчастини',
       codAmount,
+      paymentControlAmount,
     });
 
     await pool.query(`UPDATE orders SET ttn_number = $2, ttn_ref = $3, updated_at = now() WHERE id = $1`, [
@@ -172,7 +220,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     await logOrderEvent(
       order.id,
       `Створено ТТН через Нову Пошту: ${ttnNumber}` +
-        (codAmount > 0 ? ` (післяплата ${Math.round(codAmount)} грн)` : ' (без післяплати)')
+        (codAmount > 0
+          ? ` (післяплата ${Math.round(codAmount)} грн)`
+          : paymentControlAmount > 0
+            ? ` (контроль оплати ${Math.round(paymentControlAmount)} грн)`
+            : ' (без післяплати)')
     );
 
     return NextResponse.json({ success: true, ttnNumber, ttnRef });
