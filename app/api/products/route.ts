@@ -114,6 +114,8 @@ function isValidUuid(value: string): boolean {
 // ------------------------------------------------------------
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
+// Размер страницы в режиме поиска по коду мотора
+const ENGINE_PAGE_SIZE = 120;
 
 // Товар в том виде, в котором мы отдаём его на фронтенд
 interface ProductResponse {
@@ -211,12 +213,12 @@ export async function GET(request: NextRequest) {
     const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
 
     const rawPageSize = parseInt(searchParams.get('pageSize') || String(DEFAULT_PAGE_SIZE), 10);
-    const pageSize =
+    let pageSize =
       Number.isFinite(rawPageSize) && rawPageSize > 0
         ? Math.min(rawPageSize, MAX_PAGE_SIZE)
         : DEFAULT_PAGE_SIZE;
 
-    const offset = (page - 1) * pageSize;
+    let offset = (page - 1) * pageSize;
 
     // Роут публичный (его вызывает витрина), а те же данные читают и
     // админские экраны — закупочная цена, поставщик, скрытые товары и
@@ -277,6 +279,9 @@ export async function GET(request: NextRequest) {
       conditions.push('p.is_active = true');
     }
 
+    // Код мотора, если запрос — "4G18" (lib/engineSearch.ts)
+    let engineCode: string | undefined;
+
     if (search) {
       // Уся логіка текстового пошуку (артикул/бренд/кросс-номер/
       // синоніми/"деталь + авто одним реченням") винесена у
@@ -286,6 +291,13 @@ export async function GET(request: NextRequest) {
       const searchClause = await buildTextSearchClause(pool, search, values.length + 1);
       values.push(...searchClause.params);
       conditions.push(searchClause.clause);
+      engineCode = searchClause.engineCode;
+      // Поиск по мотору: деталей на один мотор бывает несколько десятков,
+      // витрина просит 24 — отдаём больше за один раз
+      if (engineCode && pageSize < ENGINE_PAGE_SIZE) {
+        pageSize = ENGINE_PAGE_SIZE;
+        offset = (page - 1) * pageSize;
+      }
     }
 
     if (supplierId) {
@@ -515,6 +527,7 @@ export async function GET(request: NextRequest) {
       success: true,
       products,
       pagination: { page, pageSize, totalCount, totalPages, ...(approxCount?.approximate ? { totalCountApproximate: true } : {}) },
+      ...(engineCode ? { engineCode } : {}),
     };
     if (cacheKey) responseCache.set(cacheKey, { expires: Date.now() + CACHE_TTL_MS, body });
     return NextResponse.json(body);

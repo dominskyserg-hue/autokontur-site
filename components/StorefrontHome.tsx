@@ -480,6 +480,10 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   const lastSearchRef = useRef<{ params: URLSearchParams; label: string } | null>(null);
   // Если результаты найдены по исправленной раскладке — что ввёл покупатель
   const [layoutFixedFrom, setLayoutFixedFrom] = useState<string | null>(null);
+  // Поиск по коду мотора ("4G18"): бэкенд (lib/engineSearch.ts) вернул
+  // engineCode — над результатами показываем пометку "Запчастини на
+  // двигун 4G18" и общее число деталей в наличии
+  const [engineInfo, setEngineInfo] = useState<{ code: string; total: number } | null>(null);
   const [filterAvailability, setFilterAvailability] = useState<'all' | 'inStock' | 'backorder'>('all');
   const [filterBrands, setFilterBrands] = useState<Set<string>>(new Set());
   const [priceFilter, setPriceFilter] = useState<{ min: string; max: string }>({ min: '', max: '' });
@@ -1216,6 +1220,11 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       }
       let products = data.products as Product[];
       setLayoutFixedFrom(null);
+      setEngineInfo(
+        typeof data.engineCode === 'string'
+          ? { code: data.engineCode, total: Number(data.pagination?.totalCount) || products.length }
+          : null
+      );
 
       // Ничего не нашли — может, покупатель забыл переключить раскладку
       // ("щс90" вместо "oc90", lib/keyboardLayout.ts): пробуем ещё раз
@@ -1241,6 +1250,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
     } catch (error) {
       setSearchError(error instanceof Error ? error.message : 'Помилка мережі під час пошуку');
       setResults([]);
+      setEngineInfo(null);
     } finally {
       setSearching(false);
     }
@@ -2195,6 +2205,16 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
               {layoutFixedFrom && !searching && (
                 <p className="mb-2 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
                   Ви ввели «{layoutFixedFrom}» — схоже, з іншою розкладкою клавіатури. Показуємо результати для «{submittedQuery}».
+                </p>
+              )}
+
+              {/* Поиск по коду мотора: пояснение, что именно показано */}
+              {engineInfo && !searching && (
+                <p className="mb-3 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                  Запчастини на двигун{' '}
+                  <b style={{ color: TECH_ACCENT_BRIGHT, fontFamily: MONO_TECH }}>{engineInfo.code}</b> — у наявності:{' '}
+                  <b style={{ color: TECH_INK, fontVariantNumeric: 'tabular-nums' }}>{engineInfo.total}</b>.
+                  Показано товари, у назві яких указано цей двигун; інші деталі до цього авто можна знайти за моделлю.
                 </p>
               )}
 
