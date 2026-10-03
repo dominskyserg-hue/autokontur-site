@@ -381,6 +381,10 @@ export default function OrderDetailsModal({
   const [senderAddresses, setSenderAddresses] = useState<Array<{ ref: string; label: string }>>([]);
   const [senderContactRef, setSenderContactRef] = useState('');
   const [senderAddressRef, setSenderAddressRef] = useState('');
+  // Відправка з відділення НП (напр. Одеса №116) замість адреси забору
+  // кур'єром: обране через пошук НП місто й відділення
+  const [senderFromWarehouse, setSenderFromWarehouse] = useState(false);
+  const [senderWarehouse, setSenderWarehouse] = useState<{ cityRef: string; warehouseRef: string; label: string } | null>(null);
   const [senderLoading, setSenderLoading] = useState(false);
   const [senderError, setSenderError] = useState<string | null>(null);
   const [ttnPayerType, setTtnPayerType] = useState<'Recipient' | 'Sender'>('Recipient');
@@ -1024,6 +1028,10 @@ export default function OrderDetailsModal({
       return;
     }
     const payAmount = parseFloat(ttnCodAmount.replace(',', '.')) || 0;
+    if (senderFromWarehouse && !senderWarehouse) {
+      setCreateTtnError('Оберіть місто та відділення відправника або поверніться до адреси забору.');
+      return;
+    }
     if (ttnPayMode !== 'none' && !(payAmount > 0)) {
       setCreateTtnError('Вкажіть суму оплати при отриманні або оберіть «Без оплати».');
       return;
@@ -1058,6 +1066,10 @@ export default function OrderDetailsModal({
           paymentControlAmount: ttnPayMode === 'control' ? payAmount : 0,
           senderContactRef: senderContactRef || undefined,
           senderAddressRef: senderAddressRef || undefined,
+          senderWarehouse:
+            senderFromWarehouse && senderWarehouse
+              ? { cityRef: senderWarehouse.cityRef, warehouseRef: senderWarehouse.warehouseRef }
+              : undefined,
         }),
       });
       const data = await response.json();
@@ -2178,6 +2190,48 @@ export default function OrderDetailsModal({
                               </option>
                             ))}
                           </select>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {(
+                              [
+                                [false, 'Адреса забору (кур\'єр)'],
+                                [true, 'З відділення НП'],
+                              ] as const
+                            ).map(([flag, label]) => (
+                              <button
+                                key={label}
+                                type="button"
+                                onClick={() => setSenderFromWarehouse(flag)}
+                                className="px-2 py-1.5 rounded-md text-[11px] font-medium"
+                                style={
+                                  senderFromWarehouse === flag
+                                    ? { background: 'var(--accent)', color: 'var(--accent-ink)' }
+                                    : { border: '1px solid var(--line)', color: 'var(--ink-muted)' }
+                                }
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {senderFromWarehouse && (
+                            <>
+                              <AdminNovaPoshtaPicker
+                                initialCityQuery=""
+                                onPick={({ cityRef, cityName, warehouseRef, warehouseDescription }) =>
+                                  setSenderWarehouse({
+                                    cityRef,
+                                    warehouseRef,
+                                    label: `${cityName}, ${warehouseDescription}`,
+                                  })
+                                }
+                              />
+                              {senderWarehouse && (
+                                <p className="text-[11px]" style={{ color: 'var(--good)' }}>
+                                  Відправка з: {senderWarehouse.label}
+                                </p>
+                              )}
+                            </>
+                          )}
+                          {!senderFromWarehouse && (
                           <select
                             className="w-full px-3 py-2 text-sm rounded-md"
                             style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
@@ -2192,6 +2246,7 @@ export default function OrderDetailsModal({
                               </option>
                             ))}
                           </select>
+                          )}
                           <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
                             За замовчуванням — відправник з Налаштувань. Тут можна обрати іншого лише для цієї ТТН.
                           </p>
