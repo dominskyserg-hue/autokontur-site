@@ -40,6 +40,8 @@ import { SITE_URL } from '@/lib/siteConfig';
 import { buildProductPath } from '@/lib/slug';
 import CardBuyButton from '@/components/CardBuyButton';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
+import { getOwnStockKeys, ownStockKey } from '@/lib/ownStock';
+import OwnStockBadge from '@/components/OwnStockBadge';
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import OfferCountNote from '@/components/OfferCountNote';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
@@ -109,6 +111,8 @@ interface CategoryProduct {
   offerCount: number;
   // Лучшее предложение — восстановленная деталь (бейдж "Відновлена")
   isRefurbished: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж "На нашому складі"
+  ownStock: boolean;
 }
 
 // cache() від React дедуплікує виклик У МЕЖАХ ОДНОГО HTTP-запиту —
@@ -126,10 +130,10 @@ export type CategorySort = 'popular' | 'price_asc' | 'price_desc';
 // Історія: колись тайбрейком був p.name, потім p.stock (у одного
 // постачальника завищені залишки саме у дорогих товарів) — обидва
 // варіанти давали дивний порядок, тому тепер бренд і ціна
-function categoryOrderByClause(sort: CategorySort, soldProductIds: string[]): string {
+function categoryOrderByClause(sort: CategorySort, soldProductIds: string[], ownStockKeys: string[]): string {
   if (sort === 'price_asc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price ASC';
   if (sort === 'price_desc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC';
-  return buildPopularOrderBy(soldProductIds);
+  return buildPopularOrderBy(soldProductIds, ownStockKeys);
 }
 
 const loadCategoryProducts = cache(async function loadCategoryProducts(
@@ -170,6 +174,8 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
   const offset = (page - 1) * PAGE_SIZE;
   // Товари, продані за 180 днів — для сортування "За популярністю" (кеш 10 хв)
   const soldProductIds = sort === 'popular' ? await getRecentlySoldProductIds(pool) : [];
+  // Детали с нашего склада — первыми в "За популярністю" и с бейджем (кеш 2 хв)
+  const ownStockKeys = await getOwnStockKeys(pool);
 
   // Персональна ціна покупця (customer_pricing_rules) — за телефоном
   // із СЕСІЇ Особистого кабінету (вхід по коду, lib/customerAuth.ts; див.
@@ -196,7 +202,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
       ${g.join}
       JOIN suppliers s ON s.id = b.supplier_id
       WHERE ${clause} AND ${g.where}
-      ${groupedOrderBy(categoryOrderByClause(sort, soldProductIds))}
+      ${groupedOrderBy(categoryOrderByClause(sort, soldProductIds, ownStockKeys))}
       LIMIT $${params.length + 1} OFFSET $${params.length + 2}
       `,
       [...params, PAGE_SIZE, offset]
@@ -221,6 +227,7 @@ const loadCategoryProducts = cache(async function loadCategoryProducts(
     offerId: row.offer_id,
     offerCount: row.offer_count,
     isRefurbished: row.is_refurbished,
+    ownStock: ownStockKeys.includes(ownStockKey(row.article, row.brand)),
   }));
 
   return { products, total: countResult.rows[0]?.total ?? 0 };
@@ -623,7 +630,7 @@ export default async function CategoryPage({
                     </div>
                     {(product.stock > 0 || product.isRefurbished) && (
                       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                        {product.stock > 0 && <StockBadge stock={product.stock} />}
+                        {product.ownStock ? <OwnStockBadge compact /> : product.stock > 0 && <StockBadge stock={product.stock} />}
                         {product.isRefurbished && <RefurbishedBadge />}
                       </div>
                     )}

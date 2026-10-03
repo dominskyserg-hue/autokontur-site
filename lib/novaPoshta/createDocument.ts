@@ -61,6 +61,16 @@ export interface CreateTtnParams {
   // клиента при получении и переведёт нам. 0 или не передано — без
   // післяплати. Комиссию за перевод денег платит получатель
   codAmount?: number;
+  // «Контроль оплати» (AfterpaymentOnGoodsCost), грн: додаткова послуга
+  // Нової Пошти — отримувач платить суму при отриманні й може оглянути
+  // посилку до оплати. Потребує окремого договору з Новою Поштою.
+  // Взаємовиключна з codAmount (післяплатою) — НП не приймає обидві
+  // одразу, тому route передає лише одне з двох
+  paymentControlAmount?: number;
+  // DoorsWarehouse — кур'єр забирає від відправника за адресою;
+  // WarehouseWarehouse — відправник сам здає посилку у відділенні НП
+  // (SenderAddress тоді — Ref відділення, CitySender — Ref його міста)
+  serviceType?: 'DoorsWarehouse' | 'WarehouseWarehouse';
 }
 
 async function findOrCreateRecipientContact(recipient: RecipientInfo): Promise<{ recipientRef: string; contactRecipientRef: string }> {
@@ -127,7 +137,7 @@ export async function createInternetDocument(
     // ---- сама відправка ----
     // DoorsWarehouse — кур'єр забирає від відправника (адреса забору
     // з Налаштувань), отримувач забирає сам з відділення/поштомату
-    ServiceType: 'DoorsWarehouse',
+    ServiceType: params.serviceType || 'DoorsWarehouse',
     CargoType: 'Cargo',
     PaymentMethod: 'Cash',
     PayerType: params.payerType,
@@ -142,6 +152,10 @@ export async function createInternetDocument(
     // 'Money', сума — рядком, комісію за переказ платить отримувач.
     // (AfterpaymentOnGoodsCost — інша послуга, "контроль оплати", вона
     // потребує окремого договору з Новою Поштою, тому її не використовуємо)
+    // «Контроль оплати» — окреме поле документа, не BackwardDeliveryData
+    ...(params.paymentControlAmount && params.paymentControlAmount > 0
+      ? { AfterpaymentOnGoodsCost: String(Math.round(params.paymentControlAmount)) }
+      : {}),
     ...(params.codAmount && params.codAmount > 0
       ? {
           BackwardDeliveryData: [

@@ -25,6 +25,12 @@
 //   { "supplierId": "3fa85f64-..." }
 //   { "name": "Фільтр масляний" }
 //   { "quantity": 3 }
+//   { "productId": "...", "price": 1250 }  — ЗАМЕНИТЬ деталь на аналог
+//     (другой артикул из каталога, кнопка "Замінити" в окне заказа):
+//     артикул, бренд, название, поставщик и закупочная цена берутся от
+//     нового товара, цена продажи — из тела запроса (или прежняя).
+//     Только для позиций "Ожидает закупки": уже заказанную у поставщика
+//     или лежащую на складе деталь так не заменить
 //   { "price": 1250.5, "costPrice": 900, "supplierId": "3fa85f64-...", "name": "...", "quantity": 2 }
 //
 // ВАЖНО: order_items хранит "снимок" товара на момент покупки (см.
@@ -83,6 +89,8 @@ interface PatchOrderItemRequestBody {
   supplierId?: string;
   name?: string;
   quantity?: number;
+  // Заменить деталь позиции на другой товар каталога (аналог)
+  productId?: string;
 }
 
 // Next.js 15: params у Route Handler — это Promise, поэтому его
@@ -119,8 +127,9 @@ export async function PATCH(
   const hasSupplier = body.supplierId !== undefined;
   const hasName = body.name !== undefined;
   const hasQuantity = body.quantity !== undefined;
+  const hasProduct = body.productId !== undefined;
 
-  if (!hasPrice && !hasCostPrice && !hasSupplier && !hasName && !hasQuantity) {
+  if (!hasPrice && !hasCostPrice && !hasSupplier && !hasName && !hasQuantity && !hasProduct) {
     return NextResponse.json(
       { error: 'Передайте хотя бы одно поле для изменения: price, costPrice, supplierId, name или quantity.' },
       { status: 400 }
@@ -157,6 +166,95 @@ export async function PATCH(
       { error: 'supplierId должен быть корректным UUID.' },
       { status: 400 }
     );
+  }
+
+  if (hasProduct && !isValidUuid(body.productId as string)) {
+    return NextResponse.json({ error: 'productId должен быть корректным UUID.' }, { status: 400 });
+  }
+
+  // ---- замена детали на аналог (другой товар каталога) ----
+  if (hasProduct) {
+    try {
+      const currentResult = await pool.query(
+        'SELECT article, brand, status FROM order_items WHERE id = $1 AND order_id = $2',
+        [itemId, orderId]
+      );
+      const current = currentResult.rows[0];
+      if (!current) {
+        return NextResponse.json({ error: 'Позиция с таким id не найдена в этом заказе.' }, { status: 404 });
+      }
+      if (current.status !== 'pending') {
+        return NextResponse.json(
+          { error: 'Замінити на аналог можна лише позицію, яку ще не замовляли у постачальника.' },
+          { status: 400 }
+        );
+      }
+
+      const productResult = await pool.query(
+        `SELECT p.id, p.article, p.brand, p.name, p.cost_price, p.supplier_id, s.name AS supplier_name
+         FROM products p JOIN suppliers s ON s.id = p.supplier_id
+         WHERE p.id = $1`,
+        [body.productId]
+      );
+      const product = productResult.rows[0];
+      if (!product) {
+        return NextResponse.json({ error: 'Товар-аналог не знайдено в каталозі.' }, { status: 404 });
+      }
+
+      const replaced = await pool.query(
+        `
+        WITH updated AS (
+          UPDATE order_items
+          SET product_id = $3, article = $4, brand = $5, name = $6, cost_price = $7,
+              supplier_id = $8, supplier_name = $9, price = COALESCE($10, price)
+          WHERE id = $1 AND order_id = $2
+          RETURNING id, article, brand, name, price, cost_price, quantity, supplier_id, supplier_name, status
+        )
+        SELECT updated.*, s.contact_name AS supplier_contact_name
+        FROM updated LEFT JOIN suppliers s ON s.id = updated.supplier_id
+        `,
+        [
+          itemId,
+          orderId,
+          product.id,
+          product.article,
+          product.brand,
+          product.name,
+          product.cost_price,
+          product.supplier_id,
+          product.supplier_name,
+          hasPrice ? body.price : null,
+        ]
+      );
+      const row = replaced.rows[0];
+
+      await logOrderEvent(
+        orderId,
+        `Позицію ${historyValue(current.brand)} ${current.article} замінено на аналог ${historyValue(row.brand)} ${row.article} ` +
+          `(${row.supplier_name}, закупка ${historyMoney(row.cost_price)}, продаж ${historyMoney(row.price)})`
+      );
+
+      return NextResponse.json({
+        success: true,
+        item: {
+          id: row.id,
+          article: row.article,
+          brand: row.brand,
+          name: row.name,
+          price: parseFloat(row.price),
+          costPrice: parseFloat(row.cost_price),
+          quantity: row.quantity,
+          supplierId: row.supplier_id,
+          supplierName: row.supplier_name,
+          supplierContactName: row.supplier_contact_name,
+          status: row.status,
+        },
+      });
+    } catch (error) {
+      console.error('Ошибка при замене позиции на аналог:', error);
+      const message = error instanceof Error ? error.message : 'Неизвестная ошибка';
+      return NextResponse.json({ error: 'Не вдалося замінити позицію: ' + message }, { status: 500 });
+    }
   }
 
   try {

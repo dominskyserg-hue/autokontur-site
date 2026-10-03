@@ -22,10 +22,14 @@ import { buildProductPath } from '@/lib/slug';
 import { buildFaqJsonLd, buildSingleProductJsonLd, jsonLdScript } from '@/lib/structuredData';
 import { SITE_URL } from '@/lib/siteConfig';
 import { buildSeoProductDescription, buildSeoProductName, resolveFaqItems, type CrossRefItem, type ProductPageData, type SimilarProduct, type VehicleCompatibilityItem, type PartCrossItem } from '@/lib/productDetail';
-import AddToCartButton from '@/components/AddToCartButton';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
+import OfferAccordion from '@/components/OfferAccordion';
+import ProductBuyBox from '@/components/ProductBuyBox';
+import StickyBuyBar from '@/components/StickyBuyBar';
+import FitCheck from '@/components/FitCheck';
+import { estimateDelivery } from '@/lib/deliveryEstimate';
+import OwnStockBadge from '@/components/OwnStockBadge';
 import FavoriteButton from '@/components/FavoriteButton';
-import QuickOrderModal from '@/components/QuickOrderModal';
 import ProductViewTracker from '@/components/ProductViewTracker';
 import ProductGallery, { type GalleryPhoto } from '@/components/ProductGallery';
 import { getCategoryIcon } from '@/lib/categoryIcons';
@@ -128,7 +132,31 @@ export default function ProductDetailContent({
 
   // Главная страница группы с несколькими предложениями — в разметке
   // AggregateOffer по ВИДИМЫМ ценам: основное предложение + "Інші пропозиції"
+  // Честный срок доставки основного товара (lib/deliveryEstimate.ts)
+  const delivery = estimateDelivery({ stock: product.stock, ownStock: product.ownStock, deliveryTime: product.deliveryTime });
   const visibleOffers = [{ retailPrice: product.retailPrice, stock: product.stock }, ...otherOffers];
+  // Строки таблицы "Інші пропозиції": текущее предложение первым, потом
+  // остальные (у них уже своя сортировка: в наличии -> дешевле)
+  const offerRows = [
+    {
+      id: product.id,
+      retailPrice: product.retailPrice,
+      stock: product.stock,
+      isRefurbished: product.isRefurbished,
+      deliveryTime: product.deliveryTime,
+      isCurrent: true,
+    },
+    ...otherOffers.map((offer) => ({ ...offer, isCurrent: false })),
+  ].map((row) => {
+    // Срок для строки таблицы: "відправка завтра · отримаєте сб, 3.10 – нд, 4.10"
+    const estimate = estimateDelivery({ stock: row.stock, ownStock: row.isCurrent && product.ownStock, deliveryTime: row.deliveryTime });
+    return {
+      ...row,
+      deliveryLabel: estimate.arrivalText
+        ? `відправка ${estimate.dispatchText} · отримаєте ${estimate.arrivalText}`
+        : estimate.dispatchText,
+    };
+  });
   const aggregateOffer =
     product.hasGroupOffers && otherOffers.length > 0
       ? {
@@ -167,7 +195,7 @@ export default function ProductDetailContent({
   const hasCompatibility = vehicleCompatibility.length > 0 || Boolean(seoOverride?.applicability?.length);
 
   return (
-    <>
+    <div data-product-root>
       {/* Аналитика (Google Analytics 4 + Meta Pixel) — событие
           "просмотр товара", см. components/ProductViewTracker.tsx.
           Ничего не рендерит, просто отправляет событие один раз при
@@ -248,7 +276,7 @@ export default function ProductDetailContent({
             >
               {formatMoney(product.retailPrice)} <span style={{ fontSize: 16, color: FAINT, fontFamily: BODY_FONT }}>грн</span>
             </span>
-            <StockBadge stock={product.stock} />
+            {product.ownStock ? <OwnStockBadge dispatchText={delivery.dispatchText} /> : <StockBadge stock={product.stock} />}
             {product.isRefurbished && <RefurbishedBadge />}
           </div>
 
@@ -260,11 +288,20 @@ export default function ProductDetailContent({
               {X}" одразу під бейджем "Під замовлення" — це читалось
               як суперечність ("під замовлення" + "сьогодні" поруч).
               Уточнене формулювання прибирає цю двозначність */}
-          {product.stock <= 0 && product.deliveryTime && (
-            <p className="mb-4 text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
-              Очікуваний термін відвантаження постачальником: {product.deliveryTime}
-            </p>
-          )}
+          {/* Честный срок (lib/deliveryEstimate.ts): когда отправим и когда
+              примерно получит покупатель — по нашему складу или по сроку
+              отгрузки поставщика + Нова Пошта */}
+          <p className="mb-4 flex flex-wrap items-center gap-x-1.5 text-sm" style={{ fontFamily: BODY_FONT, color: MUTED }}>
+            <Truck className="h-4 w-4" style={{ color: ACCENT }} />
+            Відправка:{' '}
+            <span style={{ color: delivery.dispatchToday ? SUCCESS_TEXT : PAPER, fontWeight: 600 }}>{delivery.dispatchText}</span>
+            {delivery.arrivalText && (
+              <>
+                <span>· Отримаєте орієнтовно:</span>
+                <span style={{ color: PAPER, fontWeight: 600 }}>{delivery.arrivalText}</span>
+              </>
+            )}
+          </p>
 
           {/* ==================== ДОСТАВКА / ОПЛАТА / ПОВЕРНЕННЯ ==================== */}
           {/* Реальні умови з /delivery і /returns (site_pages у базі) —
@@ -277,12 +314,10 @@ export default function ProductDetailContent({
             className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs"
             style={{ fontFamily: BODY_FONT, color: MUTED }}
           >
-            {product.stock > 0 && (
-              <span className="inline-flex items-center gap-1.5">
-                <Truck className="h-3.5 w-3.5" style={{ color: ACCENT }} />
-                Відправка сьогодні
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1.5">
+              <Truck className="h-3.5 w-3.5" style={{ color: ACCENT }} />
+              Нова Пошта по всій Україні
+            </span>
             <span className="inline-flex items-center gap-1.5">
               <Banknote className="h-3.5 w-3.5" style={{ color: ACCENT }} />
               Оплата при отриманні
@@ -293,8 +328,17 @@ export default function ProductDetailContent({
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <AddToCartButton
+          {/* "Підходить до вашого авто?" — по сохранённому в браузере авто
+              покупателя и применимости детали (components/FitCheck.tsx) */}
+          <FitCheck
+            compatibility={vehicleCompatibility.map((item) => ({ make: item.make, makeRaw: item.makeRaw, model: item.model }))}
+          />
+
+          {/* data-buy-box — по нему StickyBuyBar понимает, что блок ушёл с экрана */}
+          <div data-buy-box className="flex flex-wrap items-center gap-3">
+            {/* Количество (не больше остатка у поставщика) + кнопки заказа —
+                components/ProductBuyBox.tsx */}
+            <ProductBuyBox
               product={{
                 id: product.id,
                 article: product.article,
@@ -303,17 +347,9 @@ export default function ProductDetailContent({
                 retailPrice: product.retailPrice,
                 stock: product.stock,
               }}
-            />
-            <FavoriteButton productId={product.id} />
-            <QuickOrderModal
-              product={{
-                id: product.id,
-                article: product.article,
-                brand: product.brand,
-                name: product.name,
-                retailPrice: product.retailPrice,
-              }}
-            />
+            >
+              <FavoriteButton productId={product.id} />
+            </ProductBuyBox>
           </div>
 
           {/* ==================== ПИТАННЯ ПРО ТОВАР У TELEGRAM ==================== */}
@@ -445,26 +481,145 @@ export default function ProductDetailContent({
           <h2 className="mb-3 text-lg font-semibold" style={{ fontFamily: DISPLAY_FONT, color: '#fff' }}>
             Інші пропозиції на цю деталь
           </h2>
-          <div className="flex flex-col gap-2">
-            {/* Название поставщика покупателю НЕ показываем (аудит
-                безопасности) — только номер предложения, наличие и цену */}
-            {otherOffers.map((offer, index) => (
-              <Link
-                key={offer.id}
-                href={buildProductPath(offer.id, product)}
-                prefetch={false}
-                className="flex items-center justify-between rounded-xl p-3.5 text-sm transition-colors hover:bg-[rgba(59,130,246,0.07)]"
-                style={{ fontFamily: BODY_FONT, background: SURFACE_GLASS, border: `1px solid ${BORDER_SOFT}`, color: PAPER }}
-              >
-                <span>Пропозиція {index + 2}</span>
-                <span className="flex items-center gap-3">
-                  {offer.isRefurbished && <RefurbishedBadge />}
-                  <StockBadge stock={offer.stock} />
-                  <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>{formatMoney(offer.retailPrice)} грн</span>
+          {/* Свёрнутая строка: сколько предложений и от какой цены. По
+              нажатию выпадает таблица всех предложений (включая текущее):
+              склад, деталь, артикул, срок, количество, цена и кнопки заказа.
+              Название поставщика покупателю НЕ показываем (аудит
+              безопасности) — вместо него "Склад 1", "Склад 2"... */}
+          <OfferAccordion
+            background={SURFACE_GLASS}
+            border={BORDER_SOFT}
+            color={PAPER}
+            fontFamily={BODY_FONT}
+            summary={
+              <span className="flex flex-1 flex-wrap items-center justify-between gap-3">
+                <span>
+                  Пропозицій: {offerRows.length} · є на {offerRows.filter((row) => row.stock > 0).length}{' '}
+                  {offerRows.filter((row) => row.stock > 0).length === 1 ? 'складі' : 'складах'}
                 </span>
-              </Link>
-            ))}
-          </div>
+                <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>
+                  від {formatMoney(Math.min(...offerRows.map((row) => row.retailPrice)))} грн
+                </span>
+              </span>
+            }
+          >
+            {/* На телефоне таблица не помещается — показываем те же данные
+                карточками (одна карточка = одна строка таблицы) */}
+            <div className="flex flex-col md:hidden">
+              {offerRows.map((row, index) => (
+                <div key={row.id} className="py-3" style={{ borderTop: index > 0 ? `1px solid ${BORDER_SOFT}` : 'none' }}>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="font-semibold">
+                      Склад {index + 1}
+                      {row.isCurrent && (
+                        <span className="ml-1.5 text-xs font-normal" style={{ color: MUTED }}>
+                          (ця)
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}>{formatMoney(row.retailPrice)} грн</span>
+                  </div>
+                  <div className="text-xs" style={{ color: MUTED }}>
+                    {displayName} · <span className="font-mono">{product.article}</span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs">
+                    {row.stock > 0 ? (
+                      <span style={{ color: SUCCESS_TEXT }}>{row.stock} шт</span>
+                    ) : (
+                      <span style={{ color: HEAT }}>під замовлення</span>
+                    )}
+                    <span style={{ color: MUTED }}>
+                      · {row.deliveryLabel}
+                    </span>
+                    {row.isRefurbished && <RefurbishedBadge />}
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    <ProductBuyBox
+                      compact
+                      product={{
+                        id: row.id,
+                        article: product.article,
+                        brand: product.brand,
+                        name: product.name,
+                        retailPrice: row.retailPrice,
+                        stock: row.stock,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="-mx-1 hidden overflow-x-auto md:block">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead>
+                  <tr className="text-xs" style={{ color: MUTED }}>
+                    <th className="px-2 py-2 font-normal">Склад</th>
+                    <th className="px-2 py-2 font-normal">Деталь</th>
+                    <th className="px-2 py-2 font-normal">Артикул</th>
+                    <th className="px-2 py-2 font-normal">Термін доставки</th>
+                    <th className="px-2 py-2 text-right font-normal">Кількість</th>
+                    <th className="px-2 py-2 text-right font-normal">Ціна</th>
+                    <th className="px-2 py-2 font-normal"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {offerRows.map((row, index) => (
+                    <tr key={row.id} style={{ borderTop: `1px solid ${BORDER_SOFT}` }}>
+                      <td className="whitespace-nowrap px-2 py-2.5">
+                        Склад {index + 1}
+                        {row.isCurrent && (
+                          <span className="ml-1.5 text-xs" style={{ color: MUTED }}>
+                            (ця)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div>{displayName}</div>
+                        {row.isRefurbished && (
+                          <div className="mt-1">
+                            <RefurbishedBadge />
+                          </div>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2.5 font-mono text-xs">{product.article}</td>
+                      <td className="px-2 py-2.5 text-xs" style={{ color: MUTED }}>
+                        {row.deliveryLabel}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2.5 text-right text-xs">
+                        {row.stock > 0 ? (
+                          <span style={{ color: SUCCESS_TEXT }}>{row.stock} шт</span>
+                        ) : (
+                          <span style={{ color: HEAT }}>під замовлення</span>
+                        )}
+                      </td>
+                      <td
+                        className="whitespace-nowrap px-2 py-2.5 text-right"
+                        style={{ fontFamily: DISPLAY_FONT, fontWeight: 600, color: '#fff' }}
+                      >
+                        {formatMoney(row.retailPrice)} грн
+                      </td>
+                      <td className="px-2 py-2.5">
+                        <div className="flex items-center justify-end gap-2">
+                          <ProductBuyBox
+                            compact
+                            product={{
+                              id: row.id,
+                              article: product.article,
+                              brand: product.brand,
+                              name: product.name,
+                              retailPrice: row.retailPrice,
+                              stock: row.stock,
+                            }}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </OfferAccordion>
         </section>
       )}
 
@@ -618,7 +773,7 @@ ${canonicalUrl}`}
           <li className="flex items-start gap-2.5">
             <Truck className="mt-0.5 h-4 w-4 shrink-0" style={{ color: ACCENT }} />
             <span>
-              Доставка Новою Поштою по всій Україні. Товари в наявності відправляємо в день замовлення.{' '}
+              Доставка Новою Поштою по всій Україні. Деталі з нашого складу відправляємо в день замовлення, від постачальника — за його терміном (дата відправки вказана біля ціни).{' '}
               <Link href="/delivery" className="underline" style={{ color: ACCENT }}>
                 Детальніше
               </Link>
@@ -684,7 +839,19 @@ ${canonicalUrl}`}
           </div>
         </section>
       )}
-    </>
+      {/* Липкая полоса "Купити" внизу экрана на телефоне — появляется,
+          когда основной блок покупки ушёл вверх (components/StickyBuyBar.tsx) */}
+      <StickyBuyBar
+        product={{
+          id: product.id,
+          article: product.article,
+          brand: product.brand,
+          name: product.name,
+          retailPrice: product.retailPrice,
+          stock: product.stock,
+        }}
+      />
+    </div>
   );
 }
 

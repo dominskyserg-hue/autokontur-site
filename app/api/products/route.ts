@@ -59,6 +59,7 @@ import { CUSTOMER_SESSION_COOKIE, getCustomerSessionPhoneFromRequest } from '@/l
 import { buildTextSearchClause } from '@/lib/productSearch';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
+import { getOwnStockKeys, ownStockKey } from '@/lib/ownStock';
 import { isAdminRequest } from '@/lib/adminSession';
 import { publicImageUrl } from '@/lib/imageUrl';
 
@@ -151,6 +152,12 @@ interface ProductResponse {
   offerCount?: number;
   // Лучшее предложение — восстановленная / б/у деталь (бейдж "Відновлена")
   isRefurbished: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — на витрине бейдж
+  // "На нашому складі · відправка сьогодні" и первое место в поиске
+  ownStock: boolean;
+  // Подходит ли к "моєму авто" покупателя (параметры fitMake/fitModel,
+  // lib/myCar.ts): true/false; null — авто не передано
+  fitsMyCar: boolean | null;
   updatedAt: string;
 }
 
@@ -342,8 +349,11 @@ export async function GET(request: NextRequest) {
     // Пошук — та сама сортування "За популярністю", що й на категоріях,
     // марках і хабах (lib/popularitySort.ts): наявність → продаж за 180
     // днів → фото → група бренду (lib/brandPriority.ts) → ціна за зростанням
+    // Ключи деталей с НАШЕГО склада (кэш 2 минуты) — нужны и для
+    // сортировки поиска (такие первыми), и для бейджа в ответе
+    const ownStockKeys = await getOwnStockKeys(pool);
     const orderBySql = search
-      ? groupedOrderBy(buildPopularOrderBy(await getRecentlySoldProductIds(pool)))
+      ? groupedOrderBy(buildPopularOrderBy(await getRecentlySoldProductIds(pool), ownStockKeys))
       : featured
         ? 'ORDER BY p.updated_at DESC'
         : 'ORDER BY p.article ASC';
@@ -358,6 +368,16 @@ export async function GET(request: NextRequest) {
     values.push(pageSize, offset);
     const limitPlaceholder = `$${values.length - 1}`;
     const offsetPlaceholder = `$${values.length}`;
+
+    // "Моє авто" покупателя (fitMake/fitModel): НЕ фильтр, а отметка
+    // "✓ підходить" у каждого товара — то же условие, что и у фильтра по
+    // авто (lib/vehicleFilter.ts: свои поля товара или своя применимость),
+    // только как колонка в SELECT. Параметры добавляются ПОСЛЕ limit/offset —
+    // на их номера это не влияет, а в подсчёт total (filterValues) не попадают
+    const fitMake = (searchParams.get('fitMake') || '').trim().slice(0, 60);
+    const fitModel = (searchParams.get('fitModel') || '').trim().slice(0, 60);
+    const fitClause = fitMake ? buildVehicleWhereClause({ make: fitMake, model: fitModel || undefined }, values.length + 1) : null;
+    if (fitClause) values.push(...fitClause.params);
 
     // Персональна ціна покупця (customer_pricing_rules, за cookie з
     // телефоном "залогіненого" в Особистому кабінеті покупця —
@@ -396,6 +416,7 @@ export async function GET(request: NextRequest) {
         b.supplier_id,
         s.name AS supplier_name,
         s.delivery_time,
+        ${fitClause ? `(${fitClause.clause}) AS fits_my_car,` : ''}
         p.updated_at${useApproxCount ? '' : ', COUNT(*) OVER() AS total_count'}
       FROM products p
       ${g.join}
@@ -438,6 +459,8 @@ export async function GET(request: NextRequest) {
       discountPercent: parseFloat(row.discount_percent),
       stock: row.stock,
       isRefurbished: row.is_refurbished,
+      ownStock: ownStockKeys.includes(ownStockKey(row.article, row.brand)),
+      fitsMyCar: fitClause ? Boolean(row.fits_my_car) : null,
       ...(isAdmin ? { supplierId: row.supplier_id, supplierName: row.supplier_name } : {}),
       deliveryTime: row.delivery_time,
       updatedAt: row.updated_at,

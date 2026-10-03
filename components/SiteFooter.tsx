@@ -60,6 +60,7 @@ export default function SiteFooter({ shopName, phone, workingHours }: SiteFooter
               Сервіс та доставка
             </h4>
             <ul className="flex flex-col gap-2.5">
+              <li><Link href="/zamovlennia" className={LINK_CLASS} style={linkStyle}>Де моє замовлення?</Link></li>
               <li><Link href="/delivery" className={LINK_CLASS} style={linkStyle}>Доставка Новою Поштою</Link></li>
               <li><Link href="/returns" className={LINK_CLASS} style={linkStyle}>Повернення та обмін</Link></li>
               <li><Link href="/pidbir-za-vin" className={LINK_CLASS} style={linkStyle}>Підбір за VIN</Link></li>

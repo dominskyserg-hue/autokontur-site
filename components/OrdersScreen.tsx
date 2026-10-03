@@ -43,6 +43,8 @@ interface OrderListItem {
   itemsCount: number;
   totalAmount: number;
   paidAmount: number;
+  // Напоминание "Передзвонити" (или null)
+  callbackAt: string | null;
   createdAt: string;
   updatedAt: string;
   // Кто ведёт заказ; null — заказ ничей
@@ -60,13 +62,14 @@ interface OrderCounts {
   byStatus: Record<string, number>;
   unpaid: number;
   all: number;
+  callbacks: number;
 }
 
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 350;
 
 // Быстрый фильтр: либо статус заказа, либо "Не оплачены", либо "Все"
-type QuickFilter = '' | OrderStatus | 'unpaid';
+type QuickFilter = '' | OrderStatus | 'unpaid' | 'callback';
 
 // Дата в формате ГГГГ-ММ-ДД по местному времени браузера — именно такой
 // формат ждёт <input type="date"> и параметры dateFrom/dateTo в API
@@ -141,6 +144,7 @@ export default function OrdersScreen() {
       params.set('pageSize', String(PAGE_SIZE));
       params.set('withCounts', '1');
       if (quickFilter === 'unpaid') params.set('unpaid', '1');
+      else if (quickFilter === 'callback') params.set('callback', '1');
       else if (quickFilter) params.set('status', quickFilter);
       if (debouncedSearch) params.set('search', debouncedSearch);
       if (dateFrom) params.set('dateFrom', dateFrom);
@@ -173,7 +177,8 @@ export default function OrdersScreen() {
   // экране (app/api/admin/export/route.ts)
   const exportParams = new URLSearchParams({ kind: 'orders' });
   if (quickFilter === 'unpaid') exportParams.set('unpaid', '1');
-  else if (quickFilter) exportParams.set('status', quickFilter);
+  // Фильтр "Передзвонити" выгрузка не поддерживает — выгружаем без него
+  else if (quickFilter && quickFilter !== 'callback') exportParams.set('status', quickFilter);
   if (debouncedSearch) exportParams.set('search', debouncedSearch);
   if (dateFrom) exportParams.set('dateFrom', dateFrom);
   if (dateTo) exportParams.set('dateTo', dateTo);
@@ -190,6 +195,7 @@ export default function OrdersScreen() {
       count: counts ? counts.byStatus[status] || 0 : undefined,
     })),
     { key: 'unpaid', label: 'Не оплачены', count: counts?.unpaid },
+    { key: 'callback', label: '📞 Передзвонити', count: counts?.callbacks },
   ];
 
   // Быстрый выбор периода — чтобы не щёлкать календарь каждый раз
@@ -422,6 +428,21 @@ export default function OrdersScreen() {
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       {order.customerName} {order.customerSurname}
+                      {/* Напоминание "Передзвонити": красное — уже пора (или
+                          просрочено), жёлтое — позже */}
+                      {order.callbackAt && (
+                        <span
+                          className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full font-medium"
+                          style={
+                            new Date(order.callbackAt).getTime() <= Date.now()
+                              ? { background: 'var(--bad-soft)', color: 'var(--bad)' }
+                              : { background: 'var(--warn-soft)', color: 'var(--warn)' }
+                          }
+                          title="Нагадування: передзвонити клієнту"
+                        >
+                          📞 {formatDateTime(order.callbackAt)}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 font-mono whitespace-nowrap">{order.customerPhone}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">{order.itemsCount}</td>
@@ -501,6 +522,11 @@ export default function OrdersScreen() {
           orderId={selectedOrderId}
           onClose={() => setSelectedOrderId(null)}
           onOrderChanged={fetchOrders}
+          // "Повторити замовлення" — сразу открываем только что созданный заказ
+          onOpenOrder={(newOrderId) => {
+            fetchOrders();
+            setSelectedOrderId(newOrderId);
+          }}
           navigation={(() => {
             // Листаем в пределах текущей страницы списка (с теми же
             // фильтрами, что сейчас на экране)

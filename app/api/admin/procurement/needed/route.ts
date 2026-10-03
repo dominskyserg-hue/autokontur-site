@@ -31,6 +31,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { requireOwnerAccess } from '@/lib/adminAuth';
+import { ensureOrderItemProcurementColumns, KYIV_TODAY_SQL } from '@/lib/orderItemColumns';
 
 export const runtime = 'nodejs';
 
@@ -70,6 +71,27 @@ interface NeededItem {
   customerPhone: string;
   orderStatus: string;
   orderCreatedAt: string;
+  // Только для status=pending — выгоднее предложение у другого поставщика
+  // (null, если лучше текущего ничего нет)
+  betterOffer: BetterOffer | null;
+  // Только для status=ordered_from_supplier — когда заказали у поставщика,
+  // когда он обещал привезти (YYYY-MM-DD) и сколько дней уже опаздывает
+  supplierOrderedAt: string | null;
+  expectedAt: string | null;
+  daysLate: number;
+}
+
+// Лучшее предложение того же артикула у другого поставщика
+interface BetterOffer {
+  productId: string;
+  supplierName: string;
+  costPrice: number;
+  stock: number;
+  // 'cheaper' — дешевле по закупке; 'in_stock' — у текущего поставщика
+  // нет в наличии, а у этого есть (цена может быть и выше)
+  reason: 'cheaper' | 'in_stock';
+  // Экономия на всю позицию (разница закупки × количество); 0 для 'in_stock' дороже
+  saving: number;
 }
 
 interface SupplierGroup {
@@ -89,12 +111,24 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await ensureOrderItemProcurementColumns();
+
+    // Бренд сравниваем без регистра, пробелов и знаков ("Hyundai/Kia" =
+    // "HYUNDAI KIA") — так же, как в app/api/admin/products/offers/route.ts
+    const brandKey = (column: string) =>
+      `regexp_replace(upper(COALESCE(${column}, '')), '[^A-Z0-9А-ЯЁІЇЄҐ]', '', 'g')`;
+
     const result = await pool.query(
       `
       SELECT
         oi.id, oi.order_id, oi.article, oi.brand, oi.name, oi.quantity, oi.cost_price,
         oi.supplier_id, oi.supplier_name, p.stock AS current_stock,
         COALESCE(recv.total_received, 0) AS total_received,
+        oi.supplier_ordered_at,
+        to_char(oi.expected_at, 'YYYY-MM-DD') AS expected_at,
+        GREATEST(0, ${KYIV_TODAY_SQL} - oi.expected_at)::int AS days_late,
+        alt.id AS alt_product_id, alt.supplier_name AS alt_supplier_name,
+        alt.cost_price AS alt_cost_price, alt.stock AS alt_stock,
         o.customer_name, o.customer_surname, o.customer_phone, o.status AS order_status, o.created_at AS order_created_at
       FROM order_items oi
       JOIN orders o ON o.id = oi.order_id
@@ -105,6 +139,24 @@ export async function GET(request: NextRequest) {
         WHERE reason = 'supplier_receipt'
         GROUP BY order_item_id
       ) recv ON recv.order_item_id = oi.id
+      -- Лучшее предложение у ДРУГОГО поставщика (только для "Нужно заказать"):
+      -- в наличии и либо дешевле по закупке, либо у текущего товара нет
+      -- остатка. Из подходящих — самое дешёвое
+      LEFT JOIN LATERAL (
+        SELECT p2.id, s2.name AS supplier_name, p2.cost_price, p2.stock
+        FROM products p2
+        JOIN suppliers s2 ON s2.id = p2.supplier_id
+        WHERE $1 = 'pending'
+          AND p2.article = oi.article
+          AND ${brandKey('p2.brand')} = ${brandKey('oi.brand')}
+          AND p2.is_active
+          AND s2.is_active
+          AND p2.stock > 0
+          AND p2.supplier_id IS DISTINCT FROM oi.supplier_id
+          AND (p2.cost_price < oi.cost_price - 0.009 OR COALESCE(p.stock, 0) <= 0)
+        ORDER BY p2.cost_price ASC
+        LIMIT 1
+      ) alt ON true
       WHERE oi.status = $1 AND o.status NOT IN ('cancelled', 'shipped')
       ORDER BY oi.supplier_name NULLS LAST, o.created_at ASC
       `,
@@ -142,7 +194,23 @@ export async function GET(request: NextRequest) {
         customerPhone: row.customer_phone,
         orderStatus: row.order_status,
         orderCreatedAt: row.order_created_at,
+        betterOffer: null,
+        supplierOrderedAt: row.supplier_ordered_at,
+        expectedAt: row.expected_at,
+        daysLate: row.days_late ?? 0,
       };
+      if (row.alt_product_id) {
+        const altCost = parseFloat(row.alt_cost_price);
+        const cheaper = altCost < item.costPrice - 0.009;
+        item.betterOffer = {
+          productId: row.alt_product_id,
+          supplierName: row.alt_supplier_name,
+          costPrice: altCost,
+          stock: Number(row.alt_stock),
+          reason: cheaper ? 'cheaper' : 'in_stock',
+          saving: cheaper ? Math.round((item.costPrice - altCost) * item.quantity * 100) / 100 : 0,
+        };
+      }
       group.items.push(item);
     }
 

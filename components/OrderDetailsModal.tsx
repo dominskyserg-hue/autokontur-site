@@ -60,6 +60,10 @@ interface OrderItem {
   supplierName: string | null;
   supplierContactName: string | null;
   status: OrderItemStatus;
+  // Товар в каталоге сейчас: фото и страница на сайте (null — товара нет)
+  productId?: string | null;
+  imageUrl?: string | null;
+  productPath?: string | null;
 }
 
 // Предложение того же артикула у одного из поставщиков — то, что
@@ -75,6 +79,13 @@ interface SupplierOffer {
   retailPrice: number;
   stock: number;
   sameBrand: boolean;
+}
+
+// Аналог с ДРУГИМ артикулом (кросс-номер), которым можно заменить деталь
+// позиции (GET /api/admin/products/offers — поле analogs)
+interface AnalogOffer extends SupplierOffer {
+  article: string;
+  relation: 'oem' | 'aftermarket';
 }
 
 // Кнопки быстрой наценки на цену продажи: +15%, +20%, +30% от закупки
@@ -113,7 +124,33 @@ interface OrderDetails {
   assignedManager: { id: string; name: string; assignedAt: string | null } | null;
   // false — вошёл менеджер: закупочные цены и прибыль ему не показываем
   canSeeCosts: boolean;
+  // Откуда пришёл клиент (lib/orderSource.ts)
+  source: { label: string; detail: string | null; kind: 'ads' | 'search' | 'social' | 'messenger' | 'other' | 'direct' };
+  // Персональное правило цены клиента: скидка/наценка в % от закупки
+  pricingRule: { ruleType: 'discount' | 'markup'; percent: number } | null;
+  // Напоминание "Передзвонити" (ISO) или null
+  callbackAt: string | null;
 }
+
+// Дата в формате поля <input type="datetime-local"> — "2026-10-01T10:00"
+// по МЕСТНОМУ времени браузера (toISOString дал бы UTC и сдвинул часы)
+function toDateTimeLocal(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+// Цвет плашки "Звідки клієнт" по типу источника
+const SOURCE_COLORS: Record<OrderDetails['source']['kind'], { bg: string; fg: string }> = {
+  ads: { bg: 'var(--accent-soft)', fg: 'var(--accent)' },
+  search: { bg: 'var(--good-soft)', fg: 'var(--good)' },
+  social: { bg: 'var(--warn-soft)', fg: 'var(--warn)' },
+  messenger: { bg: 'var(--warn-soft)', fg: 'var(--warn)' },
+  other: { bg: 'var(--surface-2)', fg: 'var(--ink-muted)' },
+  direct: { bg: 'var(--surface-2)', fg: 'var(--ink-faint)' },
+};
+
+// Кнопки быстрой скидки на цену продажи позиции: −5%, −10%
+const QUICK_DISCOUNTS = [5, 10];
 
 // Статус посылки от Новой Почты (GET /api/orders/[id]/ttn-status,
 // lib/novaPoshta/tracking.ts)
@@ -196,7 +233,7 @@ interface AddItemProductOption {
   supplierName: string;
 }
 
-type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer' | 'delivery' | 'note';
+type SaveKey = 'status' | 'ttn' | 'vehicle' | 'customer' | 'delivery' | 'note' | 'callback';
 type SaveState = { state: 'idle' | 'saving' | 'saved' | 'error'; error?: string };
 const IDLE: SaveState = { state: 'idle' };
 
@@ -211,6 +248,24 @@ function toInternationalPhone(raw: string): string | null {
   if (digits.length === 10 && digits.startsWith('0')) return `38${digits}`;
   if (digits.length >= 10 && digits.length <= 15) return digits;
   return null;
+}
+
+// Миниатюра товара в строке позиции: если картинка не загрузилась
+// (ссылка устарела, сайт-источник недоступен), вместо значка "битой
+// картинки" показываем аккуратную надпись
+function ItemThumb({ src }: { src: string | null | undefined }) {
+  const [broken, setBroken] = useState(false);
+  if (!src || broken) {
+    return (
+      <span className="text-[10px] text-center leading-tight" style={{ color: 'var(--ink-faint)' }}>
+        немає фото
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" className="w-full h-full object-cover" loading="lazy" onError={() => setBroken(true)} />
+  );
 }
 
 // Маленькая кнопка "скопировать" — после нажатия на пару секунд
@@ -272,11 +327,15 @@ export default function OrderDetailsModal({
   onClose,
   onOrderChanged,
   navigation,
+  onOpenOrder,
 }: {
   orderId: string;
   onClose: () => void;
   onOrderChanged: () => void;
   navigation?: OrderNavigation;
+  // Открыть другой заказ в этом же окне (например, только что созданный
+  // кнопкой "Повторити замовлення")
+  onOpenOrder?: (orderId: string) => void;
 }) {
   const [orderDetails, setOrderDetails] = useState<OrderDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(true);
@@ -297,7 +356,7 @@ export default function OrderDetailsModal({
   // Зміна міста/відділення прямо в картці — пошук НП з Ref'ами, тож
   // обране відділення одразу підхоплюється формою створення ТТН
   const [editingDelivery, setEditingDelivery] = useState(false);
-  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE, delivery: IDLE, note: IDLE });
+  const [saveState, setSaveState] = useState<Record<SaveKey, SaveState>>({ status: IDLE, ttn: IDLE, vehicle: IDLE, customer: IDLE, delivery: IDLE, note: IDLE, callback: IDLE });
 
   // ---- создание ТТН через API Новой Почты ----
   const [showCreateTtn, setShowCreateTtn] = useState(false);
@@ -317,8 +376,22 @@ export default function OrderDetailsModal({
   const [ttnCost, setTtnCost] = useState('');
   // Післяплата: галочка и сумма. По умолчанию включена, если заказ
   // оплачен не полностью, а сумма = сколько клиент ещё не доплатил
-  const [ttnCodEnabled, setTtnCodEnabled] = useState(false);
+  // Режим оплати при отриманні: none — без неї, cod — післяплата,
+  // control — «Контроль оплати» Нової Пошти (одне з двох, не обидва)
+  const [ttnPayMode, setTtnPayMode] = useState<'none' | 'cod' | 'control'>('none');
   const [ttnCodAmount, setTtnCodAmount] = useState('');
+  // Відправник цієї ТТН: список контактів і адрес забору підтягується з
+  // API Нової Пошти, за замовчуванням вибрано те, що збережено в Налаштуваннях
+  const [senderContacts, setSenderContacts] = useState<Array<{ ref: string; label: string; phone: string }>>([]);
+  const [senderAddresses, setSenderAddresses] = useState<Array<{ ref: string; label: string }>>([]);
+  const [senderContactRef, setSenderContactRef] = useState('');
+  const [senderAddressRef, setSenderAddressRef] = useState('');
+  // Відправка з відділення НП (напр. Одеса №116) замість адреси забору
+  // кур'єром: обране через пошук НП місто й відділення
+  const [senderFromWarehouse, setSenderFromWarehouse] = useState(false);
+  const [senderWarehouse, setSenderWarehouse] = useState<{ cityRef: string; warehouseRef: string; label: string } | null>(null);
+  const [senderLoading, setSenderLoading] = useState(false);
+  const [senderError, setSenderError] = useState<string | null>(null);
   const [ttnPayerType, setTtnPayerType] = useState<'Recipient' | 'Sender'>('Recipient');
   const [ttnDescription, setTtnDescription] = useState('Запчастини');
   const [creatingTtn, setCreatingTtn] = useState(false);
@@ -338,6 +411,8 @@ export default function OrderDetailsModal({
   const [itemOffers, setItemOffers] = useState<SupplierOffer[]>([]);
   const [itemOffersLoading, setItemOffersLoading] = useState(false);
   const [itemOffersError, setItemOffersError] = useState<string | null>(null);
+  const [itemAnalogs, setItemAnalogs] = useState<AnalogOffer[]>([]);
+  const [replacingProductId, setReplacingProductId] = useState<string | null>(null);
   const [editItemSaving, setEditItemSaving] = useState(false);
   const [editItemError, setEditItemError] = useState<string | null>(null);
 
@@ -364,6 +439,10 @@ export default function OrderDetailsModal({
 
   // ---- телефон відділення Нової Пошти (контакт для дзвінка) ----
   const [warehousePhone, setWarehousePhone] = useState<string | null>(null);
+
+  // ---- закупка и прибыль в шапке: скрыты, пока не нажмёшь ----
+  // (чтобы клиент, стоящий рядом с менеджером, не видел нашу наценку)
+  const [showProfit, setShowProfit] = useState(false);
 
   // ---- модалка "Принять оплату" ----
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -448,6 +527,129 @@ export default function OrderDetailsModal({
     };
   }, [orderId, historyVersion]);
 
+  // Перечитать заказ целиком с сервера — после действий, которые меняют
+  // сразу несколько полей (скидка меняет цены всех позиций, "Взяти зі
+  // складу" — ещё и статус заказа)
+  const reloadOrder = async () => {
+    const orderResponse = await fetch(`/api/orders/${orderId}`);
+    const orderData = await orderResponse.json();
+    if (orderResponse.ok && orderData.order) {
+      setOrderDetails(orderData.order as OrderDetails);
+      setStatusDraft((orderData.order as OrderDetails).status);
+    }
+  };
+
+  // ---- скидка на весь заказ ----
+  const [showDiscount, setShowDiscount] = useState(false);
+  const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
+  const [discountValue, setDiscountValue] = useState('');
+  const [discountSaving, setDiscountSaving] = useState(false);
+  const [discountError, setDiscountError] = useState<string | null>(null);
+
+  const handleApplyDiscount = async () => {
+    const value = parseFloat(discountValue.replace(',', '.'));
+    if (!Number.isFinite(value) || value <= 0) {
+      setDiscountError('Вкажіть розмір знижки — число більше нуля');
+      return;
+    }
+    setDiscountSaving(true);
+    setDiscountError(null);
+    try {
+      const response = await fetch(`/api/orders/${orderId}/discount`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: discountType, value }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося застосувати знижку');
+      await reloadOrder();
+      setShowDiscount(false);
+      setDiscountValue('');
+      onOrderChanged();
+      bumpHistory();
+    } catch (error) {
+      setDiscountError(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setDiscountSaving(false);
+    }
+  };
+
+  // ---- разделить заказ: выбранные позиции -> в новый связанный заказ ----
+  const [showSplit, setShowSplit] = useState(false);
+  const [splitSelected, setSplitSelected] = useState<Set<string>>(new Set());
+  const [splitting, setSplitting] = useState(false);
+  const [splitError, setSplitError] = useState<string | null>(null);
+
+  // По умолчанию отмечаем всё, что ещё НЕ на складе: готовое остаётся
+  // в этом заказе и может ехать клиенту сейчас
+  const openSplit = () => {
+    if (!orderDetails) return;
+    const notReady = orderDetails.items
+      .filter((i) => i.status === 'pending' || i.status === 'ordered_from_supplier')
+      .map((i) => i.id);
+    setSplitSelected(new Set(notReady));
+    setSplitError(null);
+    setShowSplit(true);
+  };
+
+  const handleSplit = async () => {
+    if (!orderDetails) return;
+    setSplitting(true);
+    setSplitError(null);
+    try {
+      const response = await fetch(`/api/admin/orders/${orderDetails.id}/split`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemIds: Array.from(splitSelected) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося розділити замовлення');
+      setShowSplit(false);
+      await reloadOrder();
+      onOrderChanged();
+      bumpHistory();
+      if (onOpenOrder && window.confirm(`Створено замовлення №${data.orderNumber}. Відкрити його?`)) {
+        onOpenOrder(data.orderId as string);
+      }
+    } catch (error) {
+      setSplitError(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setSplitting(false);
+    }
+  };
+
+  // ---- повторить заказ: новый заказ с теми же товарами по текущим ценам ----
+  const [repeating, setRepeating] = useState(false);
+  const handleRepeatOrder = async () => {
+    if (!orderDetails) return;
+    const confirmed = window.confirm(
+      `Створити нове замовлення для ${orderDetails.customerName} з тими самими товарами?\n\n` +
+        'Ціни будуть актуальні з каталогу (з урахуванням персонального правила клієнта), доставка — та сама.'
+    );
+    if (!confirmed) return;
+    setRepeating(true);
+    try {
+      const response = await fetch(`/api/admin/orders/${orderDetails.id}/repeat`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося повторити замовлення');
+      onOrderChanged();
+      const skippedNote =
+        (data.skipped as string[]).length > 0
+          ? `\n\nНе перенесено (товару вже немає в каталозі): ${(data.skipped as string[]).join(', ')}`
+          : '';
+      if (onOpenOrder) {
+        if (skippedNote) window.alert(`Створено замовлення №${data.orderNumber}.${skippedNote}`);
+        onOpenOrder(data.orderId as string);
+      } else {
+        window.alert(`Створено замовлення №${data.orderNumber}.${skippedNote}`);
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setRepeating(false);
+    }
+  };
+
   // "Взяти зі складу": позиция закрепляется за деталью с нашей полки и
   // сразу становится "На складе". Статус всего заказа мог при этом
   // сдвинуться дальше — поэтому перечитываем заказ целиком
@@ -463,12 +665,7 @@ export default function OrderDetailsModal({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не вдалося взяти зі складу');
 
-      const orderResponse = await fetch(`/api/orders/${orderDetails.id}`);
-      const orderData = await orderResponse.json();
-      if (orderResponse.ok && orderData.order) {
-        setOrderDetails(orderData.order as OrderDetails);
-        setStatusDraft((orderData.order as OrderDetails).status);
-      }
+      await reloadOrder();
       onOrderChanged();
       bumpHistory();
     } catch (error) {
@@ -716,6 +913,12 @@ export default function OrderDetailsModal({
     savePatch('ttn', { ttnNumber: next || null });
   };
 
+  // ---- напоминание "Передзвонити": сохраняется сразу при выборе ----
+  // null — снять напоминание (кнопка "Виконано")
+  const saveCallback = (date: Date | null) => {
+    savePatch('callback', { callbackAt: date ? date.toISOString() : null });
+  };
+
   // ---- заметка менеджера — сохраняется при потере фокуса, если изменилась ----
   const handleManagerNoteBlur = () => {
     if (!orderDetails) return;
@@ -777,12 +980,38 @@ export default function OrderDetailsModal({
   // ------------------------------------------------------------
   // СОЗДАНИЕ ТТН ЧЕРЕЗ API НОВОЙ ПОЧТЫ
   // ------------------------------------------------------------
+  // Підтягує відправників з API Нової Пошти + те, що збережено в
+  // Налаштуваннях (щоб підставити як вибране за замовчуванням)
+  const loadSenderChoices = async () => {
+    setSenderLoading(true);
+    setSenderError(null);
+    try {
+      const [optionsResponse, settingsResponse] = await Promise.all([
+        fetch('/api/admin/nova-poshta/sender-options'),
+        fetch('/api/nova-poshta-settings'),
+      ]);
+      const options = await optionsResponse.json();
+      if (!optionsResponse.ok) throw new Error(options.error || 'Не вдалося отримати відправників');
+      const settings = await settingsResponse.json();
+
+      setSenderContacts(options.contacts || []);
+      setSenderAddresses(options.addresses || []);
+      setSenderContactRef(settings?.settings?.contactSenderRef || options.contacts?.[0]?.ref || '');
+      setSenderAddressRef(settings?.settings?.senderAddressRef || options.addresses?.[0]?.ref || '');
+    } catch (error) {
+      setSenderError(error instanceof Error ? error.message : 'Помилка мережі при завантаженні відправників');
+    } finally {
+      setSenderLoading(false);
+    }
+  };
+
   const openCreateTtn = () => {
     setCreateTtnError(null);
     setTtnCost(orderDetails ? String(Math.ceil(orderDetails.totalAmount)) : '');
     const unpaid = orderDetails ? Math.max(0, Math.ceil(orderDetails.totalAmount - orderDetails.paidAmount)) : 0;
-    setTtnCodEnabled(unpaid > 0);
+    setTtnPayMode(unpaid > 0 ? 'cod' : 'none');
     setTtnCodAmount(unpaid > 0 ? String(unpaid) : '');
+    loadSenderChoices();
 
     const knownRecipient =
       orderDetails?.cityRef && orderDetails?.warehouseRef
@@ -803,9 +1032,25 @@ export default function OrderDetailsModal({
       setCreateTtnError('Оберіть місто та відділення отримувача.');
       return;
     }
-    if (ttnCodEnabled && !(parseFloat(ttnCodAmount.replace(',', '.')) > 0)) {
-      setCreateTtnError('Вкажіть суму післяплати або зніміть галочку.');
+    const payAmount = parseFloat(ttnCodAmount.replace(',', '.')) || 0;
+    if (senderFromWarehouse && !senderWarehouse) {
+      setCreateTtnError('Оберіть місто та відділення відправника або поверніться до адреси забору.');
       return;
+    }
+    if (ttnPayMode !== 'none' && !(payAmount > 0)) {
+      setCreateTtnError('Вкажіть суму оплати при отриманні або оберіть «Без оплати».');
+      return;
+    }
+    // Контроль оплати: якщо клієнт ще не доплатив, а ТТН її не покриває —
+    // питаємо підтвердження, щоб не відправити неоплачену посилку випадково
+    const unpaidNow = Math.max(0, Math.ceil(orderDetails.totalAmount - orderDetails.paidAmount));
+    const covered = ttnPayMode === 'none' ? 0 : payAmount;
+    if (unpaidNow > covered) {
+      const ok = window.confirm(
+        `Увага: за замовленням не оплачено ${unpaidNow} грн, а в ТТН при отриманні заплатить лише ${Math.round(covered)} грн. ` +
+          'Створити ТТН все одно?'
+      );
+      if (!ok) return;
     }
 
     setCreatingTtn(true);
@@ -822,7 +1067,14 @@ export default function OrderDetailsModal({
           cost: parseFloat(ttnCost),
           payerType: ttnPayerType,
           description: ttnDescription,
-          codAmount: ttnCodEnabled ? parseFloat(ttnCodAmount.replace(',', '.')) || 0 : 0,
+          codAmount: ttnPayMode === 'cod' ? payAmount : 0,
+          paymentControlAmount: ttnPayMode === 'control' ? payAmount : 0,
+          senderContactRef: senderContactRef || undefined,
+          senderAddressRef: senderAddressRef || undefined,
+          senderWarehouse:
+            senderFromWarehouse && senderWarehouse
+              ? { cityRef: senderWarehouse.cityRef, warehouseRef: senderWarehouse.warehouseRef }
+              : undefined,
         }),
       });
       const data = await response.json();
@@ -860,6 +1112,7 @@ export default function OrderDetailsModal({
   // открытии редактирования позиции
   const loadItemOffers = async (item: OrderItem) => {
     setItemOffers([]);
+    setItemAnalogs([]);
     setItemOffersError(null);
     setItemOffersLoading(true);
     try {
@@ -869,6 +1122,7 @@ export default function OrderDetailsModal({
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Не удалось загрузить предложения');
       setItemOffers(data.offers as SupplierOffer[]);
+      setItemAnalogs((data.analogs as AnalogOffer[]) || []);
     } catch (error) {
       setItemOffersError(error instanceof Error ? error.message : 'Ошибка сети');
     } finally {
@@ -882,6 +1136,39 @@ export default function OrderDetailsModal({
   const pickOffer = (offer: SupplierOffer) => {
     setEditItemSupplierId(offer.supplierId);
     setEditItemCostPrice(String(offer.costPrice));
+  };
+
+  // Заменить деталь позиции на аналог (другой артикул). Цену продажи
+  // оставляем ту, что сейчас в поле формы (о ней уже могли договориться
+  // с клиентом), — поменять её можно сразу после замены
+  const handleReplaceWithAnalog = async (item: OrderItem, analog: AnalogOffer) => {
+    if (!orderDetails) return;
+    const price = parseFloat(editItemPrice.replace(',', '.'));
+    const confirmed = window.confirm(
+      `Замінити ${item.brand || ''} ${item.article} на ${analog.brand || ''} ${analog.article} ` +
+        `(${analog.supplierName}, закупка ${formatMoney(analog.costPrice)} грн)?\n\n` +
+        `Ціна продажу залишиться ${Number.isFinite(price) ? formatMoney(price) : formatMoney(item.price)} грн — за потреби змініть її після заміни.`
+    );
+    if (!confirmed) return;
+    setReplacingProductId(analog.productId);
+    try {
+      const response = await fetch(`/api/orders/${orderDetails.id}/items/${item.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId: analog.productId, ...(Number.isFinite(price) ? { price } : {}) }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Не вдалося замінити позицію');
+      setEditingItemId(null);
+      // Перечитываем заказ: у позиции новый товар — новое фото и ссылка
+      await reloadOrder();
+      onOrderChanged();
+      bumpHistory();
+    } catch (error) {
+      setEditItemError(error instanceof Error ? error.message : 'Помилка мережі');
+    } finally {
+      setReplacingProductId(null);
+    }
   };
 
   const cancelItemEdit = () => {
@@ -926,7 +1213,8 @@ export default function OrderDetailsModal({
       }
 
       const updatedItem = data.item as OrderItem;
-      const nextItems = orderDetails.items.map((item) => (item.id === updatedItem.id ? updatedItem : item));
+      // Слияние, а не замена: ответ PATCH не содержит фото и ссылку товара
+      const nextItems = orderDetails.items.map((item) => (item.id === updatedItem.id ? { ...item, ...updatedItem } : item));
       const nextTotal = nextItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
       setOrderDetails({ ...orderDetails, items: nextItems, totalAmount: nextTotal });
       setEditingItemId(null);
@@ -1183,8 +1471,11 @@ export default function OrderDetailsModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* ==================== ШАПКА ==================== */}
+        {/* relative + pr-14 — место под крестик, закреплённый в правом
+            верхнем углу (кнопки шапки могут переноситься на новую строку,
+            а крестик всегда остаётся в углу) */}
         <div
-          className="flex items-start justify-between gap-4 px-6 py-4 shrink-0 flex-wrap"
+          className="relative flex items-start justify-between gap-4 pl-6 pr-14 py-4 shrink-0 flex-wrap"
           style={{ borderBottom: '1px solid var(--line)' }}
         >
           <div className="min-w-0">
@@ -1229,6 +1520,24 @@ export default function OrderDetailsModal({
                 }}
               />
             )}
+            {/* Звідки прийшов клієнт — щоб бачити, які замовлення приносить
+                реклама Google Ads, а які — звичайний пошук чи прямий захід */}
+            {orderDetails && (
+              <p className="mt-1.5">
+                <span
+                  className="text-[11px] px-2 py-0.5 rounded-full font-medium"
+                  style={{ background: SOURCE_COLORS[orderDetails.source.kind].bg, color: SOURCE_COLORS[orderDetails.source.kind].fg }}
+                  title="Звідки клієнт прийшов на сайт (за мітками при оформленні замовлення)"
+                >
+                  Звідки: {orderDetails.source.label}
+                </span>
+                {orderDetails.source.detail && (
+                  <span className="text-[11px] ml-1.5" style={{ color: 'var(--ink-faint)' }}>
+                    {orderDetails.source.detail}
+                  </span>
+                )}
+              </p>
+            )}
           </div>
 
           <div className="flex items-center gap-3">
@@ -1255,8 +1564,33 @@ export default function OrderDetailsModal({
                 // Позиции без цены закупки завышают прибыль (закупка = 0) —
                 // в таком случае честно предупреждаем и красим прибыль в серый
                 const withoutCost = activeItems.filter((item) => !(item.costPrice > 0)).length;
+                // Скрыто: вместо цифр — кнопка "Прибуток", по нажатию показываем
+                if (!showProfit) {
+                  return (
+                    <button
+                      type="button"
+                      onClick={() => setShowProfit(true)}
+                      className="text-right pl-3 cursor-pointer"
+                      style={{ borderLeft: '1px solid var(--line)' }}
+                      title="Показати закупку і прибуток"
+                    >
+                      <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                        Прибуток
+                      </p>
+                      <p className="text-lg font-semibold font-mono" style={{ color: 'var(--ink-faint)' }}>
+                        👁 •••
+                      </p>
+                    </button>
+                  );
+                }
                 return (
-                  <div className="text-right pl-3" style={{ borderLeft: '1px solid var(--line)' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowProfit(false)}
+                    className="text-right pl-3 cursor-pointer"
+                    style={{ borderLeft: '1px solid var(--line)' }}
+                    title="Сховати закупку і прибуток"
+                  >
                     <p className="text-[11px]" style={{ color: withoutCost > 0 ? 'var(--warn)' : 'var(--ink-faint)' }}>
                       {withoutCost > 0
                         ? `Без закупки: ${withoutCost} поз. — прибуток неточний`
@@ -1275,7 +1609,7 @@ export default function OrderDetailsModal({
                         </span>
                       )}
                     </p>
-                  </div>
+                  </button>
                 );
               })()}
             {orderDetails && (
@@ -1287,6 +1621,16 @@ export default function OrderDetailsModal({
                   style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
                 >
                   Принять оплату
+                </button>
+                <button
+                  type="button"
+                  disabled={repeating}
+                  onClick={handleRepeatOrder}
+                  className="px-3.5 py-2 rounded-md text-sm font-medium whitespace-nowrap disabled:opacity-50"
+                  style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+                  title="Нове замовлення з тими самими товарами за актуальними цінами"
+                >
+                  {repeating ? 'Створюю...' : '↻ Повторити'}
                 </button>
                 {orderDetails.ttnRef && (
                   <a
@@ -1331,12 +1675,14 @@ export default function OrderDetailsModal({
                 </button>
               </div>
             )}
+            {/* Крестик — всегда в правом верхнем углу окна */}
             <button
               type="button"
               onClick={onClose}
-              className="text-sm px-2 py-1 rounded-md shrink-0"
+              className="absolute top-3 right-3 flex h-9 w-9 items-center justify-center rounded-md text-lg hover:bg-white/5"
               style={{ color: 'var(--ink-muted)' }}
               aria-label="Закрыть"
+              title="Закрити (Esc)"
             >
               ✕
             </button>
@@ -1485,6 +1831,16 @@ export default function OrderDetailsModal({
                         Картка →
                       </a>
                     </div>
+                  )}
+
+                  {/* Персональне правило ціни клієнта (розділ «Скидки и наценки
+                      клиентам») — щоб менеджер не забув про нього, коли
+                      домовляється про ціну */}
+                  {orderDetails.pricingRule && (
+                    <p className="text-xs mt-1.5 px-3 py-1.5 rounded-md" style={{ background: 'var(--accent-soft)', color: 'var(--accent)' }}>
+                      Персональне правило: {orderDetails.pricingRule.ruleType === 'discount' ? 'знижка' : 'націнка'}{' '}
+                      {orderDetails.pricingRule.percent}% від закупки
+                    </p>
                   )}
 
                   <div className="text-sm flex flex-col gap-1 mb-3">
@@ -1817,18 +2173,133 @@ export default function OrderDetailsModal({
                           onChange={(e) => setTtnDescription(e.target.value)}
                         />
 
-                        {/* ---- післяплата: Нова Пошта візьме гроші з клієнта при
-                            отриманні й перекаже нам (комісію платить отримувач) ---- */}
+                        {/* ---- відправник: контакт і адреса забору з API Нової Пошти ---- */}
+                        <div className="p-2.5 rounded-md flex flex-col gap-2" style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium" style={{ color: 'var(--ink-muted)' }}>
+                              Відправник
+                            </span>
+                            <button
+                              type="button"
+                              onClick={loadSenderChoices}
+                              disabled={senderLoading}
+                              className="text-[11px] underline disabled:opacity-50"
+                              style={{ color: 'var(--accent)' }}
+                            >
+                              {senderLoading ? 'Завантаження...' : 'Оновити з Нової Пошти'}
+                            </button>
+                          </div>
+                          {senderError && (
+                            <p className="text-[11px]" style={{ color: 'var(--bad)' }}>
+                              {senderError}
+                            </p>
+                          )}
+                          <select
+                            className="w-full px-3 py-2 text-sm rounded-md"
+                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                            value={senderContactRef}
+                            disabled={senderLoading || senderContacts.length === 0}
+                            onChange={(e) => setSenderContactRef(e.target.value)}
+                          >
+                            {senderContacts.length === 0 && <option value="">Контакти не завантажені</option>}
+                            {senderContacts.map((c) => (
+                              <option key={c.ref} value={c.ref}>
+                                {c.label}
+                                {c.phone ? ` · ${c.phone}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {(
+                              [
+                                [false, 'Адреса забору (кур\'єр)'],
+                                [true, 'З відділення НП'],
+                              ] as const
+                            ).map(([flag, label]) => (
+                              <button
+                                key={label}
+                                type="button"
+                                onClick={() => setSenderFromWarehouse(flag)}
+                                className="px-2 py-1.5 rounded-md text-[11px] font-medium"
+                                style={
+                                  senderFromWarehouse === flag
+                                    ? { background: 'var(--accent)', color: 'var(--accent-ink)' }
+                                    : { border: '1px solid var(--line)', color: 'var(--ink-muted)' }
+                                }
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {senderFromWarehouse && (
+                            <>
+                              <AdminNovaPoshtaPicker
+                                initialCityQuery=""
+                                onPick={({ cityRef, cityName, warehouseRef, warehouseDescription }) =>
+                                  setSenderWarehouse({
+                                    cityRef,
+                                    warehouseRef,
+                                    label: `${cityName}, ${warehouseDescription}`,
+                                  })
+                                }
+                              />
+                              {senderWarehouse && (
+                                <p className="text-[11px]" style={{ color: 'var(--good)' }}>
+                                  Відправка з: {senderWarehouse.label}
+                                </p>
+                              )}
+                            </>
+                          )}
+                          {!senderFromWarehouse && (
+                          <select
+                            className="w-full px-3 py-2 text-sm rounded-md"
+                            style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                            value={senderAddressRef}
+                            disabled={senderLoading || senderAddresses.length === 0}
+                            onChange={(e) => setSenderAddressRef(e.target.value)}
+                          >
+                            {senderAddresses.length === 0 && <option value="">Адреси не завантажені</option>}
+                            {senderAddresses.map((a) => (
+                              <option key={a.ref} value={a.ref}>
+                                {a.label}
+                              </option>
+                            ))}
+                          </select>
+                          )}
+                          <p className="text-[11px]" style={{ color: 'var(--ink-faint)' }}>
+                            За замовчуванням — відправник з Налаштувань. Тут можна обрати іншого лише для цієї ТТН.
+                          </p>
+                        </div>
+
+                        {/* ---- оплата при отриманні: післяплата або контроль оплати ---- */}
                         <div className="p-2.5 rounded-md" style={{ border: '1px solid var(--line)', background: 'var(--surface)' }}>
-                          <label className="flex items-center gap-2 text-sm cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={ttnCodEnabled}
-                              onChange={(e) => setTtnCodEnabled(e.target.checked)}
-                            />
-                            З післяплатою
-                          </label>
-                          {ttnCodEnabled && (
+                          <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                            Оплата при отриманні
+                          </div>
+                          <div className="grid grid-cols-3 gap-1.5">
+                            {(
+                              [
+                                ['none', 'Без оплати'],
+                                ['cod', 'Післяплата'],
+                                ['control', 'Контроль оплати'],
+                              ] as const
+                            ).map(([mode, label]) => (
+                              <button
+                                key={mode}
+                                type="button"
+                                onClick={() => setTtnPayMode(mode)}
+                                className="px-2 py-1.5 rounded-md text-[11px] font-medium"
+                                style={
+                                  ttnPayMode === mode
+                                    ? { background: 'var(--accent)', color: 'var(--accent-ink)' }
+                                    : { border: '1px solid var(--line)', color: 'var(--ink-muted)' }
+                                }
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {ttnPayMode !== 'none' && (
                             <div className="flex items-center gap-2 mt-2">
                               <input
                                 type="text"
@@ -1856,9 +2327,26 @@ export default function OrderDetailsModal({
                             </div>
                           )}
                           <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
-                            Клієнт заплатить при отриманні. Оголошена вартість автоматично буде не меншою за суму
-                            післяплати.
+                            {ttnPayMode === 'none' &&
+                              'Посилка їде без оплати при отриманні (наприклад, клієнт уже оплатив повністю).'}
+                            {ttnPayMode === 'cod' &&
+                              'Клієнт заплатить при отриманні, Нова Пошта переведе гроші нам (комісію платить отримувач).'}
+                            {ttnPayMode === 'control' &&
+                              'Додаткова послуга «Контроль оплати»: клієнт може оглянути посилку й платить при отриманні. Потрібен договір з Новою Поштою на цю послугу.'}{' '}
+                            Оголошена вартість автоматично буде не меншою за цю суму.
                           </p>
+                          {(() => {
+                            const unpaid = Math.max(0, Math.ceil(orderDetails.totalAmount - orderDetails.paidAmount));
+                            const pay = ttnPayMode === 'none' ? 0 : parseFloat(ttnCodAmount.replace(',', '.')) || 0;
+                            if (unpaid > pay) {
+                              return (
+                                <p className="text-[11px] mt-1" style={{ color: 'var(--warn)' }}>
+                                  ⚠ Не оплачено {unpaid} грн, а при отриманні буде стягнуто {Math.round(pay)} грн.
+                                </p>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
 
                         {createTtnError && (
@@ -1890,6 +2378,76 @@ export default function OrderDetailsModal({
                     )}
                   </div>
                 </div>
+
+                {/* ---- нагадування "Передзвонити" ----
+                    Замовлення з нагадуванням на сьогодні видно у списку (фільтр
+                    «📞 Передзвонити»), а в меню — лічильник, коли час настав */}
+                {(() => {
+                  const callbackDate = orderDetails.callbackAt ? new Date(orderDetails.callbackAt) : null;
+                  const isDue = callbackDate ? callbackDate.getTime() <= Date.now() : false;
+                  const quickButtonStyle = { border: '1px solid var(--line)', color: 'var(--ink-muted)' };
+                  const at = (daysAhead: number, hours: number) => {
+                    const d = new Date();
+                    d.setDate(d.getDate() + daysAhead);
+                    d.setHours(hours, 0, 0, 0);
+                    return d;
+                  };
+                  return (
+                    <div
+                      className="p-4 rounded-md"
+                      style={{
+                        background: isDue ? 'var(--bad-soft)' : 'var(--surface-2)',
+                        border: '1px solid var(--line)',
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-xs font-semibold" style={{ color: isDue ? 'var(--bad)' : 'var(--ink-muted)' }}>
+                          📞 ПЕРЕДЗВОНИТИ{isDue ? ' — ЧАС НАСТАВ' : ''}
+                        </h3>
+                        <SaveIndicator save={saveState.callback} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          type="datetime-local"
+                          className="px-3 py-2 text-sm rounded-md"
+                          // colorScheme: 'dark' — иначе значок календаря чёрный на тёмном фоне
+                          style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)', colorScheme: 'dark' }}
+                          value={callbackDate ? toDateTimeLocal(callbackDate) : ''}
+                          onChange={(e) => {
+                            if (!e.target.value) return;
+                            const d = new Date(e.target.value);
+                            if (!Number.isNaN(d.getTime())) saveCallback(d);
+                          }}
+                        />
+                        {callbackDate && (
+                          <button
+                            type="button"
+                            onClick={() => saveCallback(null)}
+                            className="text-xs px-2.5 py-1.5 rounded-md font-medium"
+                            style={{ background: 'var(--good-soft)', color: 'var(--good)' }}
+                            title="Зателефонували — зняти нагадування"
+                          >
+                            ✓ Виконано
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 mt-2">
+                        <button type="button" onClick={() => saveCallback(new Date(Date.now() + 60 * 60 * 1000))} className="text-[11px] px-2 py-1 rounded-md" style={quickButtonStyle}>
+                          через 1 год
+                        </button>
+                        <button type="button" onClick={() => saveCallback(at(0, 17))} className="text-[11px] px-2 py-1 rounded-md" style={quickButtonStyle}>
+                          сьогодні 17:00
+                        </button>
+                        <button type="button" onClick={() => saveCallback(at(1, 10))} className="text-[11px] px-2 py-1 rounded-md" style={quickButtonStyle}>
+                          завтра 10:00
+                        </button>
+                        <button type="button" onClick={() => saveCallback(at(3, 10))} className="text-[11px] px-2 py-1 rounded-md" style={quickButtonStyle}>
+                          через 3 дні
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* ---- внутрішня замітка менеджера (клієнт її не бачить) ---- */}
                 <div className="p-4 rounded-md" style={{ background: 'var(--warn-soft)', border: '1px solid var(--line)' }}>
@@ -1952,6 +2510,8 @@ export default function OrderDetailsModal({
                 {/* ---- друк документів ---- */}
                 <PrintDocumentsPanel
                   orderId={orderDetails.id}
+                  orderNumber={orderDetails.orderNumber}
+                  telegramLinked={orderDetails.telegramLinked}
                   items={orderDetails.items}
                   onItemNameSaved={(itemId, name) => {
                     setOrderDetails((prev) =>
@@ -1985,8 +2545,178 @@ export default function OrderDetailsModal({
                         + Додати товар
                       </button>
                     )}
+                    {orderDetails.status !== 'shipped' && orderDetails.items.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDiscount((v) => !v);
+                          setDiscountError(null);
+                        }}
+                        className="text-[11px] px-2 py-1 rounded-md"
+                        style={{
+                          color: showDiscount ? 'var(--accent-ink)' : 'var(--warn)',
+                          background: showDiscount ? 'var(--warn)' : 'transparent',
+                          border: '1px solid var(--warn)',
+                        }}
+                      >
+                        % Знижка
+                      </button>
+                    )}
+                    {orderDetails.status !== 'shipped' &&
+                      orderDetails.status !== 'cancelled' &&
+                      orderDetails.items.filter((i) => i.status !== 'cancelled' && i.status !== 'returned').length >= 2 && (
+                        <button
+                          type="button"
+                          onClick={() => (showSplit ? setShowSplit(false) : openSplit())}
+                          className="text-[11px] px-2 py-1 rounded-md"
+                          style={{
+                            color: showSplit ? 'var(--accent-ink)' : 'var(--ink-muted)',
+                            background: showSplit ? 'var(--ink-muted)' : 'transparent',
+                            border: '1px solid var(--ink-muted)',
+                          }}
+                          title="Перенести частину позицій у нове замовлення"
+                        >
+                          ✂ Розділити
+                        </button>
+                      )}
                   </div>
                 </div>
+
+                {/* ---- розділення замовлення: відмічені позиції переїдуть у нове
+                    замовлення (готові лишаються тут і можуть їхати зараз) ---- */}
+                {showSplit && (
+                  <div className="mb-3 p-3 rounded-md" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                    <p className="text-xs mb-2" style={{ color: 'var(--ink-muted)' }}>
+                      Відмітьте позиції, які переїдуть у <b>нове замовлення</b>. Решта залишиться тут.
+                    </p>
+                    <div className="flex flex-col gap-1">
+                      {orderDetails.items
+                        .filter((i) => i.status !== 'cancelled' && i.status !== 'returned')
+                        .map((item) => {
+                          const movable = item.status === 'pending' || item.status === 'ordered_from_supplier' || item.status === 'in_stock';
+                          return (
+                            <label
+                              key={item.id}
+                              className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-md cursor-pointer"
+                              style={{ background: 'var(--surface)', opacity: movable ? 1 : 0.5 }}
+                            >
+                              <input
+                                type="checkbox"
+                                disabled={!movable}
+                                checked={splitSelected.has(item.id)}
+                                onChange={(e) =>
+                                  setSplitSelected((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(item.id);
+                                    else next.delete(item.id);
+                                    return next;
+                                  })
+                                }
+                              />
+                              <span className="font-mono text-xs">{item.article}</span>
+                              <span className="truncate">{item.name || ''}</span>
+                              <span className="ml-auto text-[11px]" style={{ color: ITEM_STATUS_COLORS[item.status].fg }}>
+                                {ITEM_STATUS_LABELS[item.status]}
+                              </span>
+                            </label>
+                          );
+                        })}
+                    </div>
+                    <div className="flex items-center gap-2 mt-2.5">
+                      <button
+                        type="button"
+                        disabled={splitting || splitSelected.size === 0}
+                        onClick={handleSplit}
+                        className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                        style={{ background: 'var(--accent)', color: 'var(--accent-ink)' }}
+                      >
+                        {splitting ? 'Розділяю...' : `Перенести ${splitSelected.size} поз. у нове замовлення`}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowSplit(false)}
+                        className="px-4 py-2 rounded-md text-sm"
+                        style={{ border: '1px solid var(--line)', color: 'var(--ink-muted)' }}
+                      >
+                        Скасувати
+                      </button>
+                    </div>
+                    {splitError && (
+                      <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
+                        {splitError}
+                      </p>
+                    )}
+                    <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                      Оплати залишаться в цьому замовленні. Доставка, клієнт і авто скопіюються в нове.
+                    </p>
+                  </div>
+                )}
+
+                {/* ---- знижка на все замовлення: відсоток або сума в гривнях
+                    (сума розкладається на позиції пропорційно їх вартості) ---- */}
+                {showDiscount && (
+                  <div className="mb-3 p-3 rounded-md" style={{ background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className="px-3 py-2 text-sm rounded-md"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                        value={discountType}
+                        onChange={(e) => setDiscountType(e.target.value as 'percent' | 'amount')}
+                      >
+                        <option value="percent">Відсоток, %</option>
+                        <option value="amount">Сума, грн</option>
+                      </select>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        autoFocus
+                        className="w-28 px-3 py-2 text-sm rounded-md font-mono text-right"
+                        style={{ border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink)' }}
+                        placeholder={discountType === 'percent' ? '5' : '200'}
+                        value={discountValue}
+                        onChange={(e) => setDiscountValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleApplyDiscount();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={discountSaving}
+                        onClick={handleApplyDiscount}
+                        className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+                        style={{ background: 'var(--warn)', color: '#1a1a1a' }}
+                      >
+                        {discountSaving ? 'Застосовую...' : 'Застосувати'}
+                      </button>
+                      {/* Попередній перегляд нової суми — до натискання */}
+                      {(() => {
+                        const value = parseFloat(discountValue.replace(',', '.'));
+                        if (!Number.isFinite(value) || value <= 0) return null;
+                        const activeTotal = orderDetails.items
+                          .filter((i) => i.status !== 'shipped' && i.status !== 'returned' && i.status !== 'cancelled')
+                          .reduce((sum, i) => sum + i.price * i.quantity, 0);
+                        const after = discountType === 'percent' ? activeTotal * (1 - value / 100) : activeTotal - value;
+                        return (
+                          <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+                            {formatMoney(activeTotal)} → <b>{formatMoney(Math.max(0, after))} грн</b>
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    {discountError && (
+                      <p className="text-xs mt-2" style={{ color: 'var(--bad)' }}>
+                        {discountError}
+                      </p>
+                    )}
+                    <p className="text-[11px] mt-1.5" style={{ color: 'var(--ink-faint)' }}>
+                      Знижка змінює ціни продажу позицій (без відвантажених і повернених). Знижку на одну позицію — у
+                      формі редагування позиції (кнопки «−5%», «−10%»).
+                    </p>
+                  </div>
+                )}
 
                 {/* ---- пошук і додавання нової позиції (клієнт хоче
                     докупити щось ще, вже після оформлення заказа) ---- */}
@@ -2072,6 +2802,30 @@ export default function OrderDetailsModal({
                               <Fragment key={item.id}>
                                 <tr style={{ borderBottom: '1px solid var(--line)' }}>
                                   <td className="px-3 py-2.5 align-top">
+                                    <div className="flex gap-2.5">
+                                    {/* Фото товара (или заглушка) — клик открывает страницу
+                                        товара на сайте, чтобы сверить деталь с клиентом */}
+                                    {item.productPath ? (
+                                      <a
+                                        href={item.productPath}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="shrink-0 w-11 h-11 rounded-md overflow-hidden flex items-center justify-center"
+                                        style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}
+                                        title="Відкрити сторінку товару на сайті"
+                                      >
+                                        <ItemThumb src={item.imageUrl} />
+                                      </a>
+                                    ) : (
+                                      <div
+                                        className="shrink-0 w-11 h-11 rounded-md flex items-center justify-center text-[10px] text-center"
+                                        style={{ background: 'var(--surface)', border: '1px solid var(--line)', color: 'var(--ink-faint)' }}
+                                        title="Товару вже немає в каталозі"
+                                      >
+                                        —
+                                      </div>
+                                    )}
+                                    <div className="min-w-0">
                                     <p className="truncate max-w-[220px]">{item.name || 'Без названия'}</p>
                                     <p className="text-xs font-mono mt-0.5" style={{ color: 'var(--ink-faint)' }}>
                                       {item.article}
@@ -2079,6 +2833,17 @@ export default function OrderDetailsModal({
                                       {item.supplierName ? ` · ${item.supplierName}` : ''}
                                       {item.supplierContactName ? ` (${item.supplierContactName})` : ''}
                                     </p>
+                                    {item.productPath && (
+                                      <a
+                                        href={item.productPath}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-[11px] underline"
+                                        style={{ color: 'var(--accent)' }}
+                                      >
+                                        на сайті ↗
+                                      </a>
+                                    )}
                                     {/* Деталь уже лежить у нас на складі — можна не замовляти
                                         у постачальника, а одразу взяти з полиці */}
                                     {item.status === 'pending' &&
@@ -2111,6 +2876,8 @@ export default function OrderDetailsModal({
                                           </div>
                                         );
                                       })()}
+                                    </div>
+                                    </div>
                                   </td>
                                   <td className="px-3 py-2.5 align-top text-right font-mono whitespace-nowrap">
                                     {item.quantity}
@@ -2289,6 +3056,74 @@ export default function OrderDetailsModal({
                                         )}
                                       </div>
 
+                                      {/* ==== АНАЛОГИ: ІНШІ АРТИКУЛИ (крос-номери) ====
+                                          Якщо оригіналу немає або він дорогий — можна замінити
+                                          деталь на аналог. Лише для позицій, які ще не замовляли */}
+                                      {itemAnalogs.length > 0 && item.status === 'pending' && (
+                                        <div className="mb-3">
+                                          <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--ink-muted)' }}>
+                                            Аналоги (інші артикули) — {itemAnalogs.length}
+                                          </p>
+                                          <div className="rounded-md overflow-hidden max-h-56 overflow-y-auto" style={{ border: '1px solid var(--line)' }}>
+                                            <table className="w-full text-sm">
+                                              <thead>
+                                                <tr style={{ background: 'var(--surface)' }}>
+                                                  {['Деталь', 'Тип', 'Постачальник', 'Наявність', 'Закупка', 'Прайс', ''].map((h, i) => (
+                                                    <th
+                                                      key={h || i}
+                                                      className={`px-2.5 py-1.5 text-[11px] font-medium whitespace-nowrap ${
+                                                        i >= 3 && i <= 5 ? 'text-right' : 'text-left'
+                                                      }`}
+                                                      style={{ color: 'var(--ink-muted)' }}
+                                                    >
+                                                      {h}
+                                                    </th>
+                                                  ))}
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {itemAnalogs.map((analog) => (
+                                                  <tr key={analog.productId} style={{ borderTop: '1px solid var(--line)' }}>
+                                                    <td className="px-2.5 py-1.5">
+                                                      <span className="font-mono text-xs">{analog.article}</span>
+                                                      <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+                                                        {' '}
+                                                        · {analog.brand || '—'}
+                                                      </span>
+                                                    </td>
+                                                    <td className="px-2.5 py-1.5 text-[11px] whitespace-nowrap" style={{ color: analog.relation === 'oem' ? 'var(--accent)' : 'var(--ink-muted)' }}>
+                                                      {analog.relation === 'oem' ? 'оригінал' : 'аналог'}
+                                                    </td>
+                                                    <td className="px-2.5 py-1.5 text-xs whitespace-nowrap">{analog.supplierName}</td>
+                                                    <td
+                                                      className="px-2.5 py-1.5 text-right font-mono text-xs whitespace-nowrap"
+                                                      style={{ color: analog.stock > 0 ? 'var(--good)' : 'var(--ink-faint)' }}
+                                                    >
+                                                      {analog.stock > 0 ? `${analog.stock} шт` : 'немає'}
+                                                    </td>
+                                                    <td className="px-2.5 py-1.5 text-right font-mono whitespace-nowrap">{formatMoney(analog.costPrice)}</td>
+                                                    <td className="px-2.5 py-1.5 text-right font-mono whitespace-nowrap" style={{ color: 'var(--ink-muted)' }}>
+                                                      {formatMoney(analog.retailPrice)}
+                                                    </td>
+                                                    <td className="px-2.5 py-1.5 text-right whitespace-nowrap">
+                                                      <button
+                                                        type="button"
+                                                        disabled={replacingProductId !== null}
+                                                        onClick={() => handleReplaceWithAnalog(item, analog)}
+                                                        className="text-[11px] px-2 py-0.5 rounded-md disabled:opacity-50"
+                                                        style={{ color: 'var(--warn)', border: '1px solid var(--warn)' }}
+                                                      >
+                                                        {replacingProductId === analog.productId ? '...' : 'Замінити'}
+                                                      </button>
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
+
                                       {/* Порядок полей — как думает менеджер: сначала У КОГО
                                           берём (поставщик), потом ПО ЧЁМ берём (закупка), потом
                                           ЗА СКОЛЬКО продаём и сколько штук. Поля крупные (text-sm,
@@ -2359,6 +3194,23 @@ export default function OrderDetailsModal({
                                                     Прайс
                                                   </button>
                                                 )}
+                                                {/* Знижка від поточної ціни продажу позиції */}
+                                                {(() => {
+                                                  const sale = parseFloat(editItemPrice.replace(',', '.'));
+                                                  if (!Number.isFinite(sale) || sale <= 0) return null;
+                                                  return QUICK_DISCOUNTS.map((percent) => (
+                                                    <button
+                                                      key={`d${percent}`}
+                                                      type="button"
+                                                      onClick={() => setEditItemPrice(String(Math.floor(sale * (1 - percent / 100))))}
+                                                      className="text-[11px] px-1.5 py-0.5 rounded"
+                                                      style={{ border: '1px solid var(--line)', color: 'var(--warn)' }}
+                                                      title={`Знижка ${percent}% від поточної ціни продажу`}
+                                                    >
+                                                      −{percent}%
+                                                    </button>
+                                                  ));
+                                                })()}
                                                 {hasCost &&
                                                   QUICK_MARKUPS.map((percent) => (
                                                     <button

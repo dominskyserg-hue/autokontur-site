@@ -36,6 +36,17 @@ export interface CartProductInput {
   stock: number;
 }
 
+// Больше этого количества одной позиции через сайт не заказать —
+// защита от случайного "999" (крупный опт менеджер оформит сам)
+export const MAX_CART_QUANTITY = 99;
+
+// Сколько штук покупатель может выбрать: если товар есть у поставщика —
+// не больше его остатка; если "під замовлення" (остаток 0) — до
+// MAX_CART_QUANTITY, количество уточнит менеджер
+export function maxQuantityFor(stock: number): number {
+  return stock > 0 ? Math.min(stock, MAX_CART_QUANTITY) : MAX_CART_QUANTITY;
+}
+
 export function readCart(): CartItem[] {
   try {
     const raw = window.localStorage.getItem(CART_STORAGE_KEY);
@@ -50,14 +61,18 @@ export function isInCart(productId: string): boolean {
   return readCart().some((item) => item.id === productId);
 }
 
-// +1 шт. товара в корзину (если уже есть — увеличиваем количество).
+// quantity шт. товара в корзину (по умолчанию 1; если товар уже есть —
+// увеличиваем количество). Итог не больше maxQuantityFor(остаток).
 // true — записали, false — localStorage недоступен
-export function addToCart(product: CartProductInput): boolean {
+export function addToCart(product: CartProductInput, quantity = 1): boolean {
   try {
     const cart = readCart();
     const existing = cart.find((item) => item.id === product.id);
+    const limit = maxQuantityFor(product.stock);
     const nextCart: CartItem[] = existing
-      ? cart.map((item) => (item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item))
+      ? cart.map((item) =>
+          item.id === product.id ? { ...item, quantity: Math.min(limit, item.quantity + quantity) } : item
+        )
       : [
           ...cart,
           {
@@ -66,7 +81,7 @@ export function addToCart(product: CartProductInput): boolean {
             brand: product.brand,
             name: product.name || product.article,
             price: product.retailPrice,
-            quantity: 1,
+            quantity: Math.min(limit, Math.max(1, quantity)),
             stock: product.stock,
           },
         ];

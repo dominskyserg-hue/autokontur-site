@@ -22,6 +22,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { getClientIp, requireAdmin } from '@/lib/adminAuth';
 import { rateLimit, RATE_LIMIT_MESSAGE } from '@/lib/rateLimit';
+import { sendTelegramMessage } from '@/lib/telegramNotify';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -85,7 +86,24 @@ interface CreateVinRequestBody {
   vinCode?: string;
   phone?: string;
   description?: string;
+  // Заявка "Не знайшли деталь?" из пустого поиска на витрине
+  // (components/SearchNotFoundRequest.tsx): что искал покупатель и его авто.
+  // Для такой заявки VIN необязателен — покупатель часто его не знает
+  searchQuery?: string;
+  car?: string;
+  // Заявка "Передзвоніть мені" (components/CallbackButton.tsx): нужен только
+  // телефон; pageUrl/pageTitle — с какой страницы позвонить просили
+  callback?: boolean;
+  name?: string;
+  pageUrl?: string;
+  pageTitle?: string;
 }
+
+// Что пишем в vin_code для заявки на звонок
+const CALLBACK_PLACEHOLDER = '📞 Дзвінок';
+
+// Что пишем в vin_code, если VIN не указан (колонка NOT NULL)
+const NO_VIN_PLACEHOLDER = 'VIN не вказано';
 
 export async function POST(request: NextRequest) {
   // Защита от спама: не больше 5 заявок за 10 минут с одного IP
@@ -106,11 +124,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true });
   }
 
-  const vinCode = (body.vinCode || '').trim().toUpperCase();
+  const searchQuery = (body.searchQuery || '').trim().slice(0, 200);
+  const car = (body.car || '').trim().slice(0, 200);
+  const isSearchRequest = searchQuery !== '';
+  const isCallback = body.callback === true;
+  const callbackName = (body.name || '').trim().slice(0, 100);
+  // Адрес страницы — только путь на нашем сайте (не чужие ссылки)
+  const pagePath = (body.pageUrl || '').trim().startsWith('/') ? (body.pageUrl || '').trim().slice(0, 300) : '';
+  const pageTitle = (body.pageTitle || '').trim().slice(0, 200);
+  let vinCode = (body.vinCode || '').trim().toUpperCase();
   const phone = (body.phone || '').trim();
-  const description = (body.description || '').trim();
+  // Заявка из пустого поиска: в описание сразу пишем, что искали и для
+  // какого авто — менеджер видит это в разделе "VIN-запросы"
+  const description = isCallback
+    ? [
+        '📞 Передзвоніть мені',
+        callbackName ? `Ім'я: ${callbackName}` : null,
+        pageTitle || pagePath ? `Сторінка: ${[pageTitle, pagePath].filter(Boolean).join(' — ')}` : null,
+        (body.description || '').trim() ? `Питання: ${(body.description || '').trim().slice(0, 500)}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : isSearchRequest
+    ? [
+        `🔍 Не знайдено на сайті: «${searchQuery}»`,
+        car ? `Авто: ${car}` : null,
+        (body.description || '').trim() ? `Коментар: ${(body.description || '').trim()}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n')
+    : (body.description || '').trim();
 
-  if (!vinCode || vinCode.length < 5) {
+  if (isCallback) {
+    vinCode = CALLBACK_PLACEHOLDER;
+  } else if (isSearchRequest && !vinCode) {
+    vinCode = NO_VIN_PLACEHOLDER;
+  } else if (!vinCode || vinCode.length < 5) {
     return NextResponse.json({ error: 'Вкажіть VIN-код автомобіля.' }, { status: 400 });
   }
   if (!phone || !isValidPhone(phone)) {
@@ -125,6 +174,16 @@ export async function POST(request: NextRequest) {
       `INSERT INTO vin_requests (vin_code, customer_phone, description) VALUES ($1, $2, $3) RETURNING id`,
       [vinCode, phone, description]
     );
+
+    // Звонок и "не знайшли" — срочные: сразу пишем менеджеру в Telegram
+    // (ошибка отправки заявку не ломает — она уже сохранена)
+    if (isCallback || isSearchRequest) {
+      try {
+        await sendTelegramMessage(`${description}\nТелефон: ${phone}${vinCode !== CALLBACK_PLACEHOLDER && vinCode !== NO_VIN_PLACEHOLDER ? `\nVIN: ${vinCode}` : ''}`);
+      } catch (error) {
+        console.error('Не удалось отправить заявку в Telegram:', error);
+      }
+    }
 
     return NextResponse.json({ success: true, id: result.rows[0].id }, { status: 201 });
   } catch (error) {

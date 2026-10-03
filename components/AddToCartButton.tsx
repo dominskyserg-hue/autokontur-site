@@ -24,14 +24,20 @@ interface AddToCartButtonProps {
     retailPrice: number;
     stock: number;
   };
+  // compact — маленькая кнопка "У кошик" для таблицы пропозицій
+  // на странице товара (components/ProductDetailContent.tsx)
+  compact?: boolean;
+  // Сколько штук добавить (выбор количества на карточке товара,
+  // components/ProductBuyBox.tsx). По умолчанию 1
+  quantity?: number;
 }
 
-export default function AddToCartButton({ product }: AddToCartButtonProps) {
+export default function AddToCartButton({ product, compact = false, quantity = 1 }: AddToCartButtonProps) {
   const [added, setAdded] = useState(false);
   const router = useRouter();
 
   const handleAdd = () => {
-    if (!addToCart(product)) return;
+    if (!addToCart(product, quantity)) return;
 
     trackAddToCart({
       id: product.id,
@@ -46,6 +52,19 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
   const goToCart = () => {
     openCart((href) => router.push(href), () => router.back());
   };
+
+  if (added && compact) {
+    return (
+      <button
+        type="button"
+        onClick={goToCart}
+        className="whitespace-nowrap text-xs font-semibold underline"
+        style={{ color: '#34D399', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+      >
+        ✓ У кошику →
+      </button>
+    );
+  }
 
   if (added) {
     return (
@@ -67,10 +86,14 @@ export default function AddToCartButton({ product }: AddToCartButtonProps) {
     <button
       type="button"
       onClick={handleAdd}
-      className="rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
+      className={
+        compact
+          ? 'whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-semibold transition-shadow hover:shadow-glow-lg'
+          : 'rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg'
+      }
       style={{ background: 'linear-gradient(90deg, #3B82F6, #1D4ED8)', color: '#FFFFFF', boxShadow: '0 0 0 1px rgba(59,130,246,0.4), 0 0 24px 2px rgba(59,130,246,0.35)' }}
     >
-      Додати в кошик
+      {compact ? 'У кошик' : 'Додати в кошик'}
     </button>
   );
 }

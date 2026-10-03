@@ -36,6 +36,7 @@ import { getCustomerSessionPhone } from '@/lib/customerAuth';
 import { getSeoOverride, type SeoOverride, type SeoOverrideFaqItem } from '@/data/seo-overrides';
 import { PRODUCT_GROUPS_ACTIVE } from '@/lib/productGroups';
 import { publicImageUrl } from '@/lib/imageUrl';
+import { isOwnStock } from '@/lib/ownStock';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -528,6 +529,10 @@ export interface ProductDetail {
   groupMinPrice: number | null;
   // Восстановленная / б/у деталь — бейдж "Відновлена" (products.is_refurbished)
   isRefurbished: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж
+  // "На нашому складі · відправка сьогодні". Необязательное: заполняется
+  // только в loadProductPageData
+  ownStock?: boolean;
 }
 
 // Одне ДОДАТКОВЕ фото галереї товару (не плутати з product.imageUrl —
@@ -551,6 +556,9 @@ export interface OtherOffer {
   retailPrice: number;
   stock: number;
   isRefurbished: boolean;
+  // Срок отгрузки поставщиком этого предложения (suppliers.delivery_time),
+  // показывается в раскрытой строке, если товара нет в наличии
+  deliveryTime: string | null;
 }
 
 export interface CrossRefItem {
@@ -680,7 +688,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
 ): Promise<OtherOfferRaw[]> {
   const result = await pool.query(
     `
-    SELECT p2.id, p2.cost_price, p2.retail_price, p2.stock, p2.is_refurbished, s2.name AS supplier_name
+    SELECT p2.id, p2.cost_price, p2.retail_price, p2.stock, p2.is_refurbished, s2.name AS supplier_name, s2.delivery_time
     FROM products p2
     JOIN suppliers s2 ON s2.id = p2.supplier_id
     WHERE p2.article = $1
@@ -700,6 +708,7 @@ const loadOtherOffers = cache(async function loadOtherOffers(
     stock: row.stock,
     isRefurbished: row.is_refurbished,
     supplierName: row.supplier_name,
+    deliveryTime: row.delivery_time,
   }));
 });
 
@@ -1066,6 +1075,8 @@ export async function loadProductPageData(
   // явний, без spread), щоб оптова собівартість не потрапила в HTML,
   // відданий браузеру покупця
   const customerPricingRule = await getCustomerPricingRule(pool, await getCustomerSessionPhone());
+  // Есть ли эта деталь (бренд + артикул) на НАШЕМ складе
+  const ownStock = await isOwnStock(pool, product.article, product.brand);
 
   const personalizedProduct: ProductDetail = {
     id: product.id,
@@ -1087,12 +1098,14 @@ export async function loadProductPageData(
     hasGroupOffers: product.hasGroupOffers,
     groupMinPrice: product.groupMinPrice,
     isRefurbished: product.isRefurbished,
+    ownStock,
   };
   const otherOffers: OtherOffer[] = rawOtherOffers.map((offer) => ({
     id: offer.id,
     retailPrice: computeCustomerPrice(offer.costPrice, offer.retailPrice, customerPricingRule),
     stock: offer.stock,
     isRefurbished: offer.isRefurbished,
+    deliveryTime: offer.deliveryTime,
   }));
   const toPublicCrossRef = (item: CrossRefItemRaw): CrossRefItem => ({
     brand: item.brand,

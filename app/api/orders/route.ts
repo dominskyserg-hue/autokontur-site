@@ -18,6 +18,8 @@
 //   dateFrom  — YYYY-MM-DD: заказы, созданные в этот день или позже
 //   dateTo    — YYYY-MM-DD: заказы, созданные в этот день или раньше
 //               (день считается по киевскому времени)
+//   callback  — "1": только заказы, по которым пора перезвонить
+//               клиенту (напоминание на сегодня или уже просрочено)
 //   unpaid    — "1": только заказы, оплаченные не полностью (без
 //               отменённых — там платить уже нечего)
 //   manager   — кто ведёт заказ: "me" (мои), "none" (без менеджера) или
@@ -37,6 +39,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { getCurrentAdmin } from '@/lib/adminAuth';
 import { ensureOrderAssignmentColumns } from '@/lib/orderAssignment';
+import { ensureOrderExtraColumns } from '@/lib/orderColumns';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -129,6 +132,8 @@ interface OrderListItem {
   paidAmount: number;
   // Кто ведёт заказ; null — заказ ничей
   assignedManager: { id: string; name: string } | null;
+  // Напоминание "Передзвонити" (или null)
+  callbackAt: string | null;
 }
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -142,6 +147,8 @@ export async function GET(request: NextRequest) {
 
   try {
     await ensureOrderAssignmentColumns();
+    await ensureOrderExtraColumns();
+
     const searchParams = request.nextUrl.searchParams;
 
     // ---- пагинация ----
@@ -162,6 +169,7 @@ export async function GET(request: NextRequest) {
     const dateFrom = (searchParams.get('dateFrom') || '').trim();
     const dateTo = (searchParams.get('dateTo') || '').trim();
     const unpaidOnly = searchParams.get('unpaid') === '1';
+    const callbackOnly = searchParams.get('callback') === '1';
     const withCounts = searchParams.get('withCounts') === '1';
     const managerFilter = (searchParams.get('manager') || '').trim();
 
@@ -228,6 +236,12 @@ export async function GET(request: NextRequest) {
       conditions.push(`o.status = $${values.length}`);
     }
 
+    // Напоминание на сегодня (по киевскому времени) или уже просрочено
+    const CALLBACK_DUE_SQL = `o.callback_at IS NOT NULL AND (o.callback_at AT TIME ZONE 'Europe/Kyiv')::date <= (now() AT TIME ZONE 'Europe/Kyiv')::date`;
+    if (callbackOnly) {
+      conditions.push(CALLBACK_DUE_SQL);
+    }
+
     if (unpaidOnly) {
       conditions.push(`o.status <> 'cancelled' AND ${PAID_AMOUNT_SQL} < ${ORDER_TOTAL_SQL}`);
     }
@@ -255,6 +269,7 @@ export async function GET(request: NextRequest) {
         o.status,
         o.created_at,
         o.updated_at,
+        o.callback_at,
         COUNT(oi.id) AS items_count,
         COALESCE(SUM(oi.price * oi.quantity), 0) AS total_amount,
         ${PAID_AMOUNT_SQL} AS paid_amount,
@@ -295,10 +310,11 @@ export async function GET(request: NextRequest) {
       assignedManager: row.assigned_manager_id
         ? { id: row.assigned_manager_id, name: row.assigned_manager_name }
         : null,
+      callbackAt: row.callback_at,
     }));
 
     // ---- счётчики для кнопок быстрых фильтров ----
-    let counts: { byStatus: Record<string, number>; unpaid: number; all: number } | undefined;
+    let counts: { byStatus: Record<string, number>; unpaid: number; all: number; callbacks: number } | undefined;
     if (withCounts) {
       const commonWhere = commonConditions.length > 0 ? `WHERE ${commonConditions.join(' AND ')}` : '';
       const countsResult = await pool.query(
@@ -306,7 +322,8 @@ export async function GET(request: NextRequest) {
         SELECT
           o.status,
           COUNT(*)::int AS total,
-          COUNT(*) FILTER (WHERE o.status <> 'cancelled' AND ${PAID_AMOUNT_SQL} < ${ORDER_TOTAL_SQL})::int AS unpaid
+          COUNT(*) FILTER (WHERE o.status <> 'cancelled' AND ${PAID_AMOUNT_SQL} < ${ORDER_TOTAL_SQL})::int AS unpaid,
+          COUNT(*) FILTER (WHERE ${CALLBACK_DUE_SQL})::int AS callbacks
         FROM orders o
         ${commonWhere}
         GROUP BY o.status
@@ -317,12 +334,14 @@ export async function GET(request: NextRequest) {
       const byStatus: Record<string, number> = {};
       let unpaid = 0;
       let all = 0;
+      let callbacks = 0;
       for (const row of countsResult.rows) {
         byStatus[row.status] = row.total;
         unpaid += row.unpaid;
         all += row.total;
+        callbacks += row.callbacks;
       }
-      counts = { byStatus, unpaid, all };
+      counts = { byStatus, unpaid, all, callbacks };
     }
 
     return NextResponse.json({

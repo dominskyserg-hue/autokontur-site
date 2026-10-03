@@ -24,6 +24,8 @@ import { useRouter } from 'next/navigation';
 import { Search, Send, ShoppingCart, User, Phone, Menu, X } from 'lucide-react';
 import { DominatorLogo } from '@/components/SiteHeader';
 import { isCustomerCabinetEnabled } from '@/lib/customerCabinet';
+import SearchSuggestions from '@/components/SearchSuggestions';
+import MyCarChip from '@/components/MyCarChip';
 import {
   TECH_ACCENT,
   TECH_ACCENT_BRIGHT,
@@ -61,6 +63,9 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
   const [cartCount, setCartCount] = useState(0);
   const [query, setQuery] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  // Какое поле поиска в фокусе (в шапке их два: для компьютера и для
+  // телефона) — подсказки показываем только под ним
+  const [focusedSearch, setFocusedSearch] = useState<string | null>(null);
   const phoneHref = `tel:${phone.replace(/[^\d+]/g, '')}`;
 
   useEffect(() => {
@@ -78,11 +83,13 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
     event.preventDefault();
     const value = query.trim();
     if (!value) return;
+    setFocusedSearch(null);
     router.push(`/?article=${encodeURIComponent(value)}`);
   };
 
-  const searchForm = (className: string) => (
-    <form onSubmit={handleSearch} className={className} role="search">
+  // key — "desktop" или "mobile": отдельные подсказки под каждым полем
+  const searchForm = (className: string, key: string) => (
+    <form onSubmit={handleSearch} className={`relative ${className}`} role="search">
       <div
         className="flex w-full items-center gap-2 rounded-lg px-3 py-2"
         style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${TECH_BORDER}` }}
@@ -92,12 +99,29 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onFocus={() => setFocusedSearch(key)}
+          onBlur={() => setFocusedSearch(null)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setFocusedSearch(null);
+          }}
+          autoComplete="off"
           placeholder="Пошук за артикулом"
           aria-label="Пошук за артикулом"
           className="w-full bg-transparent text-sm outline-none placeholder:text-[#54607A]"
           style={{ fontFamily: TECH_BODY_FONT, color: TECH_INK }}
         />
       </div>
+      {/* Подсказки при вводе: товары с фото и ценой (components/SearchSuggestions.tsx) */}
+      <SearchSuggestions
+        query={query}
+        active={focusedSearch === key}
+        onShowAll={(value) => {
+          setQuery(value);
+          setFocusedSearch(null);
+          router.push(`/?article=${encodeURIComponent(value)}`);
+        }}
+        onPick={() => setFocusedSearch(null)}
+      />
     </form>
   );
 
@@ -118,7 +142,7 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
         </Link>
 
         {/* Пошук — на десктопі в рядку шапки, на мобільному окремим рядком нижче */}
-        {searchForm('hidden flex-1 md:flex max-w-md')}
+        {searchForm('hidden flex-1 md:flex max-w-md', 'desktop')}
 
         <div className="ml-auto flex items-center gap-1.5 md:gap-2">
           <a
@@ -155,6 +179,8 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
           >
             Марки авто
           </Link>
+          {/* "Моє авто" — подсказывает, какие детали подходят (components/MyCarChip.tsx) */}
+          <MyCarChip />
           {/* Скрыт, пока кабинет выключен (lib/customerCabinet.ts) */}
           {isCustomerCabinetEnabled() && (
             <Link
@@ -198,7 +224,7 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
       </div>
 
       {/* Пошук на мобільному — завжди видимий другим рядком */}
-      <div className="px-4 pb-3 md:hidden">{searchForm('flex')}</div>
+      <div className="px-4 pb-3 md:hidden">{searchForm('flex', 'mobile')}</div>
 
       {menuOpen && (
         <nav className="flex flex-col gap-1 px-4 pb-4 md:hidden" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
@@ -207,6 +233,7 @@ export default function SiteHeaderFull({ shopName, phone, workingHours }: SiteHe
             { href: '/marky', label: 'Марки авто' },
             { href: '/pidbir-za-vin', label: 'Підбір за VIN' },
             { href: '/delivery', label: 'Доставка і оплата' },
+            { href: '/zamovlennia', label: 'Де моє замовлення?' },
           ].map((item) => (
             <Link
               key={item.href}

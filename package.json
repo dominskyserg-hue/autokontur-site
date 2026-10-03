@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@sparticuz/chromium": "^153.0.0",
+    "@vercel/analytics": "^2.0.1",
     "@vercel/blob": "^2.8.0",
     "adm-zip": "^0.6.0",
     "clsx": "^2.1.1",

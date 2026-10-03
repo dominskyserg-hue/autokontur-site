@@ -65,6 +65,16 @@ import HoneypotField, { readHoneypot } from '@/components/HoneypotField';
 import CardBuyButton from '@/components/CardBuyButton';
 import OfferCountNote from '@/components/OfferCountNote';
 import RefurbishedBadge from '@/components/RefurbishedBadge';
+import OwnStockBadge from '@/components/OwnStockBadge';
+import { maxQuantityFor } from '@/lib/cart';
+import { estimateDelivery } from '@/lib/deliveryEstimate';
+import SearchNotFoundRequest from '@/components/SearchNotFoundRequest';
+import SearchSuggestions from '@/components/SearchSuggestions';
+import MyCarChip from '@/components/MyCarChip';
+import { myCarLabel, readMyCar } from '@/lib/myCar';
+import { useMyCar } from '@/lib/useMyCar';
+import { clearCheckoutMemory, readCheckoutMemory, saveCheckoutMemory } from '@/lib/checkoutMemory';
+import { switchKeyboardLayout } from '@/lib/keyboardLayout';
 
 // ------------------------------------------------------------
 // ТИПЫ
@@ -97,6 +107,11 @@ interface Product {
   offerCount?: number;
   // Восстановленная / б/у деталь — бейдж "Відновлена"
   isRefurbished?: boolean;
+  // Подходит к "моєму авто" покупателя (lib/myCar.ts); null — авто не выбрано
+  fitsMyCar?: boolean | null;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж
+  // "На нашому складі" вместо обычного "N шт"
+  ownStock?: boolean;
 }
 
 // В корзину кладём лучшее предложение группы, а не главную страницу
@@ -453,6 +468,18 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // ---- фільтри результатів пошуку (наявність / бренд / ціна) ----
   // На відміну від самого пошуку (запит до бази), фільтри звужують
   // те, що вже завантажено в results — нового запиту не роблять
+  // Поле поиска в фокусе — показываем подсказки при вводе
+  const [searchFocused, setSearchFocused] = useState(false);
+  // "Моє авто" (components/MyCarChip.tsx) и переключатель "Тільки для мого
+  // авто" в результатах поиска. Ref — чтобы runSearch читал актуальное
+  // значение без пересоздания функции
+  const myCar = useMyCar();
+  const [onlyMyCar, setOnlyMyCar] = useState(false);
+  const onlyMyCarRef = useRef(false);
+  // Последний поиск — чтобы повторить его при смене авто или переключателя
+  const lastSearchRef = useRef<{ params: URLSearchParams; label: string } | null>(null);
+  // Если результаты найдены по исправленной раскладке — что ввёл покупатель
+  const [layoutFixedFrom, setLayoutFixedFrom] = useState<string | null>(null);
   const [filterAvailability, setFilterAvailability] = useState<'all' | 'inStock' | 'backorder'>('all');
   const [filterBrands, setFilterBrands] = useState<Set<string>>(new Set());
   const [priceFilter, setPriceFilter] = useState<{ min: string; max: string }>({ min: '', max: '' });
@@ -532,6 +559,18 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       // localStorage недоступний — просто лишаємось з виглядом за замовчуванням
     }
   }, []);
+
+  // На телефоне (< 768px) таблица шире экрана и обрезается (цена и "Купити"
+  // уезжают за край) — там всегда карточки, а переключатель вида скрыт
+  const [isMobileScreen, setIsMobileScreen] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 767px)');
+    const update = () => setIsMobileScreen(query.matches);
+    update();
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  const effectiveViewMode: 'grid' | 'table' = isMobileScreen ? 'grid' : viewMode;
 
   const changeViewMode = (mode: 'grid' | 'table') => {
     setViewMode(mode);
@@ -753,6 +792,52 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // Чесний UI-нюанс, а не нова бізнес-логіка
   const [deliveryMethod, setDeliveryMethod] = useState<'branch' | 'courier'>('branch');
 
+  // Способ оплаты: при отриманні (за замовчуванням) или карткою онлайн
+  // через mono (lib/monoPay.ts). Выбор карты показываем, только если оплата
+  // включена на сервере (GET /api/payments/mono/config)
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'card'>('cod');
+  const [monoEnabled, setMonoEnabled] = useState(false);
+  // Заказ оформлен, но перейти на страницу оплаты не получилось
+  const [payFailed, setPayFailed] = useState(false);
+  useEffect(() => {
+    fetch('/api/payments/mono/config')
+      .then((response) => response.json())
+      .then((data) => setMonoEnabled(Boolean(data.enabled)))
+      .catch(() => setMonoEnabled(false));
+  }, []);
+
+  // Быстрый повторный заказ (lib/checkoutMemory.ts): данные прошлого заказа
+  // подставляются в форму. prefilled — показать "Дані з минулого замовлення"
+  const [prefilled, setPrefilled] = useState(false);
+  const fillFromMemory = useCallback(() => {
+    const saved = readCheckoutMemory();
+    if (!saved || !saved.customerPhone) return;
+    setCustomerName(saved.customerName ?? '');
+    setCustomerSurname(saved.customerSurname ?? '');
+    setCustomerPhone(saved.customerPhone ?? '');
+    setCity(saved.city ?? '');
+    setNovaPoshtaAddress(saved.novaPoshtaAddress ?? '');
+    setCityRef(saved.cityRef ?? null);
+    setWarehouseRef(saved.warehouseRef ?? null);
+    if (saved.deliveryMethod) setDeliveryMethod(saved.deliveryMethod);
+    setPrefilled(true);
+  }, []);
+  useEffect(() => {
+    fillFromMemory();
+  }, [fillFromMemory]);
+  // "Очистити" — забыть сохранённые данные и очистить поля
+  const handleClearPrefill = () => {
+    clearCheckoutMemory();
+    setCustomerName('');
+    setCustomerSurname('');
+    setCustomerPhone('');
+    setCity('');
+    setNovaPoshtaAddress('');
+    setCityRef(null);
+    setWarehouseRef(null);
+    setPrefilled(false);
+  };
+
   // VIN-захист замовлення — Smart UX з ТЗ: чекбокс + поле VIN. Окремого
   // стовпця в базі теж немає, тому VIN просто дописується в comment
   // перед відправкою (див. handleSubmitOrder) — менеджер побачить його
@@ -813,9 +898,12 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
     setCart((prev) => {
       const existing = prev.find((item) => item.id === product.id);
       if (existing) {
-        // Товар уже в корзине — просто увеличиваем количество
+        // Товар уже в корзине — увеличиваем количество, но не больше
+        // остатка поставщика (lib/cart.ts, maxQuantityFor)
         return prev.map((item) =>
-          item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.id === product.id
+            ? { ...item, quantity: Math.min(maxQuantityFor(item.stock), item.quantity + 1) }
+            : item
         );
       }
       return [
@@ -840,13 +928,14 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // Изменение количества кнопками "+"/"-" в панели корзины. delta —
   // +1 или -1. Снизу ограничиваем единицей (убрать товар полностью —
   // это отдельная кнопка removeFromCart, а не количество 0), сверху —
-  // остатком на складе, каким он был на момент добавления в корзину
+  // остатком поставщика; товар "під замовлення" (остаток 0) — до 99 шт.
+  // Правило общее с карточкой товара: maxQuantityFor в lib/cart.ts
   const updateQuantity = (id: string, delta: number) => {
     setCart((prev) =>
       prev.map((item) => {
         if (item.id !== id) return item;
         const nextQuantity = item.quantity + delta;
-        if (nextQuantity < 1 || nextQuantity > item.stock) return item;
+        if (nextQuantity < 1 || nextQuantity > maxQuantityFor(item.stock)) return item;
         return { ...item, quantity: nextQuantity };
       })
     );
@@ -983,6 +1072,45 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       // корзину — и React-state (setCart), и localStorage (это уже
       // делает эффект выше, который сохраняет cart в localStorage
       // при каждом изменении — запись [] означает "очистить")
+      // Запоминаем контакты и доставку для следующего заказа (lib/checkoutMemory.ts)
+      saveCheckoutMemory({
+        customerName: customerName.trim(),
+        customerSurname: customerSurname.trim(),
+        customerPhone: customerPhone.trim(),
+        city: city.trim(),
+        novaPoshtaAddress: novaPoshtaAddress.trim(),
+        cityRef: deliveryMethod === 'branch' ? cityRef : null,
+        warehouseRef: deliveryMethod === 'branch' ? warehouseRef : null,
+        deliveryMethod,
+      });
+      // Оплата карткою онлайн: создаём счёт в mono и уводим покупателя на
+      // страницу оплаты. Заказ уже оформлен, поэтому корзину очищаем сразу.
+      // Если перейти к оплате не вышло — показываем экран "Дякуємо" с
+      // подсказкой оплатить позже на странице "Де моє замовлення?"
+      let payFailedNow = false;
+      if (paymentMethod === 'card' && monoEnabled) {
+        try {
+          const payResponse = await fetch('/api/payments/mono/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderId: data.orderId, phone: customerPhone.trim() }),
+          });
+          const payData = await payResponse.json();
+          if (payResponse.ok && payData.pageUrl) {
+            try {
+              window.localStorage.setItem(CART_STORAGE_KEY, '[]');
+            } catch {
+              // не критично
+            }
+            window.location.href = payData.pageUrl as string;
+            return;
+          }
+          payFailedNow = true;
+        } catch {
+          payFailedNow = true;
+        }
+      }
+      setPayFailed(payFailedNow);
       setCreatedOrderId(data.orderId);
       setCreatedOrderNumber(data.orderNumber);
       setOrderStatus('success');
@@ -1002,6 +1130,8 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
       setAddressTouched(false);
       setVinProtect(false);
       setVinProtectCode('');
+      // Форма снова заполнена сохранёнными данными — для следующего заказа
+      fillFromMemory();
     } catch (error) {
       setOrderError(error instanceof Error ? error.message : 'Помилка мережі під час оформлення замовлення');
       setOrderStatus('idle');
@@ -1059,18 +1189,49 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
   // запроса (params) и подписью, которая показывается над результатами
   // (label, например "555-66" или "Toyota, 2008, 2.0")
   // ------------------------------------------------------------
-  const runSearch = useCallback(async (params: URLSearchParams, label: string) => {
+  const runSearch = useCallback(async (baseParams: URLSearchParams, label: string) => {
     const token = ++pollTokenRef.current;
+    lastSearchRef.current = { params: baseParams, label };
     setSearching(true);
     setSearchError(null);
     setSubmittedQuery(label);
+    // "Моє авто": отметка "підходить" у каждого товара (fitMake/fitModel),
+    // а при включённом "Тільки для мого авто" — ещё и фильтр (carMake/carModel),
+    // если поиск сам по себе не по авто
+    const params = new URLSearchParams(baseParams);
+    const car = readMyCar();
+    if (car) {
+      params.set('fitMake', car.make);
+      if (car.model) params.set('fitModel', car.model);
+      if (onlyMyCarRef.current && !params.has('carMake')) {
+        params.set('carMake', car.make);
+        if (car.model) params.set('carModel', car.model);
+      }
+    }
     try {
       const response = await fetch(`/api/products?${params.toString()}`);
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Не вдалося виконати пошук');
       }
-      const products = data.products as Product[];
+      let products = data.products as Product[];
+      setLayoutFixedFrom(null);
+
+      // Ничего не нашли — может, покупатель забыл переключить раскладку
+      // ("щс90" вместо "oc90", lib/keyboardLayout.ts): пробуем ещё раз
+      const searchText = params.get('search');
+      const switched = products.length === 0 && searchText ? switchKeyboardLayout(searchText) : null;
+      if (switched) {
+        const retryParams = new URLSearchParams(params);
+        retryParams.set('search', switched);
+        const retryResponse = await fetch(`/api/products?${retryParams.toString()}`);
+        const retryData = await retryResponse.json();
+        if (retryResponse.ok && (retryData.products as Product[]).length > 0) {
+          products = retryData.products as Product[];
+          setLayoutFixedFrom(searchText);
+          setSubmittedQuery(switched);
+        }
+      }
       setResults(products);
 
       const missingImageIds = products.filter((p) => !p.imageUrl).map((p) => p.id);
@@ -1085,10 +1246,20 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
     }
   }, [pollForImages]);
 
+  // Сменили "моє авто" или переключатель "Тільки для мого авто" — повторяем
+  // последний поиск, чтобы отметки и фильтр соответствовали новому авто
+  const myCarKey = myCar ? myCarLabel(myCar) : '';
+  useEffect(() => {
+    onlyMyCarRef.current = onlyMyCar && Boolean(myCarKey);
+    if (lastSearchRef.current) runSearch(lastSearchRef.current.params, lastSearchRef.current.label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onlyMyCar, myCarKey]);
+
   const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const query = searchInput.trim();
     if (!query) return;
+    setSearchFocused(false);
     runSearch(new URLSearchParams({ search: query, pageSize: '24' }), query);
   };
 
@@ -1298,11 +1469,13 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
               style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
             >
               <PhoneIcon />
-              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} style={{ color: TECH_MUTED }}>
+              <a href={`tel:${phone.replace(/[^\d+]/g, '')}`} className="whitespace-nowrap" style={{ color: TECH_MUTED }}>
                 {phone}
               </a>
-              <span style={{ color: TECH_BORDER_2 }}>◆</span>
-              <span>{workingHours}</span>
+              {/* Часы работы — только на широком экране: в шапке ещё кнопка
+                  "Моє авто", иначе строка переносится */}
+              <span className="hidden 2xl:inline" style={{ color: TECH_BORDER_2 }}>◆</span>
+              <span className="hidden whitespace-nowrap 2xl:inline">{workingHours}</span>
             </div>
 
             <div className="flex items-center gap-2.5">
@@ -1363,8 +1536,11 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                 className="hidden lg:flex items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors hover:bg-white/5"
                 style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}
               >
-                <span>Марки авто</span>
+                <span className="whitespace-nowrap">Марки авто</span>
               </Link>
+
+              {/* ---- Моє авто (components/MyCarChip.tsx) ---- */}
+              <MyCarChip />
 
               {/* ---- Особистий кабінет ---- */}
               {/* Скрыт, пока кабинет выключен (lib/customerCabinet.ts) */}
@@ -1476,6 +1652,8 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
             orderError={orderError}
             createdOrderId={createdOrderId}
             createdOrderNumber={createdOrderNumber}
+            prefilled={prefilled}
+            onClearPrefill={handleClearPrefill}
             customerName={customerName}
             customerSurname={customerSurname}
             customerPhone={customerPhone}
@@ -1499,6 +1677,10 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
             onWarehouseRefChange={setWarehouseRef}
             onCommentChange={setComment}
             onDeliveryMethodChange={setDeliveryMethod}
+            monoEnabled={monoEnabled}
+            paymentMethod={paymentMethod}
+            onPaymentMethodChange={setPaymentMethod}
+            payFailed={payFailed}
             onVinProtectChange={setVinProtect}
             onVinProtectCodeChange={setVinProtectCode}
             onNameBlur={() => setNameTouched(true)}
@@ -1799,7 +1981,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.18 }}
                     onSubmit={handleSearchSubmit}
-                    className="max-w-md mx-auto lg:mx-0 flex items-center gap-3 rounded-xl px-4 py-1 transition-shadow focus-within:shadow-glow"
+                    className="relative max-w-md mx-auto lg:mx-0 flex items-center gap-3 rounded-xl px-4 py-1 transition-shadow focus-within:shadow-glow"
                     style={{ border: `1px solid ${TECH_BORDER_2}`, background: 'rgba(255,255,255,0.04)' }}
                   >
                     <SearchIcon />
@@ -1807,6 +1989,12 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                       type="text"
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
+                      onFocus={() => setSearchFocused(true)}
+                      onBlur={() => setSearchFocused(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Escape') setSearchFocused(false);
+                      }}
+                      autoComplete="off"
                       placeholder="Введіть артикул або назву запчастини"
                       className="w-full min-w-0 py-3.5 text-sm bg-transparent outline-none placeholder:text-[#54607A]"
                       style={{ fontFamily: SANS_TECH, color: TECH_INK }}
@@ -1819,6 +2007,17 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                     >
                       {searching ? 'Шукаємо...' : 'Знайти'}
                     </button>
+                    {/* Подсказки при вводе (components/SearchSuggestions.tsx) */}
+                    <SearchSuggestions
+                      query={searchInput}
+                      active={searchFocused}
+                      onShowAll={(value) => {
+                        setSearchInput(value);
+                        setSearchFocused(false);
+                        runSearch(new URLSearchParams({ search: value, pageSize: '24' }), value);
+                      }}
+                      onPick={() => setSearchFocused(false)}
+                    />
                   </motion.form>
                 ) : (
                   <motion.form
@@ -1992,6 +2191,12 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                   {submittedQuery}
                 </code>
               </h2>
+              {/* Нашли по исправленной раскладке клавиатуры (lib/keyboardLayout.ts) */}
+              {layoutFixedFrom && !searching && (
+                <p className="mb-2 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                  Ви ввели «{layoutFixedFrom}» — схоже, з іншою розкладкою клавіатури. Показуємо результати для «{submittedQuery}».
+                </p>
+              )}
 
               <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
                 <p className="text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
@@ -2008,9 +2213,20 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                   )}
                 </p>
 
+                {/* ---- "Тільки для мого авто" (lib/myCar.ts) ---- */}
+                {myCar && (
+                  <label
+                    className="inline-flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium"
+                    style={{ fontFamily: SANS_TECH, border: `1px solid ${onlyMyCar ? 'rgba(52,211,153,0.45)' : TECH_BORDER}`, color: onlyMyCar ? TECH_GOOD : TECH_MUTED }}
+                  >
+                    <input type="checkbox" checked={onlyMyCar} onChange={(e) => setOnlyMyCar(e.target.checked)} />
+                    Тільки для {myCarLabel(myCar)}
+                  </label>
+                )}
+
                 {/* ---- перемикач вигляду: плиткою або таблицею ---- */}
                 {!searching && results.length > 0 && (
-                  <div className="inline-flex shrink-0 gap-0.5 rounded-lg p-1" style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}>
+                  <div className="hidden shrink-0 gap-0.5 rounded-lg p-1 md:inline-flex" style={{ background: TECH_SURFACE, border: `1px solid ${TECH_BORDER}` }}>
                     <button
                       type="button"
                       onClick={() => changeViewMode('grid')}
@@ -2238,16 +2454,19 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                       <span style={{ fontFamily: MONO_TECH, color: TECH_ACCENT_BRIGHT }}>«{submittedQuery}»</span> нічого не знайдено
                     </h3>
                     <p className="max-w-sm text-sm leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-                      Перевірте правильність артикула — або надішліть нам VIN-код автомобіля, і інженер підбере деталь вручну.
+                      Перевірте правильність артикула — або залиште заявку нижче, і ми знайдемо деталь вручну.
                     </p>
+                    {/* Заявка "Не знайшли деталь?" — то, что искали, уже подставлено
+                        (components/SearchNotFoundRequest.tsx) */}
+                    <SearchNotFoundRequest query={submittedQuery} />
                     <button
                       type="button"
                       onClick={() => setVinModalOpen(true)}
-                      className="mt-4 inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold transition-shadow hover:shadow-glow-lg"
-                      style={{ fontFamily: SANS_TECH, background: `linear-gradient(90deg, ${TECH_ACCENT}, ${TECH_ACCENT_DIM})`, color: '#fff', boxShadow: TECH_GLOW }}
+                      className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium underline"
+                      style={{ fontFamily: SANS_TECH, color: TECH_ACCENT_BRIGHT }}
                     >
-                      Підібрати за VIN
-                      <ArrowRight className="h-4 w-4" />
+                      Або підібрати за VIN-кодом
+                      <ArrowRight className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
@@ -2292,7 +2511,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                   className="overflow-hidden rounded-2xl"
                   style={{ background: TECH_SURFACE, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)', border: `1px solid ${TECH_BORDER}` }}
                 >
-                  {viewMode === 'table' ? (
+                  {effectiveViewMode === 'table' ? (
                     <div className="overflow-x-auto">
                       <div style={{ minWidth: '760px' }}>
                         <div
@@ -2309,7 +2528,7 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                           <span>Бренд / Код</span>
                           <span>Товар</span>
                           <span>Наявність</span>
-                          <span>Термін</span>
+                          <span>Відправка</span>
                           <span className="text-right">Ціна</span>
                           <span></span>
                         </div>
@@ -2393,10 +2612,17 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                                   <RefurbishedBadge />
                                 </span>
                               )}
+                              {product.fitsMyCar && (
+                                <span className="shrink-0 text-[11px] font-semibold" style={{ color: TECH_GOOD }} title="Підходить до вашого авто">
+                                  ✓ підходить
+                                </span>
+                              )}
                             </div>
 
                             <div>
-                              {product.stock > 0 ? (
+                              {product.ownStock ? (
+                                <OwnStockBadge compact />
+                              ) : product.stock > 0 ? (
                                 <span
                                   className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
                                   style={{ fontFamily: SANS_TECH, background: TECH_GOOD_SOFT, color: TECH_GOOD, boxShadow: `0 0 0 1px rgba(52,211,153,0.25)` }}
@@ -2416,7 +2642,9 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                             </div>
 
                             <div className="whitespace-nowrap text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-                              {product.stock > 0 ? 'сьогодні' : product.deliveryTime || '—'}
+                              {/* Когда отправим (lib/deliveryEstimate.ts): наш склад —
+                                  сегодня/завтра, у поставщика — по его сроку */}
+                              {estimateDelivery({ stock: product.stock, ownStock: product.ownStock, deliveryTime: product.deliveryTime }).dispatchText}
                             </div>
 
                             <div className="whitespace-nowrap text-right">
@@ -2507,10 +2735,17 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
                                 <RefurbishedBadge />
                               </div>
                             )}
+                            {product.fitsMyCar && (
+                              <div className="mt-1.5 text-[11px] font-semibold" style={{ color: TECH_GOOD }}>
+                                ✓ Підходить до вашого авто
+                              </div>
+                            )}
                           </Link>
 
                           <div className="mt-auto flex items-center justify-between gap-2">
-                            {product.stock > 0 ? (
+                            {product.ownStock ? (
+                              <OwnStockBadge compact />
+                            ) : product.stock > 0 ? (
                               <span
                                 className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-semibold"
                                 style={{ fontFamily: SANS_TECH, background: TECH_GOOD_SOFT, color: TECH_GOOD, boxShadow: `0 0 0 1px rgba(52,211,153,0.25)` }}
@@ -2555,7 +2790,8 @@ export default function StorefrontHome({ initialSettings, hiddenCategorySlugs = 
 
                           {product.stock <= 0 && product.deliveryTime && (
                             <p className="-mt-2 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-                              Термін поставки: {product.deliveryTime}
+                              Відправка:{' '}
+                              {estimateDelivery({ stock: product.stock, ownStock: product.ownStock, deliveryTime: product.deliveryTime }).dispatchText}
                             </p>
                           )}
 
@@ -3124,6 +3360,9 @@ interface CartDrawerProps {
   orderError: string | null;
   createdOrderId: string | null;
   createdOrderNumber: number | null;
+  // Форма заполнена данными прошлого заказа (lib/checkoutMemory.ts)
+  prefilled: boolean;
+  onClearPrefill: () => void;
   customerName: string;
   customerSurname: string;
   customerPhone: string;
@@ -3147,6 +3386,11 @@ interface CartDrawerProps {
   onWarehouseRefChange: (ref: string | null) => void;
   onCommentChange: (value: string) => void;
   onDeliveryMethodChange: (value: 'branch' | 'courier') => void;
+  // Оплата карткою онлайн (mono) включена на сервере
+  monoEnabled: boolean;
+  paymentMethod: 'cod' | 'card';
+  onPaymentMethodChange: (value: 'cod' | 'card') => void;
+  payFailed: boolean;
   onVinProtectChange: (value: boolean) => void;
   onVinProtectCodeChange: (value: string) => void;
   onNameBlur: () => void;
@@ -3188,6 +3432,8 @@ function CartDrawer({
   orderError,
   createdOrderId,
   createdOrderNumber,
+  prefilled,
+  onClearPrefill,
   customerName,
   customerSurname,
   customerPhone,
@@ -3211,6 +3457,10 @@ function CartDrawer({
   onWarehouseRefChange,
   onCommentChange,
   onDeliveryMethodChange,
+  monoEnabled,
+  paymentMethod,
+  onPaymentMethodChange,
+  payFailed,
   onVinProtectChange,
   onVinProtectCodeChange,
   onNameBlur,
@@ -3262,7 +3512,7 @@ function CartDrawer({
         </div>
 
         {orderStatus === 'success' ? (
-          <OrderSuccessScreen orderNumber={createdOrderNumber} customerPhone={customerPhone} onClose={onClose} />
+          <OrderSuccessScreen orderNumber={createdOrderNumber} customerPhone={customerPhone} payFailed={payFailed} onClose={onClose} />
         ) : cart.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center px-8 text-center">
             <div style={{ color: TECH_BORDER_2 }}>
@@ -3301,6 +3551,15 @@ function CartDrawer({
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
                   Контактна інформація
                 </h3>
+                {/* Данные прошлого заказа уже подставлены (lib/checkoutMemory.ts) */}
+                {prefilled && (
+                  <p className="-mt-1 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_GOOD }}>
+                    ✓ Підставили дані з минулого замовлення.{' '}
+                    <button type="button" onClick={onClearPrefill} className="underline" style={{ color: TECH_MUTED }}>
+                      Очистити
+                    </button>
+                  </p>
+                )}
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -3429,24 +3688,52 @@ function CartDrawer({
                 </div>
               </div>
 
-              {/* ---- Спосіб оплати — реально працює лише післяплата,
-                  картку/IBAN чесно позначаємо "Скоро", а не вдаємо, що
-                  вони вже приймають гроші ---- */}
+              {/* ---- Спосіб оплати: післяплата працює завжди, картка онлайн
+                  (mono) — коли ввімкнено на сервері (MONO_ACQUIRING_TOKEN),
+                  інакше чесно "Скоро"; IBAN поки "Скоро" ---- */}
               <div className="mt-1 flex flex-col gap-3 pt-3" style={{ borderTop: `1px solid ${TECH_BORDER}` }}>
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
                   Спосіб оплати
                 </h3>
                 <div className="grid grid-cols-3 gap-1.5">
-                  <div
+                  {/* Післяплата — оплата при отриманні в Новій Пошті */}
+                  <button
+                    type="button"
+                    onClick={() => onPaymentMethodChange('cod')}
                     className="flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center"
-                    style={{ border: '1px solid rgba(59,130,246,0.5)', background: 'rgba(59,130,246,0.1)', boxShadow: TECH_GLOW }}
+                    style={
+                      paymentMethod === 'cod' || !monoEnabled
+                        ? { border: '1px solid rgba(59,130,246,0.5)', background: 'rgba(59,130,246,0.1)', boxShadow: TECH_GLOW }
+                        : { border: `1px solid ${TECH_BORDER}` }
+                    }
                   >
-                    <Banknote className="h-[18px] w-[18px]" style={{ color: TECH_ACCENT_BRIGHT }} />
-                    <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: '#fff' }}>
+                    <Banknote className="h-[18px] w-[18px]" style={{ color: paymentMethod === 'cod' || !monoEnabled ? TECH_ACCENT_BRIGHT : TECH_FAINT }} />
+                    <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: paymentMethod === 'cod' || !monoEnabled ? '#fff' : TECH_MUTED }}>
                       Післяплата
                     </span>
-                  </div>
-                  <div className="relative flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center opacity-45" style={{ border: `1px solid ${TECH_BORDER}` }}>
+                  </button>
+                  {/* Картка онлайн (mono) — працює, коли увімкнено на сервері; інакше "Скоро" */}
+                  {monoEnabled ? (
+                    <button
+                      type="button"
+                      onClick={() => onPaymentMethodChange('card')}
+                      className="flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center"
+                      style={
+                        paymentMethod === 'card'
+                          ? { border: '1px solid rgba(59,130,246,0.5)', background: 'rgba(59,130,246,0.1)', boxShadow: TECH_GLOW }
+                          : { border: `1px solid ${TECH_BORDER}` }
+                      }
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" style={{ color: paymentMethod === 'card' ? TECH_ACCENT_BRIGHT : TECH_FAINT }}>
+                        <rect x="2" y="5" width="20" height="15" rx="2.5" />
+                        <path d="M2 10h20" />
+                      </svg>
+                      <span className="text-[10.5px] font-semibold leading-tight" style={{ fontFamily: SANS_TECH, color: paymentMethod === 'card' ? '#fff' : TECH_MUTED }}>
+                        Карткою онлайн
+                      </span>
+                    </button>
+                  ) : (
+                    <div className="relative flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center opacity-45" style={{ border: `1px solid ${TECH_BORDER}` }}>
                     <span
                       className="absolute -top-1.5 right-1 rounded-full px-1.5 py-0.5 text-[8px] font-bold"
                       style={{ fontFamily: SANS_TECH, color: TECH_HEAT, background: TECH_HEAT_SOFT }}
@@ -3461,6 +3748,7 @@ function CartDrawer({
                       Картка
                     </span>
                   </div>
+                  )}
                   <div className="relative flex flex-col items-center gap-1.5 rounded-xl p-2.5 text-center opacity-45" style={{ border: `1px solid ${TECH_BORDER}` }}>
                     <span
                       className="absolute -top-1.5 right-1 rounded-full px-1.5 py-0.5 text-[8px] font-bold"
@@ -3477,6 +3765,12 @@ function CartDrawer({
                     </span>
                   </div>
                 </div>
+                {monoEnabled && paymentMethod === 'card' && (
+                  <p className="text-[11px] leading-relaxed" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
+                    Після підтвердження відкриється захищена сторінка monobank: картка, Apple Pay або Google Pay. Дані
+                    картки ми не бачимо і не зберігаємо.
+                  </p>
+                )}
               </div>
 
               {/* ---- VIN-захист замовлення ---- */}
@@ -3589,7 +3883,8 @@ function CartRow({
   onDecrement: () => void;
   onRemove: () => void;
 }) {
-  const atStockLimit = item.quantity >= item.stock;
+  // Дальше "+" не нажимается: весь остаток поставщика уже в корзине
+  const atLimit = item.quantity >= maxQuantityFor(item.stock);
 
   return (
     <div className="flex items-start gap-3 pb-3" style={{ borderBottom: `1px solid ${TECH_BORDER}` }}>
@@ -3619,7 +3914,7 @@ function CartRow({
           <button
             type="button"
             onClick={onIncrement}
-            disabled={atStockLimit}
+            disabled={atLimit}
             aria-label="Збільшити кількість"
             className="flex h-6 w-6 items-center justify-center rounded-md text-sm font-semibold disabled:opacity-30"
             style={{ background: 'rgba(255,255,255,0.06)', color: TECH_INK }}
@@ -3630,6 +3925,11 @@ function CartRow({
             × {formatMoney(item.price)} грн
           </span>
         </div>
+        {item.stock > 0 && atLimit && (
+          <p className="mt-1.5 text-xs" style={{ fontFamily: SANS_TECH, color: TECH_FAINT }}>
+            Це весь наявний залишок ({item.stock} шт)
+          </p>
+        )}
       </div>
 
       <div className="flex shrink-0 flex-col items-end gap-2">
@@ -3667,10 +3967,13 @@ const TELEGRAM_BOT_USERNAME = 'dominatorparts_orders_bot';
 function OrderSuccessScreen({
   orderNumber,
   customerPhone,
+  payFailed,
   onClose,
 }: {
   orderNumber: number | null;
   customerPhone: string;
+  // Выбрана оплата карткою, но перейти на страницу оплаты не вдалося
+  payFailed: boolean;
   onClose: () => void;
 }) {
   return (
@@ -3690,8 +3993,18 @@ function OrderSuccessScreen({
           №{orderNumber ?? ''}
         </span>
       </p>
+      {payFailed && (
+        <p className="mb-3 rounded-lg p-2.5 text-xs" style={{ fontFamily: SANS_TECH, background: TECH_HEAT_SOFT, color: TECH_HEAT }}>
+          Не вдалося відкрити сторінку оплати карткою. Замовлення збережено — оплатити можна на сторінці «Де моє
+          замовлення?» або при отриманні.
+        </p>
+      )}
       <p className="mb-6 text-sm" style={{ fontFamily: SANS_TECH, color: TECH_MUTED }}>
-        Ми зв&apos;яжемося з вами найближчим часом.
+        Ми зв&apos;яжемося з вами найближчим часом. Статус замовлення завжди можна перевірити на сторінці{' '}
+        {/* Обычная ссылка, а не Link: страница открывается из панели корзины */}
+        <a href={`/zamovlennia${orderNumber ? `?n=${orderNumber}` : ''}`} className="underline" style={{ color: TECH_ACCENT_BRIGHT }}>
+          «Де моє замовлення?»
+        </a>
       </p>
 
       {customerPhone && (

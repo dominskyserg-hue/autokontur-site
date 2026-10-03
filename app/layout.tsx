@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google';
 import VinRequestButton from '@/components/VinRequestButton';
+import CallbackButton from '@/components/CallbackButton';
 import AttributionCapture from '@/components/AttributionCapture';
+import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 
 // Друга пара шрифтів — ТІЛЬКИ для нового розділу "Tech Premium"
@@ -174,6 +176,8 @@ export default function RootLayout({
         {/* Плаваюча кнопка "Не знайшли, що шукали?" — на КОЖНІЙ сторінці
             сайту (сама ховає себе під /admin, див. components/VinRequestButton.tsx) */}
         <VinRequestButton />
+        {/* "Передзвоніть мені" — слева внизу, на всех страницах витрины (components/CallbackButton.tsx) */}
+        <CallbackButton />
 
         {/* ==================== META (FACEBOOK) PIXEL — базовый код ====================
             Стандартный код инициализации fbq() — ровно такой же, какой
@@ -238,6 +242,11 @@ export default function RootLayout({
             ${GA_MEASUREMENT_ID ? `gtag('config', '${GA_MEASUREMENT_ID}');` : ''}
           `}
         </Script>
+        {/* Vercel Web Analytics — считает ЖИВЫХ посетителей (просмотры
+            страниц, откуда пришли, страна, устройство). Отчёт — во вкладке
+            Analytics проекта на vercel.com. Работает после того, как
+            Analytics включён в настройках проекта */}
+        <Analytics />
       </body>
     </html>
   );

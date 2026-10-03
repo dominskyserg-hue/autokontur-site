@@ -32,6 +32,8 @@ import RefurbishedBadge from '@/components/RefurbishedBadge';
 import { groupedListSql, groupedOrderBy } from '@/lib/productGroups';
 import Breadcrumbs from '@/components/Breadcrumbs';
 import { buildPopularOrderBy, getRecentlySoldProductIds } from '@/lib/popularitySort';
+import { getOwnStockKeys, ownStockKey } from '@/lib/ownStock';
+import OwnStockBadge from '@/components/OwnStockBadge';
 import { publicImageUrl } from '@/lib/imageUrl';
 import {
   TECH_BG,
@@ -95,6 +97,8 @@ interface MakeProduct {
   offerCount: number;
   // Лучшее предложение — восстановленная деталь (бейдж "Відновлена")
   isRefurbished: boolean;
+  // Деталь лежит на НАШЕМ складе (lib/ownStock.ts) — бейдж "На нашому складі"
+  ownStock: boolean;
 }
 
 // Той самий вибір сортування, що й на app/category/[slug]/page.tsx
@@ -102,10 +106,10 @@ export type MakeSort = 'popular' | 'price_asc' | 'price_desc';
 
 // 'popular' — та сама сортування "За популярністю", що й на категоріях
 // (lib/popularitySort.ts)
-function makeOrderByClause(sort: MakeSort, soldProductIds: string[]): string {
+function makeOrderByClause(sort: MakeSort, soldProductIds: string[], ownStockKeys: string[]): string {
   if (sort === 'price_asc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price ASC';
   if (sort === 'price_desc') return 'ORDER BY (p.stock > 0) DESC, p.retail_price DESC';
-  return buildPopularOrderBy(soldProductIds);
+  return buildPopularOrderBy(soldProductIds, ownStockKeys);
 }
 
 const loadMakeProducts = cache(async function loadMakeProducts(
@@ -120,6 +124,8 @@ const loadMakeProducts = cache(async function loadMakeProducts(
   const offset = (page - 1) * PAGE_SIZE;
   // Товари, продані за 180 днів — для сортування "За популярністю" (кеш 10 хв)
   const soldProductIds = sort === 'popular' ? await getRecentlySoldProductIds(pool) : [];
+  // Детали с нашего склада — первыми в "За популярністю" и с бейджем (кеш 2 хв)
+  const ownStockKeys = await getOwnStockKeys(pool);
 
   // Персональна ціна покупця — див. коментар біля того ж коду в
   // app/category/[slug]/page.tsx
@@ -134,7 +140,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
       ${g.join}
       JOIN suppliers s ON s.id = b.supplier_id
       WHERE ${clause} AND ${g.where}
-      ${groupedOrderBy(makeOrderByClause(sort, soldProductIds))}
+      ${groupedOrderBy(makeOrderByClause(sort, soldProductIds, ownStockKeys))}
       LIMIT $2 OFFSET $3
       `,
       [param, PAGE_SIZE, offset]
@@ -155,6 +161,7 @@ const loadMakeProducts = cache(async function loadMakeProducts(
     offerId: row.offer_id,
     offerCount: row.offer_count,
     isRefurbished: row.is_refurbished,
+    ownStock: ownStockKeys.includes(ownStockKey(row.article, row.brand)),
   }));
 
   return { products, total: countResult.rows[0]?.total ?? 0 };
@@ -438,7 +445,7 @@ export default async function CarMakePage({
                     </div>
                     {(product.stock > 0 || product.isRefurbished) && (
                       <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
-                        {product.stock > 0 && <StockBadge stock={product.stock} />}
+                        {product.ownStock ? <OwnStockBadge compact /> : product.stock > 0 && <StockBadge stock={product.stock} />}
                         {product.isRefurbished && <RefurbishedBadge />}
                       </div>
                     )}

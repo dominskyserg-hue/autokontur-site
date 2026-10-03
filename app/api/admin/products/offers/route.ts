@@ -14,13 +14,24 @@
 //             первыми (один и тот же артикул бывает у разных
 //             производителей — это разные детали)
 //
-//   Ответ: { success, offers: [{ productId, supplierId, supplierName,
-//            brand, name, costPrice, retailPrice, stock }] }
+//   Ответ: { success, offers: [...], analogs: [...] }
+//     offers  — ТОТ ЖЕ артикул у всех поставщиков: { productId, supplierId,
+//               supplierName, brand, name, costPrice, retailPrice, stock }
+//     analogs — ДРУГИЕ артикулы, которыми можно заменить деталь (кроссы):
+//               те же поля + article и relation ('oem' — оригинальный
+//               номер, 'aftermarket' — неоригинальный аналог). Источники:
+//               кроссы из прайсов поставщиков (part_crosses — та же
+//               выборка, что и блок аналогов на странице товара,
+//               lib/productDetail.ts) и группы взаимозаменяемости,
+//               которые админ ведёт вручную (раздел "Кроссы",
+//               cross_reference_members). Показываем только то, что
+//               реально есть в прайсах поставщиков
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { requireAdmin } from '@/lib/adminAuth';
+import { crossSideMatchesSql } from '@/lib/crossBrandMatch';
 
 export const runtime = 'nodejs';
 
@@ -40,6 +51,7 @@ globalThis.pgPool = pool;
 // Больше предложений по одному артикулу почти не бывает, а длинный
 // список в окне заказа всё равно неудобно смотреть
 const MAX_OFFERS = 30;
+const MAX_ANALOGS = 30;
 
 // Та же очистка артикула, что и при разборе прайса поставщика
 // (cleanArticle в app/api/suppliers/parse-excel/route.ts) — иначе
@@ -64,7 +76,8 @@ export async function GET(request: NextRequest) {
   if (adminDenied) return adminDenied;
 
   const article = cleanArticle(request.nextUrl.searchParams.get('article') || '');
-  const brand = normalizeBrand(request.nextUrl.searchParams.get('brand') || '');
+  const rawBrand = (request.nextUrl.searchParams.get('brand') || '').trim();
+  const brand = normalizeBrand(rawBrand);
 
   if (!article) {
     return NextResponse.json({ error: 'Не указан артикул.' }, { status: 400 });
@@ -96,8 +109,57 @@ export async function GET(request: NextRequest) {
       [article, brand]
     );
 
+    // ---- аналоги с ДРУГИМ артикулом ----
+    // Пары (бренд, артикул) аналогов из двух источников, затем — какие
+    // из них есть в прайсах поставщиков. Кроссы из прайсов берём только
+    // если известен бренд детали: без бренда один и тот же номер у разных
+    // производителей дал бы чужие аналоги (lib/crossBrandMatch.ts)
+    const analogsResult = await pool.query(
+      `
+      WITH pairs AS (
+        SELECT DISTINCT brand_b AS brand, article_b AS article,
+               CASE WHEN relation_type = 'oem' THEN 'oem' ELSE 'aftermarket' END AS relation
+        FROM part_crosses
+        WHERE $2::text <> '' AND article_a = $1 AND article_b <> $1 AND LENGTH(article_b) >= 3
+          AND is_valid AND ${crossSideMatchesSql('brand_a', 'article_a', '$2::text')}
+        UNION
+        SELECT DISTINCT m2.brand, m2.part_number, m2.part_type
+        FROM cross_reference_members m1
+        JOIN cross_reference_members m2 ON m2.group_id = m1.group_id
+        WHERE m1.part_number = $1
+          AND ($2::text = '' OR m1.brand ILIKE $2::text)
+          AND m2.part_number <> $1
+      )
+      SELECT DISTINCT ON (p.id)
+        p.id, p.supplier_id, s.name AS supplier_name, p.article, p.brand, p.name,
+        p.cost_price, p.retail_price, p.stock, pairs.relation
+      FROM pairs
+      JOIN products p ON p.article = pairs.article AND UPPER(COALESCE(p.brand, '')) = UPPER(pairs.brand) AND p.is_active
+      JOIN suppliers s ON s.id = p.supplier_id
+      ORDER BY p.id
+      `,
+      [article, rawBrand]
+    );
+    // Сортировка для менеджера: сначала что в наличии, потом дешевле
+    const analogs = analogsResult.rows
+      .map((row) => ({
+        productId: row.id,
+        supplierId: row.supplier_id,
+        supplierName: row.supplier_name,
+        article: row.article,
+        brand: row.brand,
+        name: row.name,
+        costPrice: parseFloat(row.cost_price),
+        retailPrice: parseFloat(row.retail_price),
+        stock: row.stock,
+        relation: row.relation === 'oem' ? 'oem' : 'aftermarket',
+      }))
+      .sort((a, b) => Number(b.stock > 0) - Number(a.stock > 0) || a.costPrice - b.costPrice)
+      .slice(0, MAX_ANALOGS);
+
     return NextResponse.json({
       success: true,
+      analogs,
       offers: result.rows.map((row) => ({
         productId: row.id,
         supplierId: row.supplier_id,
