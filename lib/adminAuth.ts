@@ -18,6 +18,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { Pool } from 'pg';
 import { ADMIN_SESSION_COOKIE, hashSessionToken, verifySessionCookie } from '@/lib/adminSessionToken';
 import { sendTelegramMessage } from '@/lib/telegramNotify';
+import { ensureAdminUsersTables, type AdminIdentity } from '@/lib/adminUsers';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -33,27 +34,50 @@ const pool =
 
 globalThis.pgPool = pool;
 
-// Ищет живую сессию по значению cookie. Возвращает id сессии или null.
+// Ищет живую сессию по значению cookie и возвращает, КТО вошёл.
 // last_seen_at обновляем не чаще раза в 5 минут — чтобы не писать в
-// базу на каждый запрос админки
-async function findActiveSessionId(cookieValue: string | undefined): Promise<string | null> {
+// базу на каждый запрос админки. Сессия отключённого пользователя не
+// считается живой. Сессия без user_id (создана до появления
+// пользователей, вход по общему паролю) считается сессией владельца
+async function findActiveAdmin(cookieValue: string | undefined): Promise<AdminIdentity | null> {
   const token = await verifySessionCookie(cookieValue);
   if (!token) return null;
 
   const tokenHash = await hashSessionToken(token);
   try {
-    const result = await pool.query<{ id: string }>(
-      'SELECT id FROM admin_sessions WHERE token_hash = $1 AND expires_at > now()',
+    await ensureAdminUsersTables();
+    const result = await pool.query<{
+      id: string;
+      user_id: string | null;
+      login: string | null;
+      name: string | null;
+      role: 'owner' | 'manager' | null;
+      is_active: boolean | null;
+    }>(
+      `
+      SELECT s.id, s.user_id, u.login, u.name, u.role, u.is_active
+      FROM admin_sessions s
+      LEFT JOIN admin_users u ON u.id = s.user_id
+      WHERE s.token_hash = $1 AND s.expires_at > now()
+      `,
       [tokenHash]
     );
-    const sessionId = result.rows[0]?.id ?? null;
-    if (sessionId) {
-      await pool.query(
-        "UPDATE admin_sessions SET last_seen_at = now() WHERE id = $1 AND last_seen_at < now() - interval '5 minutes'",
-        [sessionId]
-      );
-    }
-    return sessionId;
+    const row = result.rows[0];
+    if (!row) return null;
+    if (row.user_id && !row.is_active) return null;
+
+    await pool.query(
+      "UPDATE admin_sessions SET last_seen_at = now() WHERE id = $1 AND last_seen_at < now() - interval '5 minutes'",
+      [row.id]
+    );
+
+    return {
+      id: row.user_id,
+      login: row.login ?? 'owner',
+      name: row.name ?? 'Адмін',
+      role: row.role ?? 'owner',
+      sessionId: row.id,
+    };
   } catch (error) {
     // База недоступна — безопасный вариант: "не админ"
     console.error('Ошибка при проверке сессии администратора:', error);
@@ -61,17 +85,22 @@ async function findActiveSessionId(cookieValue: string | undefined): Promise<str
   }
 }
 
-// true — запрос от залогиненного админа (сессия в базе). Для страниц и
-// роутов без объекта request — cookie читается через next/headers
-export async function isAdminSession(): Promise<boolean> {
+// Текущий пользователь админки (для страниц и роутов без объекта
+// request) или null, если не вошёл
+export async function getCurrentAdmin(): Promise<AdminIdentity | null> {
   const cookieStore = await cookies();
-  return (await findActiveSessionId(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)) !== null;
+  return findActiveAdmin(cookieStore.get(ADMIN_SESSION_COOKIE)?.value);
+}
+
+// true — запрос от залогиненного пользователя админки (сессия в базе)
+export async function isAdminSession(): Promise<boolean> {
+  return (await getCurrentAdmin()) !== null;
 }
 
 // То же для роутов, где под рукой объект request (публичные роуты,
 // которые отдают админу дополнительные поля: /api/products и т.п.)
 export async function isAdminRequest(request: NextRequest): Promise<boolean> {
-  return (await findActiveSessionId(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)) !== null;
+  return (await findActiveAdmin(request.cookies.get(ADMIN_SESSION_COOKIE)?.value)) !== null;
 }
 
 // Главная функция для админских роутов: null — можно продолжать,
@@ -79,6 +108,27 @@ export async function isAdminRequest(request: NextRequest): Promise<boolean> {
 export async function requireAdmin(): Promise<NextResponse | null> {
   if (await isAdminSession()) return null;
   return NextResponse.json({ error: 'Потрібна авторизація.' }, { status: 401 });
+}
+
+// Короткая форма requireOwner() для роутов закрытых разделов (закупки,
+// касса, поставщики, отчёты, настройки): тот же формат ответа, что и у
+// requireAdmin() — null или готовый 401/403. Менеджер получает 403
+export async function requireOwnerAccess(): Promise<NextResponse | null> {
+  return (await requireOwner()).denied;
+}
+
+// Для разделов только для владельца (управление менеджерами и т.п.):
+// 401 — не вошёл, 403 — вошёл, но он менеджер. Вторым элементом
+// возвращает пользователя, чтобы роуту не искать его ещё раз
+export async function requireOwner(): Promise<{ denied: NextResponse } | { denied: null; admin: AdminIdentity }> {
+  const admin = await getCurrentAdmin();
+  if (!admin) {
+    return { denied: NextResponse.json({ error: 'Потрібна авторизація.' }, { status: 401 }) };
+  }
+  if (admin.role !== 'owner') {
+    return { denied: NextResponse.json({ error: 'Недостатньо прав: дія доступна лише власнику.' }, { status: 403 }) };
+  }
+  return { denied: null, admin };
 }
 
 // ------------------------------------------------------------
@@ -89,12 +139,14 @@ export async function createAdminSession(
   tokenHash: string,
   expiresAt: Date,
   ip: string | null,
-  userAgent: string | null
+  userAgent: string | null,
+  userId: string
 ): Promise<void> {
   // Истёкшие сессии чистит ежедневный cron (cleanupAdminAuthTables)
+  await ensureAdminUsersTables();
   await pool.query(
-    'INSERT INTO admin_sessions (token_hash, expires_at, ip, user_agent) VALUES ($1, $2, $3, $4)',
-    [tokenHash, expiresAt, ip, userAgent ? userAgent.slice(0, 500) : null]
+    'INSERT INTO admin_sessions (token_hash, expires_at, ip, user_agent, user_id) VALUES ($1, $2, $3, $4, $5)',
+    [tokenHash, expiresAt, ip, userAgent ? userAgent.slice(0, 500) : null, userId]
   );
 }
 

@@ -83,12 +83,14 @@ export type AdminSection =
   | 'analytics'
   | 'reports'
   | 'treasury'
+  | 'managers'
   | 'settings';
 
 interface NavItem {
   key: AdminSection | 'products' | 'orders' | 'analytics';
   label: string;
   href: string | null; // null — раздел ещё не реализован, ссылка неактивна
+  ownerOnly?: boolean; // true — пункт видит только владелец, менеджеру он скрыт
 }
 
 // Счётчики "сколько работы ждёт" по разделам меню —
@@ -145,7 +147,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: 'КАТАЛОГ',
     items: [
-      { key: 'suppliers', label: 'Поставщики', href: '/admin' },
+      { key: 'suppliers', label: 'Поставщики', href: '/admin', ownerOnly: true },
       { key: 'products', label: 'Товары', href: '/admin/products' },
       { key: 'crossReferences', label: 'Кроссы', href: '/admin/cross-references' },
       { key: 'searchSynonyms', label: 'Словник пошуку', href: '/admin/search-synonyms' },
@@ -155,23 +157,26 @@ const NAV_GROUPS: NavGroup[] = [
     title: 'ПРОДАЖИ',
     items: [
       { key: 'orders', label: 'Заказы', href: '/admin/orders' },
-      { key: 'procurement', label: 'Закупки', href: '/admin/procurement' },
+      { key: 'procurement', label: 'Закупки', href: '/admin/procurement', ownerOnly: true },
       { key: 'warehouse', label: 'Склад', href: '/admin/warehouse' },
       { key: 'shipping', label: 'К отгрузке', href: '/admin/shipping' },
       { key: 'customers', label: 'Клиенты', href: '/admin/customers' },
       { key: 'customerDiscounts', label: 'Скидки и наценки клиентам', href: '/admin/customer-pricing-rules' },
       { key: 'vinRequests', label: 'VIN-запросы', href: '/admin/vin-requests' },
-      { key: 'analytics', label: 'Аналитика', href: '/admin/analytics' },
-      { key: 'reports', label: 'Отчёты', href: '/admin/reports' },
+      { key: 'analytics', label: 'Аналитика', href: '/admin/analytics', ownerOnly: true },
+      { key: 'reports', label: 'Отчёты', href: '/admin/reports', ownerOnly: true },
     ],
   },
   {
     title: 'ФИНАНСЫ',
-    items: [{ key: 'treasury', label: 'Кассы и счета', href: '/admin/treasury' }],
+    items: [{ key: 'treasury', label: 'Кассы и счета', href: '/admin/treasury', ownerOnly: true }],
   },
   {
     title: 'СИСТЕМА',
-    items: [{ key: 'settings', label: 'Настройки', href: '/admin/settings' }],
+    items: [
+      { key: 'managers', label: 'Менеджеры', href: '/admin/managers', ownerOnly: true },
+      { key: 'settings', label: 'Настройки', href: '/admin/settings', ownerOnly: true },
+    ],
   },
 ];
 
@@ -222,6 +227,21 @@ export default function AdminLayout({
       .catch(() => {
         // Не получилось — остаёмся с названием по умолчанию, это не
         // критично для работы самой админки
+      });
+  }, []);
+
+  // ---- кто вошёл (GET /api/admin/me): имя внизу меню и скрытие
+  // пунктов, доступных только владельцу ----
+  const [currentUser, setCurrentUser] = useState<{ name: string; role: 'owner' | 'manager' } | null>(null);
+
+  useEffect(() => {
+    fetch('/api/admin/me')
+      .then((response) => response.json())
+      .then((data) => {
+        if (data.user) setCurrentUser({ name: data.user.name, role: data.user.role });
+      })
+      .catch(() => {
+        // Не получилось — имя просто не покажем, на работу это не влияет
       });
   }, []);
 
@@ -281,7 +301,7 @@ export default function AdminLayout({
     <div className="min-h-screen flex" style={rootStyle}>
       {/* ==================== БОКОВОЕ МЕНЮ ==================== */}
       <aside
-        className="w-60 shrink-0 px-4 py-6 hidden md:flex md:flex-col gap-6"
+        className="w-60 shrink-0 px-4 py-6 hidden md:flex md:flex-col gap-6 md:sticky md:top-0 md:h-screen md:overflow-y-auto"
         style={{ borderRight: '1px solid var(--line)' }}
       >
         <div className="flex items-center gap-2 px-2">
@@ -304,7 +324,9 @@ export default function AdminLayout({
                 {group.title}
               </p>
               <div className="flex flex-col gap-0.5">
-                {group.items.map((item) => {
+                {group.items
+                  .filter((item) => !item.ownerOnly || currentUser?.role === 'owner')
+                  .map((item) => {
                   const isActive = item.key === active;
                   const isEnabled = item.href !== null;
 
@@ -373,18 +395,44 @@ export default function AdminLayout({
           ))}
         </nav>
 
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="mt-auto px-2 py-2 rounded-md text-sm font-medium text-left"
-          style={{ color: 'var(--ink-faint)' }}
-        >
-          Выйти
-        </button>
+        <div className="mt-auto flex flex-col">
+          {currentUser && (
+            <div className="px-2 pb-1 text-xs" style={{ color: 'var(--ink-muted)' }}>
+              <div className="font-medium truncate">{currentUser.name}</div>
+              <div style={{ color: 'var(--ink-faint)' }}>{currentUser.role === 'owner' ? 'Власник' : 'Менеджер'}</div>
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="px-2 py-2 rounded-md text-sm font-medium text-left"
+            style={{ color: 'var(--ink-faint)' }}
+          >
+            Выйти
+          </button>
+        </div>
       </aside>
 
       {/* ==================== ОБЛАСТЬ КОНТЕНТА ==================== */}
       <div className="flex-1 min-w-0 overflow-x-hidden">
+        {/* На узком экране бокового меню нет — показываем верхнюю
+            панель с именем и кнопкой выхода */}
+        <div
+          className="md:hidden flex items-center justify-between gap-3 px-5 py-3"
+          style={{ borderBottom: '1px solid var(--line)' }}
+        >
+          <span className="text-sm font-medium truncate" style={{ color: 'var(--ink-muted)' }}>
+            {currentUser ? currentUser.name : shopName}
+          </span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="px-3 py-1.5 rounded-md text-sm font-medium shrink-0"
+            style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}
+          >
+            Выйти
+          </button>
+        </div>
         <div className="max-w-6xl mx-auto px-5 md:px-10 py-8">{children}</div>
       </div>
     </div>

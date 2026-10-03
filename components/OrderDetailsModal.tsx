@@ -46,6 +46,7 @@ import {
   type OrderItemStatus,
   type OrderStatus,
 } from '@/lib/orderUi';
+import OrderManagerAssign from '@/components/OrderManagerAssign';
 
 interface OrderItem {
   id: string;
@@ -119,6 +120,10 @@ interface OrderDetails {
   // Подключил ли клиент Telegram-бота магазина (сообщение о ТТН уходит
   // ему автоматически)
   telegramLinked: boolean;
+  // Кто ведёт заказ (блок components/OrderManagerAssign.tsx); null — ничей
+  assignedManager: { id: string; name: string; assignedAt: string | null } | null;
+  // false — вошёл менеджер: закупочные цены и прибыль ему не показываем
+  canSeeCosts: boolean;
   // Откуда пришёл клиент (lib/orderSource.ts)
   source: { label: string; detail: string | null; kind: 'ads' | 'search' | 'social' | 'messenger' | 'other' | 'direct' };
   // Персональное правило цены клиента: скидка/наценка в % от закупки
@@ -1502,6 +1507,19 @@ export default function OrderDetailsModal({
                 {formatDateTime(orderDetails.createdAt)}
               </p>
             )}
+            {orderDetails && (
+              <OrderManagerAssign
+                orderId={orderDetails.id}
+                assigned={orderDetails.assignedManager}
+                onChanged={(next) => {
+                  setOrderDetails((prev) =>
+                    prev ? { ...prev, assignedManager: next ? { ...next, assignedAt: new Date().toISOString() } : null } : prev
+                  );
+                  onOrderChanged();
+                  bumpHistory();
+                }}
+              />
+            )}
             {/* Звідки прийшов клієнт — щоб бачити, які замовлення приносить
                 реклама Google Ads, а які — звичайний пошук чи прямий захід */}
             {orderDetails && (
@@ -1534,6 +1552,7 @@ export default function OrderDetailsModal({
             {/* Закупка и прибыль по заказу — только по живым позициям
                 (отменённые и возвращённые не считаем: их уже не продаём) */}
             {orderDetails &&
+              orderDetails.canSeeCosts &&
               (() => {
                 const activeItems = orderDetails.items.filter(
                   (item) => item.status !== 'cancelled' && item.status !== 'returned'
@@ -3436,7 +3455,14 @@ export default function OrderDetailsModal({
                           <span className="font-mono whitespace-nowrap shrink-0" style={{ color: 'var(--ink-faint)' }}>
                             {formatDateTime(event.createdAt)}
                           </span>
-                          <span style={{ color: 'var(--ink)' }}>{event.message}</span>
+                          <span style={{ color: 'var(--ink)' }}>
+                            {event.createdBy && event.createdBy !== 'admin' && (
+                              <span className="font-medium mr-1.5" style={{ color: 'var(--accent)' }}>
+                                {event.createdBy}:
+                              </span>
+                            )}
+                            {event.message}
+                          </span>
                         </div>
                       ))}
                       {history.length > 5 && (

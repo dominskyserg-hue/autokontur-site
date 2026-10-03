@@ -2761,6 +2761,41 @@ CREATE INDEX IF NOT EXISTS idx_order_history_order_id ON order_history (order_id
 
 
 -- ============================================================
+-- ТАБЛИЦА admin_users — пользователи админ-панели (владелец, менеджеры)
+-- =====================================================
+
+-- ============================================================
+-- У каждого сотрудника свой логин и пароль (хеш scrypt, сам пароль не
+-- хранится). Сессии admin_sessions привязаны к пользователю через
+-- user_id. Модуль lib/adminUsers.ts создаёт эти объекты сам при первом
+-- обращении, поэтому запускать этот блок вручную не обязательно.
+-- Первый владелец создаётся автоматически: пока таблица пуста, вход с
+-- паролем из ADMIN_PASSWORD создаёт пользователя с ролью owner.
+CREATE TABLE IF NOT EXISTS admin_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  login TEXT NOT NULL UNIQUE CHECK (login = lower(login)),
+  name TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'manager' CHECK (role IN ('owner', 'manager')),
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_login_at TIMESTAMPTZ
+);
+
+ALTER TABLE admin_sessions ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES admin_users(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_admin_sessions_user_id ON admin_sessions (user_id);
+
+
+-- ============================================================
+-- orders.assigned_manager_id / assigned_at — менеджер, который ведёт заказ
+-- ============================================================
+-- NULL — заказ никому не назначен. Если пользователя удалят, заказ
+-- останется (SET NULL). Колонки добавляет и сам код (lib/orderAssignment.ts)
+-- при первом обращении — вручную запускать не обязательно.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS assigned_manager_id UUID REFERENCES admin_users(id) ON DELETE SET NULL;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS idx_orders_assigned_manager_id ON orders (assigned_manager_id);
+=======
 -- ЗАКАЗЫ: НАПОМИНАНИЕ "ПЕРЕДЗВОНИТИ"
 -- ============================================================
 -- Когда менеджеру перезвонить клиенту по заказу. Заказы с наступившим

@@ -37,7 +37,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool, PoolClient } from 'pg';
-import { requireAdmin } from '@/lib/adminAuth';
+import { requireAdmin, requireOwnerAccess } from '@/lib/adminAuth';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -353,7 +353,7 @@ async function upsertMapping(
 // ------------------------------------------------------------
 export async function POST(request: NextRequest) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
+  const adminDenied = await requireOwnerAccess();
   if (adminDenied) return adminDenied;
 
   let body: CreateSupplierRequestBody;

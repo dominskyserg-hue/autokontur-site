@@ -17,7 +17,7 @@
 import { NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { runUrlPriceImport } from '@/lib/urlPriceImport';
-import { requireAdmin } from '@/lib/adminAuth';
+import { requireOwnerAccess } from '@/lib/adminAuth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -42,7 +42,7 @@ globalThis.pgPool = pool;
 // ------------------------------------------------------------
 export async function POST() {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
+  const adminDenied = await requireOwnerAccess();
   if (adminDenied) return adminDenied;
 
   try {
@@ -62,7 +62,7 @@ const LOG_PAGE_SIZE = 30;
 
 export async function GET() {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
+  const adminDenied = await requireOwnerAccess();
   if (adminDenied) return adminDenied;
 
   try {

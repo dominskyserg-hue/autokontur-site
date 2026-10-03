@@ -21,8 +21,11 @@
 // владельцу приходит уведомление в Telegram (lib/adminAuth.ts).
 // IP — из x-real-ip, который ставит Vercel (клиент его не подменит).
 //
-// Здесь всего ОДИН пароль на всю админку (без логинов пользователей) —
-// осознанное упрощение
+// У каждого сотрудника свой логин и пароль (таблица admin_users, см.
+// lib/adminUsers.ts), сессия привязана к пользователю. ADMIN_PASSWORD
+// нужен теперь только ОДИН раз: пока в базе нет ни одного пользователя,
+// первый вход с этим паролем создаёт владельца (логин — тот, что
+// введён в форме, либо "owner"). После этого общий пароль не работает.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -34,6 +37,16 @@ import {
   hashSessionToken,
   signSessionCookie,
 } from '@/lib/adminSessionToken';
+import {
+  countAdminUsers,
+  createAdminUser,
+  findAdminUserByLogin,
+  isValidLogin,
+  markAdminUserLogin,
+  normalizeLogin,
+  verifyAgainstDummy,
+  verifyPassword,
+} from '@/lib/adminUsers';
 import {
   LOGIN_MAX_FAILED_ATTEMPTS,
   clearFailedLogins,
@@ -47,6 +60,7 @@ import {
 export const runtime = 'nodejs';
 
 interface LoginRequestBody {
+  login?: string;
   password?: string;
 }
 
@@ -67,14 +81,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Тело запроса должно быть корректным JSON.' }, { status: 400 });
   }
 
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (!adminPassword) {
-    return NextResponse.json(
-      { error: 'На сервере не настроен пароль администратора (переменная ADMIN_PASSWORD).' },
-      { status: 500 }
-    );
-  }
-
   const ip = await getClientIp();
 
   try {
@@ -90,9 +96,46 @@ export async function POST(request: NextRequest) {
     }
 
     const password = (body.password || '').trim();
-    if (!password || !passwordsMatch(password, adminPassword)) {
+    const login = normalizeLogin(body.login);
+    if (!password) {
       await recordFailedLogin(ip);
-      return NextResponse.json({ error: 'Неверный пароль.' }, { status: 401 });
+      return NextResponse.json({ error: 'Неверный логин или пароль.' }, { status: 401 });
+    }
+
+    let userId: string;
+
+    if ((await countAdminUsers()) === 0) {
+      // Первый запуск: пользователей ещё нет — общий пароль из
+      // ADMIN_PASSWORD создаёт владельца
+      const adminPassword = process.env.ADMIN_PASSWORD;
+      if (!adminPassword) {
+        return NextResponse.json(
+          { error: 'На сервере не настроен пароль администратора (переменная ADMIN_PASSWORD).' },
+          { status: 500 }
+        );
+      }
+      if (!passwordsMatch(password, adminPassword)) {
+        await recordFailedLogin(ip);
+        return NextResponse.json({ error: 'Неверный логин или пароль.' }, { status: 401 });
+      }
+      const ownerLogin = login && isValidLogin(login) ? login : 'owner';
+      const owner = await createAdminUser({ login: ownerLogin, name: 'Власник', password, role: 'owner' });
+      userId = owner.id;
+    } else {
+      const user = login ? await findAdminUserByLogin(login) : null;
+      if (!user) {
+        // Считаем хеш всё равно — чтобы время ответа не выдавало,
+        // есть ли такой логин
+        await verifyAgainstDummy(password);
+        await recordFailedLogin(ip);
+        return NextResponse.json({ error: 'Неверный логин или пароль.' }, { status: 401 });
+      }
+      const passwordOk = await verifyPassword(password, user.passwordHash);
+      if (!passwordOk || !user.isActive) {
+        await recordFailedLogin(ip);
+        return NextResponse.json({ error: 'Неверный логин или пароль.' }, { status: 401 });
+      }
+      userId = user.id;
     }
 
     const token = generateSessionToken();
@@ -107,8 +150,10 @@ export async function POST(request: NextRequest) {
       await hashSessionToken(token),
       new Date(expiresAtUnix * 1000),
       ip,
-      request.headers.get('user-agent')
+      request.headers.get('user-agent'),
+      userId
     );
+    await markAdminUserLogin(userId);
     await clearFailedLogins(ip);
 
     const response = NextResponse.json({ success: true });

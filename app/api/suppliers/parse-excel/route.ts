@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { importPriceListForSupplier, type MappingSettings } from '@/lib/priceListImport';
-import { requireAdmin } from '@/lib/adminAuth';
+import { requireOwnerAccess } from '@/lib/adminAuth';
 
 // Библиотеки xlsx и pg используют Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -57,7 +57,7 @@ function isValidUuid(value: string): boolean {
 // ------------------------------------------------------------
 export async function POST(request: NextRequest) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
+  const adminDenied = await requireOwnerAccess();
   if (adminDenied) return adminDenied;
 
   try {

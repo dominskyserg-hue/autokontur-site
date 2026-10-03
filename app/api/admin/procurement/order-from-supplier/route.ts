@@ -26,7 +26,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
 import { autoAdvanceOrderStatus } from '@/lib/orderStatusPipeline';
-import { requireAdmin } from '@/lib/adminAuth';
+import { requireOwnerAccess } from '@/lib/adminAuth';
 import { ensureOrderItemProcurementColumns } from '@/lib/orderItemColumns';
 
 export const runtime = 'nodejs';
@@ -57,7 +57,7 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function POST(request: NextRequest) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
+  const adminDenied = await requireOwnerAccess();
   if (adminDenied) return adminDenied;
 
   let body: RequestBody;

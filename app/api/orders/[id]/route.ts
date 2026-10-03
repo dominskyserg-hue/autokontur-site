@@ -21,7 +21,8 @@ import { describeOrderSource, type OrderSource } from '@/lib/orderSource';
 import { buildProductPath } from '@/lib/slug';
 import { normalizePhone } from '@/lib/phoneNormalize';
 import { STATUS_LABELS } from '@/lib/orderUi';
-import { requireAdmin } from '@/lib/adminAuth';
+import { getCurrentAdmin, requireAdmin } from '@/lib/adminAuth';
+import { ensureOrderAssignmentColumns } from '@/lib/orderAssignment';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
 // выполняться в окружении Node.js, а не в "Edge"-окружении Next.js
@@ -167,6 +168,12 @@ interface OrderDetailsResponse {
   // Подключил ли клиент Telegram-бота магазина — если да, сообщение о
   // ТТН уходит ему автоматически (lib/orderNotifications.ts)
   telegramLinked: boolean;
+  // Кто ведёт заказ (lib/orderAssignment.ts); null — заказ ничей
+  assignedManager: { id: string; name: string; assignedAt: string | null } | null;
+  // false — вошёл менеджер: окно заказа скрывает закупку и прибыль. Сами
+  // costPrice позиций в ответе остаются: форма правки позиции отправляет
+  // их обратно при сохранении, и обнуление затёрло бы закупку в базе
+  canSeeCosts: boolean;
   // Откуда пришёл клиент (Google Ads, Google пошук, прямой заход...) —
   // по сохранённым при оформлении меткам, lib/orderSource.ts
   source: OrderSource;
@@ -185,8 +192,10 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
-  if (adminDenied) return adminDenied;
+  const viewer = await getCurrentAdmin();
+  if (!viewer) {
+    return NextResponse.json({ error: 'Потрібна авторизація.' }, { status: 401 });
+  }
 
   const { id } = await params;
 
@@ -196,13 +205,16 @@ export async function GET(
 
   try {
     await ensureOrderExtraColumns();
+    await ensureOrderAssignmentColumns();
 
     const orderResult = await pool.query(
       `
       SELECT id, order_number, customer_name, customer_surname, customer_phone, city, nova_poshta_address,
              city_ref, warehouse_ref, comment, manager_note, callback_at, customer_id,
              utm_source, utm_medium, utm_campaign, utm_term, gclid, referrer,
-             ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at
+             ttn_number, ttn_ref, vin, car_info, status, created_at, updated_at,
+             assigned_manager_id, assigned_at,
+             (SELECT u.name FROM admin_users u WHERE u.id = orders.assigned_manager_id) AS assigned_manager_name
       FROM orders
       WHERE id = $1
       `,
@@ -322,6 +334,10 @@ export async function GET(
       callbackAt: orderRow.callback_at,
       customer,
       telegramLinked: await isCustomerTelegramLinked(orderRow.customer_phone),
+      assignedManager: orderRow.assigned_manager_id
+        ? { id: orderRow.assigned_manager_id, name: orderRow.assigned_manager_name, assignedAt: orderRow.assigned_at }
+        : null,
+      canSeeCosts: viewer.role === 'owner',
       source: describeOrderSource({
         utmSource: orderRow.utm_source,
         utmMedium: orderRow.utm_medium,

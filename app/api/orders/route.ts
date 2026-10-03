@@ -22,6 +22,8 @@
 //               клиенту (напоминание на сегодня или уже просрочено)
 //   unpaid    — "1": только заказы, оплаченные не полностью (без
 //               отменённых — там платить уже нечего)
+//   manager   — кто ведёт заказ: "me" (мои), "none" (без менеджера) или
+//               UUID конкретного менеджера. Действует и на счётчики
 //   withCounts — "1": дополнительно вернуть counts — сколько заказов
 //               в каждом статусе и сколько неоплаченных (с учётом
 //               поиска и дат, но БЕЗ фильтра по статусу) — для кнопок
@@ -35,7 +37,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { Pool } from 'pg';
-import { requireAdmin } from '@/lib/adminAuth';
+import { getCurrentAdmin } from '@/lib/adminAuth';
+import { ensureOrderAssignmentColumns } from '@/lib/orderAssignment';
 import { ensureOrderExtraColumns } from '@/lib/orderColumns';
 
 // Библиотека pg использует Node.js API, поэтому роут должен
@@ -127,16 +130,23 @@ interface OrderListItem {
   // оплаты рядом со статусом отгрузки (components/PaymentBadge.tsx),
   // тот же расчёт, что и в GET /api/orders/[id]
   paidAmount: number;
+  // Кто ведёт заказ; null — заказ ничей
+  assignedManager: { id: string; name: string } | null;
   // Напоминание "Передзвонити" (или null)
   callbackAt: string | null;
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function GET(request: NextRequest) {
   // Вторая проверка входа (кроме middleware.ts): сессия админа в базе
-  const adminDenied = await requireAdmin();
-  if (adminDenied) return adminDenied;
+  const admin = await getCurrentAdmin();
+  if (!admin) {
+    return NextResponse.json({ error: 'Потрібна авторизація.' }, { status: 401 });
+  }
 
   try {
+    await ensureOrderAssignmentColumns();
     await ensureOrderExtraColumns();
 
     const searchParams = request.nextUrl.searchParams;
@@ -161,6 +171,7 @@ export async function GET(request: NextRequest) {
     const unpaidOnly = searchParams.get('unpaid') === '1';
     const callbackOnly = searchParams.get('callback') === '1';
     const withCounts = searchParams.get('withCounts') === '1';
+    const managerFilter = (searchParams.get('manager') || '').trim();
 
     if ((dateFrom && !DATE_PATTERN.test(dateFrom)) || (dateTo && !DATE_PATTERN.test(dateTo))) {
       return NextResponse.json({ error: 'Дата должна быть в формате ГГГГ-ММ-ДД.' }, { status: 400 });
@@ -198,6 +209,22 @@ export async function GET(request: NextRequest) {
     if (dateTo) {
       values.push(dateTo);
       conditions.push(`(o.created_at AT TIME ZONE 'Europe/Kyiv')::date <= $${values.length}::date`);
+    }
+
+    // Фильтр по ответственному менеджеру — тоже общий (влияет и на счётчики)
+    if (managerFilter === 'none') {
+      conditions.push('o.assigned_manager_id IS NULL');
+    } else if (managerFilter === 'me') {
+      // Сессия без личного пользователя (старый вход по общему паролю) —
+      // "моих" заказов у неё нет
+      values.push(admin.id);
+      conditions.push(`o.assigned_manager_id = $${values.length}::uuid`);
+    } else if (managerFilter) {
+      if (!UUID_PATTERN.test(managerFilter)) {
+        return NextResponse.json({ error: 'manager должен быть me, none или UUID менеджера.' }, { status: 400 });
+      }
+      values.push(managerFilter);
+      conditions.push(`o.assigned_manager_id = $${values.length}::uuid`);
     }
 
     // Копия общих условий и параметров — для счётчиков (без статуса)
@@ -246,11 +273,14 @@ export async function GET(request: NextRequest) {
         COUNT(oi.id) AS items_count,
         COALESCE(SUM(oi.price * oi.quantity), 0) AS total_amount,
         ${PAID_AMOUNT_SQL} AS paid_amount,
+        o.assigned_manager_id,
+        am.name AS assigned_manager_name,
         COUNT(*) OVER() AS total_count
       FROM orders o
       LEFT JOIN order_items oi ON oi.order_id = o.id
+      LEFT JOIN admin_users am ON am.id = o.assigned_manager_id
       ${whereSql}
-      GROUP BY o.id
+      GROUP BY o.id, am.id
       ORDER BY o.created_at DESC
       LIMIT ${limitPlaceholder} OFFSET ${offsetPlaceholder}
       `,
@@ -277,6 +307,9 @@ export async function GET(request: NextRequest) {
       paidAmount: parseFloat(row.paid_amount),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      assignedManager: row.assigned_manager_id
+        ? { id: row.assigned_manager_id, name: row.assigned_manager_name }
+        : null,
       callbackAt: row.callback_at,
     }));
 
